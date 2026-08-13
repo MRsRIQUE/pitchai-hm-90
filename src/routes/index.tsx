@@ -689,7 +689,7 @@ function Landing() {
                   Dúvidas
                 </Link>
                 <a href="#">Falar com a gente</a>
-                <a href="#">Termos de uso</a>
+                <Link to="/termos">Termos de uso</Link>
                 <a href="#">Privacidade</a>
               </div>
             </div>

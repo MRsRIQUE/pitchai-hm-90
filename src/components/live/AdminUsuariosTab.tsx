@@ -46,6 +46,14 @@ const PLAN_PRICES: Record<string, number> = {
   studio: 197,
 };
 
+function readableServerError(error: unknown, fallback: string): string {
+  const message = error instanceof Error ? error.message : String(error ?? "");
+  if (message.includes("<!doctype html") || message.includes("<html")) {
+    return "O servidor não conseguiu processar a cortesia. Atualize a página e tente novamente.";
+  }
+  return message || fallback;
+}
+
 /** Gestão avançada de usuários, cotas e verificação de custos de IA. */
 export function UsuariosTab() {
   const qc = useQueryClient();
@@ -108,7 +116,7 @@ export function UsuariosTab() {
       setNote("");
       qc.invalidateQueries({ queryKey: ["admin", "comped"] });
     },
-    onError: (e: any) => setMsg({ kind: "err", text: e?.message ?? "Falha ao liberar" }),
+    onError: (e: unknown) => setMsg({ kind: "err", text: readableServerError(e, "Falha ao liberar") }),
   });
 
   const revokeM = useMutation({
