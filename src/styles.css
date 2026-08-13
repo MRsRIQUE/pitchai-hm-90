@@ -244,6 +244,26 @@ html[data-tier="2xl"] {
   font-size: calc(16px * var(--font-scale));
 }
 
+@layer components {
+  [data-sidebar="sidebar"] {
+    background: var(--glass-bg-strong) !important;
+    backdrop-filter: var(--glass-blur-strong);
+    -webkit-backdrop-filter: var(--glass-blur-strong);
+    border-color: var(--glass-border-strong) !important;
+    box-shadow: 16px 0 44px rgba(0, 0, 0, 0.14);
+  }
+
+  [data-sidebar="sidebar"] [data-sidebar="menu-button"]:hover,
+  [data-sidebar="sidebar"] [data-sidebar="menu-action"]:hover {
+    background: rgba(255, 255, 255, 0.09);
+  }
+
+  .light [data-sidebar="sidebar"] [data-sidebar="menu-button"]:hover,
+  .light [data-sidebar="sidebar"] [data-sidebar="menu-action"]:hover {
+    background: rgba(17, 24, 39, 0.06);
+  }
+}
+
 @layer utilities {
   /* App shell — width follows the active tier (set by useDevice via --shell-max). */
   .app-shell {

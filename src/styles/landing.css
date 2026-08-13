@@ -519,12 +519,48 @@
   color: var(--ink-3);
   font-weight: 600;
 }
-.landing .chip-v {
-  font-size: 12.5px;
-  font-weight: 560;
-  letter-spacing: -0.015em;
-  margin-top: 1px;
-}
+  .landing .chip-v {
+  display: block;
+  font-size: 12px;
+  font-weight: 650;
+  color: #0c0c0d;
+  line-height: 1.2;
+  }
+
+  .landing .chip-k {
+  color: rgba(12, 12, 13, 0.62);
+  }
+
+  .landing .chat {
+  background: rgba(255, 255, 255, 0.86);
+  border-color: rgba(12, 12, 13, 0.12);
+  color: #0c0c0d;
+  box-shadow: 0 12px 28px rgba(12, 12, 13, 0.14);
+  }
+  .landing .chat-q,
+  .landing .chat-q b,
+  .landing .chat-a {
+  color: #0c0c0d;
+  }
+  .landing .chat-a {
+  border-top-color: rgba(12, 12, 13, 0.1);
+  }
+  .landing .chat-a-text {
+  color: #0c0c0d;
+  }
+  .landing .pcard {
+  color: #0c0c0d;
+  }
+  .landing .pname {
+  color: rgba(12, 12, 13, 0.62);
+  }
+  .landing .pprice,
+  .landing .ppin {
+  color: var(--accent-ink);
+  }
+  .landing .phone {
+  color: #0c0c0d;
+  }
 
 /* ============================================================
    STATS
@@ -1651,7 +1687,21 @@ html.dark .landing .btn-dark {
   color: #0c0c0d;
 }
 html.dark .landing .btn-dark:hover {
-  background: #e6e6ec;
+  background: #f2f2f5;
+}
+
+/* Contraste intencional para superfícies glass claras e cards brancos. */
+.landing .chip,
+.landing .chip .chip-k,
+.landing .chip .chip-v,
+.landing .chat,
+.landing .chat-q,
+.landing .chat-q b,
+.landing .chat-a,
+.landing .chat-a-text,
+.landing .pcard,
+.landing .pname {
+  color: #0c0c0d;
 }
 
 /* números dos passos e selo do plano */

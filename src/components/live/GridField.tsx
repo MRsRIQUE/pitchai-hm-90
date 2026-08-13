@@ -249,9 +249,11 @@ export function GridField() {
     };
 
     const onMove = (e: PointerEvent) => {
-      mouseX = e.clientX;
-      mouseY = e.clientY;
-      mouseActive = true;
+      const rect = canvas.getBoundingClientRect();
+      mouseX = e.clientX - rect.left;
+      mouseY = e.clientY - rect.top;
+      mouseActive = mouseX >= 0 && mouseY >= 0 && mouseX <= rect.width && mouseY <= rect.height;
+      if (mouseActive) start();
     };
     const onLeave = () => {
       mouseActive = false;
