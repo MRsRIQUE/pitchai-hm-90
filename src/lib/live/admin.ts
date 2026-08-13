@@ -56,7 +56,11 @@ async function ensureAdmin(ctx: {
 
 /* ---------- Auth ---------- */
 export async function checkIsAdmin(userId: string, email?: string | null): Promise<boolean> {
-  return isAdmin(userId, email);
+  // A allowlist por e-mail é a fonte imediata de autorização para o painel.
+  // Normalizamos aqui também para evitar falhas por espaços ou capitalização
+  // vindos do perfil do Firebase Auth.
+  const normalizedEmail = email?.trim().toLowerCase() || null;
+  return isAdmin(userId, normalizedEmail);
 }
 
 /* ---------- Ranking (server-only) ---------- */

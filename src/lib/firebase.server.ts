@@ -631,8 +631,14 @@ export const ADMIN_EMAILS = new Set<string>([
   "cortezin66@gmail.com",
 ]);
 
+export function getNormalizedAdminEmail(email?: string | null): string | null {
+  const normalized = email?.trim().toLowerCase();
+  return normalized || null;
+}
+
 export function isAdminEmail(email?: string | null): boolean {
-  return !!email && ADMIN_EMAILS.has(email.trim().toLowerCase());
+  const normalizedEmail = getNormalizedAdminEmail(email);
+  return normalizedEmail !== null && ADMIN_EMAILS.has(normalizedEmail);
 }
 
 export async function isAdmin(uid: string, email?: string | null): Promise<boolean> {
