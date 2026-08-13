@@ -181,22 +181,39 @@ function Marquee({ rev = false }: { rev?: boolean }) {
 
 function Landing() {
   const [phoneVideoIndex, setPhoneVideoIndex] = useState(0);
+  const [phoneVideoFailed, setPhoneVideoFailed] = useState(false);
+  const [reduceMotion, setReduceMotion] = useState(false);
   const phoneVideoRef = useRef<HTMLVideoElement>(null);
 
   useEffect(() => {
-    const video = phoneVideoRef.current;
-    if (!video) return;
-    video.load();
-    void video.play().catch(() => undefined);
-  }, [phoneVideoIndex]);
+    const media = window.matchMedia("(prefers-reduced-motion: reduce)");
+    const syncMotionPreference = () => setReduceMotion(media.matches);
+    syncMotionPreference();
+    media.addEventListener("change", syncMotionPreference);
+    return () => media.removeEventListener("change", syncMotionPreference);
+  }, []);
 
   useEffect(() => {
     const video = phoneVideoRef.current;
-    if (!video) return;
-    const onEnded = () => setPhoneVideoIndex((index) => (index + 1) % PHONE_VIDEOS.length);
+    if (!video || reduceMotion || phoneVideoFailed) return;
+    video.load();
+    void video.play().catch(() => undefined);
+  }, [phoneVideoIndex, reduceMotion, phoneVideoFailed]);
+
+  useEffect(() => {
+    const video = phoneVideoRef.current;
+    if (!video || reduceMotion || phoneVideoFailed) return;
+    const onEnded = () => {
+      setPhoneVideoFailed(false);
+      setPhoneVideoIndex((index) => (index + 1) % PHONE_VIDEOS.length);
+    };
     video.addEventListener("ended", onEnded);
     return () => video.removeEventListener("ended", onEnded);
-  }, []);
+  }, [reduceMotion, phoneVideoFailed]);
+
+  const handlePhoneVideoError = () => {
+    setPhoneVideoFailed(true);
+  };
 
   useEffect(() => {
     const els = document.querySelectorAll(".landing .rv");
@@ -358,16 +375,26 @@ function Landing() {
                   <span className="viewers">1.284 assistindo</span>
                 </div>
                 <div className="stage">
-                  <video
-                    ref={phoneVideoRef}
-                    className="stage-video"
-                    src={PHONE_VIDEOS[phoneVideoIndex]}
-                    autoPlay
-                    muted
-                    playsInline
-                    preload="metadata"
-                    aria-label={`Demonstração ${phoneVideoIndex + 1} da live no TikTok Shop`}
-                  />
+                  {!phoneVideoFailed && !reduceMotion ? (
+                    <video
+                      ref={phoneVideoRef}
+                      className="stage-video"
+                      key={PHONE_VIDEOS[phoneVideoIndex]}
+                      src={PHONE_VIDEOS[phoneVideoIndex]}
+                      poster="/logo-nav.png"
+                      autoPlay
+                      muted
+                      playsInline
+                      loop={false}
+                      preload="metadata"
+                      onError={handlePhoneVideoError}
+                      aria-label={`Demonstração ${phoneVideoIndex + 1} da live no TikTok Shop`}
+                    />
+                  ) : null}
+                  <div className={`stage-fallback${phoneVideoFailed || reduceMotion ? " is-visible" : ""}`} aria-hidden="true">
+                    <img src="/logo-nav.png" alt="" />
+                    <span>{phoneVideoFailed ? "Demonstração disponível em breve" : "Pitch AI ao vivo"}</span>
+                  </div>
                 </div>
                 <div className="screen-bottom">
                   <div className="chat">
