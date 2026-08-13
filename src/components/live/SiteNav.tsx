@@ -28,12 +28,12 @@ export function SiteNav({
   const wrap =
     effTone === "dark"
       ? "sticky top-0 z-30 border-b border-white/10 bg-[#0A0518]/80 backdrop-blur-md"
-      : "sticky top-0 z-30 border-b border-purple-900/10 bg-white/80 backdrop-blur-md";
+      : "sticky top-0 z-30 border-b border-[#1E0836]/10 bg-white/55 text-[#1E0836] shadow-[0_8px_30px_rgba(30,8,54,0.04)] backdrop-blur-xl supports-[backdrop-filter]:bg-white/45";
 
   const linkClass =
     effTone === "dark"
       ? "text-slate-300 hover:text-white transition-colors duration-200 font-medium"
-      : "text-slate-600 hover:text-slate-900 transition-colors duration-200 font-medium";
+      : "text-[#33283D] hover:text-[#12091A] transition-colors duration-200 font-medium";
 
   return (
     <header className={wrap}>
