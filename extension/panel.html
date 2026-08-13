@@ -7,6 +7,35 @@
     <link rel="stylesheet" href="panel.css" />
   </head>
   <body>
+    <!-- Onboarding do primeiro uso (some após concluir) -->
+    <div class="pnl-onboarding" id="pnl-onboarding" hidden>
+      <div class="pnl-onb-card">
+        <h2>Bem-vindo(a) à Pitch AI</h2>
+        <p class="pnl-sub">Sua vendedora com IA para a LIVE do TikTok Shop. Veja como começar em 3 passos:</p>
+        <ol class="pnl-onb-steps">
+          <li>
+            <b>1</b>
+            <span>Conecte sua conta
+              <small>Abra o painel no site, copie seu código de conexão e cole na barra roxa aqui em cima.</small>
+            </span>
+          </li>
+          <li>
+            <b>2</b>
+            <span>Leia sua vitrine
+              <small>Na aba “Auto-Fixar Produto”, clique em “Atualizar Vitrine Agora” para a IA ver seus produtos.</small>
+            </span>
+          </li>
+          <li>
+            <b>3</b>
+            <span>Ligue as respostas por voz
+              <small>Na aba “Respostas da IA”, ative “Ligar Respostas por Voz”. Pronto, a IA já atende sua live!</small>
+            </span>
+          </li>
+        </ol>
+        <button class="pnl-btn primary" id="pnl-onb-done" style="width: 100%; height: 42px">Começar agora</button>
+      </div>
+    </div>
+
     <!-- Cabeçalho Principal -->
     <header class="pnl-header">
       <div class="pnl-brand">
@@ -31,11 +60,11 @@
         <input
           type="text"
           id="pnl-sync-token"
-          placeholder="Cole seu Sync Token aqui (do painel web)"
+          placeholder="Cole aqui seu código de conexão (copie no site)"
           style="width: 260px; font-family: var(--font-mono); height: 32px; font-size: 11px"
         />
-        <button class="pnl-btn primary" id="pnl-pull" style="height: 32px; padding: 0 10px" title="Baixar configurações da sua conta web">⬇ Sincronizar</button>
-        <button class="pnl-btn ghost" id="pnl-push" style="height: 32px; padding: 0 10px" title="Enviar configurações locais para a nuvem">⬆ Enviar</button>
+        <button class="pnl-btn primary" id="pnl-pull" style="height: 32px; padding: 0 10px" title="Baixar suas configurações salvas no site">⬇ Sincronizar</button>
+        <button class="pnl-btn ghost" id="pnl-push" style="height: 32px; padding: 0 10px" title="Salvar suas configurações atuais na nuvem">⬆ Enviar</button>
       </div>
     </div>
 

@@ -1,56 +1,136 @@
 <!doctype html>
-<html>
+<html lang="pt-BR">
   <head>
     <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Pitch AI</title>
     <style>
+      :root {
+        --bg: #0b0b12;
+        --surface: rgba(255, 255, 255, 0.04);
+        --border: rgba(255, 255, 255, 0.1);
+        --ink: #f4f4f6;
+        --muted: #a1a1aa;
+        --accent: #8b5cf6;
+        --accent-2: #a855f7;
+      }
+      * {
+        box-sizing: border-box;
+      }
       body {
         margin: 0;
-        padding: 16px;
-        width: 260px;
-        background: #0f0f1a;
-        color: #f9fafb;
-        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, sans-serif;
+        padding: 18px;
+        width: 288px;
+        background:
+          radial-gradient(120% 90% at 85% 0%, rgba(139, 92, 246, 0.22) 0%, transparent 55%),
+          var(--bg);
+        color: var(--ink);
+        font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
       }
-      h1 {
+      .brand {
+        display: flex;
+        align-items: center;
+        gap: 9px;
+        margin-bottom: 14px;
+      }
+      .brand-badge {
+        width: 30px;
+        height: 30px;
+        border-radius: 9px;
+        background: linear-gradient(135deg, var(--accent) 0%, var(--accent-2) 100%);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-weight: 800;
         font-size: 15px;
-        margin: 0 0 4px;
+        color: #fff;
+        box-shadow: 0 6px 18px rgba(139, 92, 246, 0.35);
       }
-      h1 b {
-        color: #7c3aed;
+      .brand-name {
+        font-size: 15px;
+        font-weight: 700;
+        letter-spacing: -0.01em;
       }
-      p {
+      .brand-name span {
+        color: var(--accent-2);
+      }
+      .lead {
+        font-size: 12.5px;
+        line-height: 1.5;
+        color: var(--muted);
+        margin: 0 0 14px;
+      }
+      .steps {
+        list-style: none;
+        margin: 0 0 16px;
+        padding: 0;
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+      }
+      .steps li {
+        display: flex;
+        gap: 9px;
+        align-items: flex-start;
         font-size: 12px;
-        color: #a1a1aa;
-        margin: 0 0 12px;
+        color: var(--ink);
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: 10px;
+        padding: 9px 11px;
+      }
+      .steps b {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        flex: 0 0 auto;
+        width: 18px;
+        height: 18px;
+        border-radius: 999px;
+        background: rgba(139, 92, 246, 0.2);
+        color: var(--accent-2);
+        font-size: 11px;
+        font-weight: 700;
       }
       a {
         display: block;
-        padding: 8px 12px;
-        background: #7c3aed;
-        color: #ffffff;
-        text-decoration: none;
-        border-radius: 8px;
-        font-weight: 600;
+        padding: 10px 12px;
+        border-radius: 10px;
+        font-weight: 650;
         font-size: 13px;
         text-align: center;
+        text-decoration: none;
         margin-top: 8px;
+      }
+      a.primary {
+        background: linear-gradient(135deg, var(--accent) 0%, var(--accent-2) 100%);
+        color: #fff;
+        box-shadow: 0 8px 20px rgba(139, 92, 246, 0.3);
       }
       a.ghost {
         background: transparent;
-        border: 1px solid rgba(255, 255, 255, 0.12);
-        color: #f9fafb;
+        border: 1px solid var(--border);
+        color: var(--ink);
       }
     </style>
   </head>
   <body>
-    <h1>Pitch AI <b>LIVE</b></h1>
-    <p>Abra shop.tiktok.com/streamer/live — a barra aparece no topo.</p>
-    <a href="https://shop.tiktok.com/streamer/live/product/dashboard" target="_blank"
-      >Ir para TikTok Shop LIVE</a
+    <div class="brand">
+      <div class="brand-badge">P</div>
+      <div class="brand-name">Pitch <span>AI</span></div>
+    </div>
+
+    <p class="lead">Sua vendedora com IA para a LIVE do TikTok Shop. Siga os passos abaixo para começar.</p>
+
+    <ol class="steps">
+      <li><b>1</b><span>Abra sua LIVE no TikTok Shop pelo botão abaixo.</span></li>
+      <li><b>2</b><span>A barra da Pitch AI aparece sozinha no topo da página.</span></li>
+      <li><b>3</b><span>Cole seu código de conexão e ative a IA. Pronto!</span></li>
+    </ol>
+
+    <a href="https://shop.tiktok.com/streamer/live/product/dashboard" target="_blank" class="primary"
+      >Abrir minha LIVE</a
     >
-    <a href="https://pitchai-live.lovable.app/app" target="_blank" class="ghost"
-      >Abrir painel web</a
-    >
+    <a href="https://pitchai.ai.studio/app" target="_blank" class="ghost">Abrir painel no site</a>
   </body>
 </html>

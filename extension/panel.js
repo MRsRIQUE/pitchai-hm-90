@@ -7,7 +7,7 @@
     if (window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1") {
       return window.location.origin;
     }
-    return "https://pitchai-live.lovable.app";
+    return "https://pitchai.ai.studio";
   }
   const API_BASE = resolveApiBase();
 
@@ -345,9 +345,14 @@
     const box = document.getElementById("pnl-products");
     box.innerHTML = "";
     if (!cfg.produtos.length) {
-      const p = document.createElement("p");
-      p.textContent = "Nenhum produto ainda.";
-      box.appendChild(p);
+      const empty = document.createElement("div");
+      empty.className = "pnl-empty";
+      empty.innerHTML =
+        '<div class="pnl-empty-icon">🛍️</div>' +
+        "<strong>Nenhum produto lido ainda</strong>" +
+        "<span>Abra sua LIVE no TikTok Shop e clique em <b>“Atualizar Vitrine Agora”</b> acima. " +
+        "Os produtos aparecem aqui automaticamente. Você também pode adicionar um manualmente.</span>";
+      box.appendChild(empty);
       return;
     }
     if (!Array.isArray(cfg.autoFixar.ids)) cfg.autoFixar.ids = [];
@@ -938,30 +943,41 @@
       render();
     });
     document.getElementById("pnl-web").addEventListener("click", () => {
-      window.open("https://pitchai-live.lovable.app/app", "_blank");
+      window.open(API_BASE + "/app", "_blank");
     });
 
     // Sync token + pull/push
     const tokenInput = document.getElementById("pnl-sync-token");
-    const statusEl = document.getElementById("pnl-sync-status");
+    // Reaproveita a barrinha de estado para mensagens rápidas (não há #pnl-sync-status no HTML).
+    const statusEl = document.getElementById("pnl-sync-state");
     const credsEl = document.getElementById("pnl-sync-state");
+    const dotEl = document.getElementById("pnl-quick-dot");
     const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    function setDot(kind) {
+      if (!dotEl) return;
+      dotEl.classList.remove("ok", "warn");
+      if (kind === "ok") dotEl.classList.add("ok");
+      else if (kind === "warn") dotEl.classList.add("warn");
+    }
     async function renderCreds() {
       if (!credsEl) return;
       const t = (cfg.syncToken || "").trim();
       if (!t) {
-        credsEl.textContent = "⚠ IA desligada — sem Sync token";
-        credsEl.style.color = "#FF6B35";
+        credsEl.textContent = "Cole seu código de conexão para ativar a IA";
+        credsEl.style.color = "#f97316";
+        setDot("warn");
         return;
       }
       if (!UUID_RE.test(t)) {
-        credsEl.textContent = "⚠ token com formato inválido";
-        credsEl.style.color = "#FF6B35";
+        credsEl.textContent = "Esse código não parece completo. Copie novamente do site.";
+        credsEl.style.color = "#f97316";
+        setDot("warn");
         return;
       }
 
-      credsEl.textContent = "Verificando token...";
-      credsEl.style.color = "#A1A1AA";
+      credsEl.textContent = "Verificando seu código...";
+      credsEl.style.color = "#a1a1aa";
+      setDot(null);
 
       try {
         const headers = await signRequest(t, "verify");
@@ -972,18 +988,22 @@
         });
         const data = await res.json().catch(() => ({}));
         if (res.ok && data.valid && !data.locked) {
-          credsEl.textContent = `✓ Plano ${(data.plan || "free").toUpperCase()} · Cota restante: ${data.remainingChat ?? 0} msgs / ${data.remainingTts ?? 0} voz`;
-          credsEl.style.color = "#00E676";
+          credsEl.textContent = `Conectado · Plano ${(data.plan || "free").toUpperCase()} · Resta ${data.remainingChat ?? 0} respostas e ${data.remainingTts ?? 0} de voz`;
+          credsEl.style.color = "#22c55e";
+          setDot("ok");
         } else if (data.reason === "quota_exceeded") {
-          credsEl.textContent = `🔒 Cota do plano '${data.plan || "free"}' esgotada (${data.remainingChat}/${data.chatLimit} msgs). Faça upgrade!`;
-          credsEl.style.color = "#FF6B35";
+          credsEl.textContent = `Seu plano '${data.plan || "free"}' atingiu o limite (${data.remainingChat}/${data.chatLimit}). Faça upgrade no site.`;
+          credsEl.style.color = "#f97316";
+          setDot("warn");
         } else {
-          credsEl.textContent = `🔒 Token inválido ou revogado (${data.message || "Acesso negado"})`;
-          credsEl.style.color = "#FF3B3B";
+          credsEl.textContent = `Código inválido ou expirado. Gere um novo no painel do site.`;
+          credsEl.style.color = "#ef4444";
+          setDot("warn");
         }
       } catch {
-        credsEl.textContent = "✓ IA conectada (modo offline)";
-        credsEl.style.color = "#00E676";
+        credsEl.textContent = "Conectada (sem internet no momento)";
+        credsEl.style.color = "#22c55e";
+        setDot("ok");
       }
     }
     tokenInput.value = cfg.syncToken || "";
@@ -995,16 +1015,19 @@
     });
     function setStatus(msg, kind) {
       statusEl.textContent = msg;
-      statusEl.style.color = kind === "err" ? "#FF3B3B" : kind === "ok" ? "#00E676" : "";
+      statusEl.style.color = kind === "err" ? "#ef4444" : kind === "ok" ? "#22c55e" : "#a1a1aa";
+      if (kind === "err") setDot("warn");
+      else if (kind === "ok") setDot("ok");
       if (msg)
+        // Restaura o estado real da conexão em vez de deixar a barra vazia.
         setTimeout(() => {
-          statusEl.textContent = "";
+          renderCreds();
         }, 3500);
     }
 
     document.getElementById("pnl-pull").addEventListener("click", async () => {
-      if (!cfg.syncToken) return setStatus("cole o token primeiro", "err");
-      setStatus("puxando…");
+      if (!cfg.syncToken) return setStatus("Cole seu código de conexão primeiro", "err");
+      setStatus("Baixando suas configurações...");
       try {
         const r = await fetch(`${API_BASE}/api/public/live/config`, {
           method: "POST",
@@ -1012,19 +1035,19 @@
           body: JSON.stringify({ action: "pull", token: cfg.syncToken }),
         });
         const data = await r.json();
-        if (!r.ok) return setStatus(data?.error || "falhou", "err");
+        if (!r.ok) return setStatus(data?.error || "Não foi possível baixar", "err");
         cfg = { ...DEFAULTS, ...(data.config || {}), syncToken: cfg.syncToken };
         save(cfg);
         render();
         tokenInput.value = cfg.syncToken;
-        setStatus("✓ config puxada", "ok");
+        setStatus("Configurações baixadas com sucesso", "ok");
       } catch (e) {
-        setStatus("erro de rede", "err");
+        setStatus("Sem conexão. Verifique sua internet.", "err");
       }
     });
     document.getElementById("pnl-push").addEventListener("click", async () => {
-      if (!cfg.syncToken) return setStatus("cole o token primeiro", "err");
-      setStatus("enviando…");
+      if (!cfg.syncToken) return setStatus("Cole seu código de conexão primeiro", "err");
+      setStatus("Enviando suas configurações...");
       try {
         const { syncToken, ...toSend } = cfg;
         const r = await fetch(`${API_BASE}/api/public/live/config`, {
@@ -1033,10 +1056,10 @@
           body: JSON.stringify({ action: "push", token: cfg.syncToken, config: toSend }),
         });
         const data = await r.json();
-        if (!r.ok) return setStatus(data?.error || "falhou", "err");
-        setStatus("✓ enviado", "ok");
+        if (!r.ok) return setStatus(data?.error || "Não foi possível enviar", "err");
+        setStatus("Configurações salvas na nuvem", "ok");
       } catch (e) {
-        setStatus("erro de rede", "err");
+        setStatus("Sem conexão. Verifique sua internet.", "err");
       }
     });
 
@@ -1048,5 +1071,30 @@
         renderCreds();
       }
     });
+
+    // Onboarding do primeiro uso — mostra o guia só uma vez por instalação.
+    const ONBOARD_KEY = "pitchai.onboarded.v1";
+    const onbEl = document.getElementById("pnl-onboarding");
+    const onbDone = document.getElementById("pnl-onb-done");
+    if (onbEl && onbDone) {
+      try {
+        chrome.storage.local.get([ONBOARD_KEY], (res) => {
+          if (!res || !res[ONBOARD_KEY]) onbEl.hidden = false;
+        });
+      } catch {
+        // Ambiente sem chrome.storage (ex.: painel aberto isolado): mostra por padrão.
+        onbEl.hidden = false;
+      }
+      onbDone.addEventListener("click", () => {
+        onbEl.hidden = true;
+        try {
+          chrome.storage.local.set({ [ONBOARD_KEY]: true });
+        } catch {
+          /* ignora quando storage indisponível */
+        }
+        const tokenField = document.getElementById("pnl-sync-token");
+        if (tokenField) tokenField.focus();
+      });
+    }
   });
 })();

@@ -14,6 +14,7 @@
     // maliciosos injetem sync tokens fake ou captured network payloads.
     const ALLOWED_ORIGINS = [
       "https://shop.tiktok.com",
+      "https://pitchai.ai.studio",
       "https://pitchai-live.lovable.app",
       location.origin,
     ];
@@ -171,10 +172,17 @@
       header = document.createElement("div");
       header.id = "pitchai-header";
       header.className = "pitchai-header";
+      const extVersion = (() => {
+        try {
+          return chrome.runtime.getManifest().version;
+        } catch {
+          return "";
+        }
+      })();
       header.innerHTML = `
         <span class="pitchai-logo">pitch<b>ai</b></span>
-        <span class="pitchai-ver">v0.14.5 [TEST]</span>
-        <span class="pitchai-status ok"><span class="pitchai-dot on"></span> Teste Ativo</span>
+        <span class="pitchai-ver">${extVersion ? "v" + extVersion : ""}</span>
+        <span class="pitchai-status ok"><span class="pitchai-dot on"></span> Ativo</span>
         <button class="pitchai-btn primary" id="pitchai-test-toggle-btn">Painel ▴</button>
         <button class="pitchai-btn" id="pitchai-test-tab-btn" title="Abrir painel">↗ Aba</button>
       `;
@@ -259,7 +267,7 @@
     if (window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1") {
       return window.location.origin;
     }
-    return "https://pitchai-live.lovable.app";
+    return "https://pitchai.ai.studio";
   }
   const API_BASE = resolveApiBase();
 
