@@ -441,6 +441,7 @@
 /* floating chips */
 .landing .chip {
   position: absolute;
+  z-index: 6;
   background: var(--surface);
   border: 1px solid var(--line);
   border-radius: 11px;
@@ -462,13 +463,13 @@
   }
 }
 .landing .chip-a {
-  top: 52px;
-  left: -74px;
+  top: 46px;
+  left: -34px;
   animation-delay: 0s;
 }
 .landing .chip-b {
-  bottom: 120px;
-  right: -70px;
+  bottom: 132px;
+  right: -34px;
   animation-delay: 1.8s;
 }
 .landing .chip-ic {

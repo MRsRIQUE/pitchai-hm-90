@@ -319,18 +319,6 @@ function Landing() {
                 <Download style={{ width: 15, height: 15 }} /> Baixar o app
               </Link>
             </div>
-
-            <div className="trust">
-              <i>
-                <span className="dot" /> Instalação em 2 cliques
-              </i>
-              <i>
-                <span className="dot" /> Sem cartão de crédito
-              </i>
-              <i>
-                <span className="dot" /> Cancela quando quiser
-              </i>
-            </div>
           </div>
 
           {/* product mock */}

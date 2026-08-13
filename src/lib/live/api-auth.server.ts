@@ -262,6 +262,6 @@ export async function getSyncTokenStatus(token: string) {
   };
 }
 
-export async function checkIsAdmin(uid: string): Promise<boolean> {
-  return isAdmin(uid);
+export async function checkIsAdmin(uid: string, email?: string | null): Promise<boolean> {
+  return isAdmin(uid, email);
 }

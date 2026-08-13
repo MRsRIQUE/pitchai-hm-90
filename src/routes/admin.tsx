@@ -52,7 +52,7 @@ function AdminPage() {
       return;
     }
     setEmail(user.email ?? "");
-    const admin = await checkIsAdmin(user.uid);
+    const admin = await checkIsAdmin(user.uid, user.email);
     setStatus(admin ? "ok" : "not-admin");
   }
 
@@ -135,7 +135,8 @@ function LoginGate() {
           {busy ? "Entrando…" : "Entrar"}
         </button>
         <p className="text-xs text-white/40">
-          O papel <code>admin</code> deve estar atribuído em <code>user_roles</code>.
+          O acesso admin é concedido pela allowlist de e-mails ou por um documento em{" "}
+          <code>admins/&#123;uid&#125;</code>.
         </p>
       </form>
     </div>

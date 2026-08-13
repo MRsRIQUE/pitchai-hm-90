@@ -577,7 +577,18 @@ export async function setRankedProduct(
 }
 
 // admins — verificação de admin (leitura pública)
-export async function isAdmin(uid: string): Promise<boolean> {
+//
+// Allowlist por e-mail: administradores definidos aqui têm acesso garantido
+// independentemente de existir um documento em `admins/{uid}` no Firestore.
+// Útil quando não há credenciais de servidor para gravar a coleção `admins`.
+export const ADMIN_EMAILS = new Set<string>(["hferro150@gmail.com"]);
+
+export function isAdminEmail(email?: string | null): boolean {
+  return !!email && ADMIN_EMAILS.has(email.trim().toLowerCase());
+}
+
+export async function isAdmin(uid: string, email?: string | null): Promise<boolean> {
+  if (isAdminEmail(email)) return true;
   const doc = await fsGet(`admins/${uid}`, { mode: "public" });
   return !!doc?.data?.role;
 }

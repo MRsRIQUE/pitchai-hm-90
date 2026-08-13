@@ -11,15 +11,15 @@ export type CompedAccess = {
   note: string | null;
 };
 
-async function assertAdmin(userId: string) {
-  if (!(await isAdmin(userId))) throw new Error("Forbidden");
+async function assertAdmin(ctx: { userId: string; user?: { email?: string | null } }) {
+  if (!(await isAdmin(ctx.userId, ctx.user?.email))) throw new Error("Forbidden");
 }
 
 /* Lista os acessos de cortesia concedidos por administradores. */
 export const listCompedAccess = createServerFn({ method: "POST" })
   .middleware([requireFirebaseAuth])
   .handler(async ({ context }): Promise<CompedAccess[]> => {
-    await assertAdmin(context.userId);
+    await assertAdmin(context);
     const docs = await fsQuery("comped_access", {
       orderBy: { field: "grantedUntil", direction: "DESCENDING" },
       limit: 200,
@@ -48,7 +48,7 @@ export const grantCompedAccess = createServerFn({ method: "POST" })
     return { email, days, note: String(data.note ?? "").slice(0, 300) };
   })
   .handler(async ({ data, context }): Promise<{ ok: true } | { error: string }> => {
-    await assertAdmin(context.userId);
+    await assertAdmin(context);
 
     const hits = await fsQuery("users", {
       where: [{ field: "email", op: "EQUAL", value: data.email }],
@@ -93,7 +93,7 @@ export const revokeCompedAccess = createServerFn({ method: "POST" })
     return { userId: data.userId };
   })
   .handler(async ({ data, context }): Promise<{ ok: true } | { error: string }> => {
-    await assertAdmin(context.userId);
+    await assertAdmin(context);
     try {
       await setSubscription(
         data.userId,

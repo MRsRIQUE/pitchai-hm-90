@@ -47,13 +47,16 @@ export type Costs = {
   usd_brl: number;
 };
 
-async function ensureAdmin(ctx: { userId: string }): Promise<void> {
-  if (!(await isAdmin(ctx.userId))) throw new Error("Forbidden");
+async function ensureAdmin(ctx: {
+  userId: string;
+  user?: { email?: string | null };
+}): Promise<void> {
+  if (!(await isAdmin(ctx.userId, ctx.user?.email))) throw new Error("Forbidden");
 }
 
 /* ---------- Auth ---------- */
-export async function checkIsAdmin(userId: string): Promise<boolean> {
-  return isAdmin(userId);
+export async function checkIsAdmin(userId: string, email?: string | null): Promise<boolean> {
+  return isAdmin(userId, email);
 }
 
 /* ---------- Ranking (server-only) ---------- */
