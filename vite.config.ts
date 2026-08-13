@@ -14,7 +14,9 @@ export default defineConfig({
     server: { entry: "server" },
   },
   nitro: {
-    preset: "node-server",
+    // O deploy alvo é Vercel; node-server gera apenas um servidor Node
+    // standalone e deixa o Vercel sem uma função/rota para responder ao domínio.
+    preset: "vercel",
     prerender: {
       routes: ["/"],
     },
