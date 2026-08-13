@@ -424,12 +424,25 @@ export async function getUserByEmail(
   email: string,
   options: { mode?: FirestoreAuthMode; userToken?: string } = {},
 ): Promise<FirestoreDocument | null> {
-  const res = await fsQuery("users", {
-    ...options,
-    where: [{ field: "email", op: "EQUAL", value: email.toLowerCase().trim() }],
-    limit: 1,
-  });
-  return res[0] ?? null;
+  const normalizedEmail = email.toLowerCase().trim();
+  try {
+    const res = await fsQuery("users", {
+      ...options,
+      where: [{ field: "email", op: "EQUAL", value: normalizedEmail }],
+      limit: 1,
+    });
+    return res[0] ?? null;
+  } catch (error) {
+    // Contas Google podem ter sido criadas antes da indexação pelo perfil.
+    // Tenta a leitura pública apenas quando a consulta autenticada falhar;
+    // as regras do Firestore continuam sendo a autoridade final.
+    if (options.mode !== "server") throw error;
+    const fallback = await fsQuery("users", {
+      where: [{ field: "email", op: "EQUAL", value: normalizedEmail }],
+      limit: 1,
+    });
+    return fallback[0] ?? null;
+  }
 }
 
 export async function setUserEmailIndex(
