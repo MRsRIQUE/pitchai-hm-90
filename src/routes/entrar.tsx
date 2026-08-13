@@ -1,13 +1,14 @@
 import { createFileRoute, Link, useNavigate, useSearch } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
-import { Loader2 } from "lucide-react";
+import { Eye, EyeOff, Loader2, Lock, Mail } from "lucide-react";
 import {
   signInWithPopup,
   onAuthStateChanged,
   signInWithEmailAndPassword,
   createUserWithEmailAndPassword,
   sendPasswordResetEmail,
+  type User,
 } from "firebase/auth";
 import { doc, setDoc } from "firebase/firestore";
 import { getFirebaseAuth, getFirebaseDb, googleProvider } from "@/lib/firebase";
@@ -44,12 +45,38 @@ function safeNext(next?: string) {
   return next;
 }
 
+/** Traduz códigos de erro do Firebase Auth para mensagens claras em português. */
+function translateAuthError(err: unknown): string {
+  const code = (err as { code?: string })?.code ?? "";
+  const map: Record<string, string> = {
+    "auth/email-already-in-use": "Este e-mail já tem uma conta. Faça login em vez de cadastrar.",
+    "auth/invalid-email": "Digite um e-mail válido.",
+    "auth/user-disabled": "Esta conta foi desativada. Fale com o suporte.",
+    "auth/user-not-found": "Não encontramos uma conta com este e-mail.",
+    "auth/wrong-password": "Senha incorreta. Tente novamente ou clique em “Esqueci minha senha”.",
+    "auth/invalid-credential": "E-mail ou senha incorretos.",
+    "auth/invalid-login-credentials": "E-mail ou senha incorretos.",
+    "auth/weak-password": "Senha muito curta. Use pelo menos 8 caracteres.",
+    "auth/too-many-requests": "Muitas tentativas. Aguarde um pouco e tente de novo.",
+    "auth/network-request-failed": "Sem conexão com a internet. Verifique sua rede e tente novamente.",
+    "auth/popup-closed-by-user": "Janela do Google fechada antes de concluir o login.",
+    "auth/cancelled-popup-request": "Login com Google cancelado.",
+    "auth/popup-blocked": "O navegador bloqueou a janela do Google. Permita pop-ups e tente novamente.",
+  };
+  if (map[code]) return map[code];
+  return "Não foi possível continuar. Tente novamente em alguns instantes.";
+}
+
 function EntrarPage() {
   const { next } = useSearch({ from: "/entrar" });
   const navigate = useNavigate();
   const [mode, setMode] = useState<"login" | "signup" | "forgot">("login");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [formError, setFormError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const dest = safeNext(next);
 
@@ -70,17 +97,26 @@ function EntrarPage() {
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
+    setFormError(null);
+
+    if (mode === "signup" && password !== confirmPassword) {
+      setFormError("As senhas não coincidem. Digite a mesma senha nos dois campos.");
+      return;
+    }
+
     setBusy(true);
     const fbAuth = getFirebaseAuth();
     try {
       if (mode === "login") {
         const { user } = await signInWithEmailAndPassword(fbAuth, email, password);
         await ensureUserDoc(user.uid, user.email ?? email);
+        await activateIfPending(user);
         toast.success("Login efetuado com sucesso!");
         navigate({ to: dest });
       } else if (mode === "signup") {
         const { user } = await createUserWithEmailAndPassword(fbAuth, email, password);
         await ensureUserDoc(user.uid, user.email ?? email);
+        await activateIfPending(user);
         toast.success("Conta criada! Redirecionando...");
         navigate({ to: dest });
       } else {
@@ -93,9 +129,7 @@ function EntrarPage() {
         setMode("login");
       }
     } catch (err) {
-      //err?.message ?? "Não foi possível continuar")
-      const msg = err instanceof Error ? err.message : "Não foi possível continuar";
-      toast.error(msg);
+      toast.error(translateAuthError(err));
     } finally {
       setBusy(false);
     }
@@ -107,11 +141,11 @@ function EntrarPage() {
       const fbAuth = getFirebaseAuth();
       const { user } = await signInWithPopup(fbAuth, googleProvider);
       await ensureUserDoc(user.uid, user.email ?? "");
+      await activateIfPending(user);
       toast.success("Autenticado com Google com sucesso!");
       navigate({ to: dest });
-    } catch (err: any) {
-      console.error(err);
-      toast.error(err?.message ?? "Falha no login com Google.");
+    } catch (err) {
+      toast.error(translateAuthError(err));
     } finally {
       setBusy(false);
     }
@@ -131,71 +165,175 @@ function EntrarPage() {
     }
   }
 
+  /**
+   * Ativa automaticamente a licença Pro se este e-mail tiver um pagamento
+   * aprovado pendente (compra feita antes de criar a conta). Silencioso:
+   * na grande maioria dos logins não há nada a ativar, então erros/404 são
+   * esperados e não devem interromper o fluxo de login.
+   */
+  async function activateIfPending(user: User) {
+    try {
+      if (!user.email) return;
+      const idToken = await user.getIdToken();
+      const res = await fetch("/api/public/payments/activate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${idToken}` },
+        body: JSON.stringify({ email: user.email }),
+      });
+      if (res.ok) {
+        const data = await res.json().catch(() => null);
+        if (data?.success) {
+          toast.success("Pagamento identificado! Sua licença Pro foi ativada automaticamente.");
+        }
+      }
+    } catch (err) {
+      console.warn("[entrar] Verificação de pagamento pendente falhou:", err);
+    }
+  }
+
   return (
-    <main className="grid min-h-dvh place-items-center bg-[#0F0F1A] px-4 py-12 text-white">
-      <div className="w-full max-w-sm space-y-6">
+    <main className="relative grid min-h-dvh place-items-center overflow-hidden bg-[#0b0b12] px-4 py-12 text-white">
+      {/* Glow radial roxo, consistente com a identidade visual do restante do site. */}
+      <div
+        aria-hidden
+        className="pointer-events-none absolute inset-0"
+        style={{
+          background:
+            "radial-gradient(85% 55% at 82% -8%, rgba(139,92,246,0.22) 0%, transparent 55%), radial-gradient(65% 45% at 8% 4%, rgba(168,85,247,0.12) 0%, transparent 50%)",
+        }}
+      />
+
+      <div className="relative w-full max-w-sm space-y-6">
         <div className="text-center">
           <Link to="/" className="font-display text-2xl font-bold">
-            Pitch<span className="text-[#FF6B35]">aí</span>
+            Pitch<span className="text-[#a855f7]">aí</span>
           </Link>
-          <h1 className="mt-4 text-xl font-semibold">
+          <h1 className="mt-4 text-xl font-semibold text-balance">
             {mode === "login"
               ? "Entrar na sua conta"
               : mode === "signup"
                 ? "Criar sua conta"
                 : "Recuperar acesso"}
           </h1>
-          <p className="mt-1 text-sm text-white/50">
+          <p className="mt-1 text-sm text-white/55 text-pretty">
             {mode === "forgot"
-              ? "Informe seu email e mandamos o link de redefinição."
+              ? "Informe seu e-mail e mandamos o link de redefinição."
               : "Seu roteiro, voz e configuração ficam salvos na nuvem."}
           </p>
         </div>
 
-        <button
-          onClick={google}
-          type="button"
-          className="w-full rounded-lg bg-white px-4 py-2.5 text-sm font-semibold text-black hover:opacity-90"
-        >
-          Continuar com Google
-        </button>
-
-        <div className="flex items-center gap-3 text-xs text-white/30">
-          <span className="h-px flex-1 bg-white/10" /> ou{" "}
-          <span className="h-px flex-1 bg-white/10" />
-        </div>
-
-        <form onSubmit={submit} className="space-y-3">
-          <input
-            type="email"
-            required
-            autoComplete="email"
-            placeholder="seu@email.com"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            className="w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2.5 text-sm outline-none focus:border-[#7C3AED]"
-          />
-          {mode !== "forgot" && (
-            <input
-              type="password"
-              required
-              minLength={8}
-              autoComplete={mode === "login" ? "current-password" : "new-password"}
-              placeholder="Senha (mín. 8 caracteres)"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              className="w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2.5 text-sm outline-none focus:border-[#7C3AED]"
-            />
-          )}
+        <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-6 shadow-[0_20px_60px_rgba(0,0,0,0.4)] backdrop-blur-2xl">
           <button
-            type="submit"
+            onClick={google}
+            type="button"
             disabled={busy}
-            className="flex w-full items-center justify-center gap-2 rounded-lg bg-[#7C3AED] px-4 py-2.5 text-sm font-semibold text-white hover:opacity-90 disabled:opacity-50"
+            className="flex w-full items-center justify-center gap-2 rounded-lg bg-white px-4 py-2.5 text-sm font-semibold text-black transition hover:opacity-90 disabled:opacity-50"
           >
-            {busy && <Loader2 className="h-4 w-4 animate-spin" />}
-            {mode === "login" ? "Entrar" : mode === "signup" ? "Criar conta" : "Enviar link"}
+            <svg viewBox="0 0 48 48" className="h-4 w-4" aria-hidden>
+              <path
+                fill="#FFC107"
+                d="M43.6 20.5H42V20H24v8h11.3c-1.6 4.6-6 8-11.3 8-6.6 0-12-5.4-12-12s5.4-12 12-12c3.1 0 5.9 1.2 8 3.1l5.7-5.7C34.5 6 29.5 4 24 4 12.9 4 4 12.9 4 24s8.9 20 20 20 20-8.9 20-20c0-1.3-.1-2.7-.4-3.5z"
+              />
+              <path
+                fill="#FF3D00"
+                d="M6.3 14.7l6.6 4.8C14.6 16 18.9 13 24 13c3.1 0 5.9 1.2 8 3.1l5.7-5.7C34.5 6 29.5 4 24 4c-7.7 0-14.3 4.3-17.7 10.7z"
+              />
+              <path
+                fill="#4CAF50"
+                d="M24 44c5.4 0 10.3-1.8 14-5.7l-6.5-5.4c-2 1.4-4.6 2.1-7.5 2.1-5.3 0-9.7-3.4-11.3-8l-6.6 5.1C9.5 39.6 16.2 44 24 44z"
+              />
+              <path
+                fill="#1976D2"
+                d="M43.6 20.5H42V20H24v8h11.3c-.8 2.2-2.2 4.1-4.1 5.4l6.5 5.4C41.5 36 44 30.5 44 24c0-1.3-.1-2.7-.4-3.5z"
+              />
+            </svg>
+            Continuar com Google
           </button>
-        </form>
+
+          <div className="my-5 flex items-center gap-3 text-xs text-white/30">
+            <span className="h-px flex-1 bg-white/10" /> ou <span className="h-px flex-1 bg-white/10" />
+          </div>
+
+          <form onSubmit={submit} className="space-y-3">
+            <div className="relative">
+              <Mail className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-white/35" />
+              <input
+                type="email"
+                required
+                autoComplete="email"
+                placeholder="seu@email.com"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                className="w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2.5 pl-9 text-sm outline-none transition focus:border-[#8b5cf6] focus:ring-1 focus:ring-[#8b5cf6]/40"
+              />
+            </div>
+
+            {mode !== "forgot" && (
+              <div className="relative">
+                <Lock className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-white/35" />
+                <input
+                  type={showPassword ? "text" : "password"}
+                  required
+                  minLength={8}
+                  autoComplete={mode === "login" ? "current-password" : "new-password"}
+                  placeholder="Senha (mín. 8 caracteres)"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  className="w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2.5 pl-9 pr-10 text-sm outline-none transition focus:border-[#8b5cf6] focus:ring-1 focus:ring-[#8b5cf6]/40"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword((v) => !v)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-white/40 hover:text-white/80"
+                  aria-label={showPassword ? "Ocultar senha" : "Mostrar senha"}
+                  tabIndex={-1}
+                >
+                  {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                </button>
+              </div>
+            )}
+
+            {mode === "signup" && (
+              <div className="relative">
+                <Lock className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-white/35" />
+                <input
+                  type={showConfirmPassword ? "text" : "password"}
+                  required
+                  minLength={8}
+                  autoComplete="new-password"
+                  placeholder="Confirmar senha"
+                  value={confirmPassword}
+                  onChange={(e) => setConfirmPassword(e.target.value)}
+                  className="w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2.5 pl-9 pr-10 text-sm outline-none transition focus:border-[#8b5cf6] focus:ring-1 focus:ring-[#8b5cf6]/40"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowConfirmPassword((v) => !v)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-white/40 hover:text-white/80"
+                  aria-label={showConfirmPassword ? "Ocultar senha" : "Mostrar senha"}
+                  tabIndex={-1}
+                >
+                  {showConfirmPassword ? (
+                    <EyeOff className="h-4 w-4" />
+                  ) : (
+                    <Eye className="h-4 w-4" />
+                  )}
+                </button>
+              </div>
+            )}
+
+            {formError && <p className="text-sm text-[#f87171]">{formError}</p>}
+
+            <button
+              type="submit"
+              disabled={busy}
+              className="flex w-full items-center justify-center gap-2 rounded-lg bg-gradient-to-br from-[#8b5cf6] to-[#a855f7] px-4 py-2.5 text-sm font-semibold text-white shadow-[0_8px_24px_rgba(139,92,246,0.35)] transition hover:opacity-90 disabled:opacity-50"
+            >
+              {busy && <Loader2 className="h-4 w-4 animate-spin" />}
+              {mode === "login" ? "Entrar" : mode === "signup" ? "Criar conta" : "Enviar link"}
+            </button>
+          </form>
+        </div>
 
         <div className="space-y-2 text-center text-sm text-white/50">
           {mode === "login" && (
