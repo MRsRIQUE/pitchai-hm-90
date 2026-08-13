@@ -68,12 +68,26 @@
    GRID FIELD — quadriculado deformável pelo mouse (canvas)
    ============================================================ */
 .landing .grid-field {
-  position: fixed;
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  min-height: 100%;
+  pointer-events: none;
+  opacity: 0.9;
+}
+
+/* Fallback visual: a malha continua mesmo antes do canvas hidratar. */
+.landing::before {
+  content: "";
+  position: absolute;
   inset: 0;
   z-index: 0;
   pointer-events: none;
-  -webkit-mask-image: linear-gradient(to bottom, #000 35%, rgba(0, 0, 0, 0.65) 65%, transparent 97%);
-  mask-image: linear-gradient(to bottom, #000 35%, rgba(0, 0, 0, 0.65) 65%, transparent 97%);
+  background-image:
+    linear-gradient(var(--grid-line) 1px, transparent 1px),
+    linear-gradient(90deg, var(--grid-line) 1px, transparent 1px);
+  background-size: 56px 56px;
+  opacity: 0.72;
 }
 .landing .grid-field canvas {
   display: block;
@@ -324,9 +338,23 @@
   flex: 1;
   background: radial-gradient(120% 90% at 30% 20%, #2a2a33 0%, #17171c 60%, #101014 100%);
   position: relative;
+  overflow: hidden;
+}
+.landing .stage-video {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  opacity: 0.92;
+  z-index: 0;
+}
+.landing .stage-video:not([src]) {
+  display: none;
 }
 .landing .silhouette {
   position: absolute;
+  z-index: 1;
   left: 50%;
   bottom: 0;
   transform: translateX(-50%);
@@ -464,12 +492,12 @@
 }
 .landing .chip-a {
   top: 46px;
-  left: -34px;
+  left: -22px;
   animation-delay: 0s;
 }
 .landing .chip-b {
   bottom: 132px;
-  right: -34px;
+  right: -22px;
   animation-delay: 1.8s;
 }
 .landing .chip-ic {
@@ -507,11 +535,18 @@
 }
 .landing .stats-grid {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  align-items: stretch;
 }
-.landing .stat {
-  padding: 38px 28px 38px 0;
-  border-right: 1px solid var(--line);
+  .landing .stat {
+    min-height: 0;
+    padding: 26px 18px;
+    border-right: none;
+    border-bottom: 1px solid var(--line);
+  }
+.landing .stat-d {
+  max-width: 19em;
+  min-height: 42px;
 }
 .landing .stat:last-child {
   border-right: none;

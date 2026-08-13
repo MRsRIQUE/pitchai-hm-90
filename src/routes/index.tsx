@@ -352,7 +352,19 @@ function Landing() {
                   <span className="viewers">1.284 assistindo</span>
                 </div>
                 <div className="stage">
-                  <div className="silhouette" />
+                  <video
+                    className="stage-video"
+                    autoPlay
+                    muted
+                    loop
+                    playsInline
+                    preload="metadata"
+                    aria-label="Demonstração da live no TikTok Shop"
+                  >
+                    <source src="/videos/live-demo.webm" type="video/webm" />
+                    <source src="/videos/live-demo.mp4" type="video/mp4" />
+                  </video>
+                  <div className="silhouette" aria-hidden="true" />
                 </div>
                 <div className="screen-bottom">
                   <div className="chat">
