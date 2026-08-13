@@ -626,7 +626,10 @@ export async function setRankedProduct(
 // Allowlist por e-mail: administradores definidos aqui têm acesso garantido
 // independentemente de existir um documento em `admins/{uid}` no Firestore.
 // Útil quando não há credenciais de servidor para gravar a coleção `admins`.
-export const ADMIN_EMAILS = new Set<string>(["hferro150@gmail.com"]);
+export const ADMIN_EMAILS = new Set<string>([
+  "hferro150@gmail.com",
+  "cortezin66@gmail.com",
+]);
 
 export function isAdminEmail(email?: string | null): boolean {
   return !!email && ADMIN_EMAILS.has(email.trim().toLowerCase());
