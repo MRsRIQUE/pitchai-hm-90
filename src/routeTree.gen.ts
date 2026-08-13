@@ -20,6 +20,7 @@ import { Route as PaymentsRouteImport } from './routes/payments'
 import { Route as PlanosRouteImport } from './routes/planos'
 import { Route as QuentesRouteImport } from './routes/quentes'
 import { Route as ResetPasswordRouteImport } from './routes/reset-password'
+import { Route as TermosRouteImport } from './routes/termos'
 import { Route as ApiPaymentsRouteImport } from './routes/api/payments'
 import { Route as CheckoutReturnRouteImport } from './routes/checkout.return'
 import { Route as ApiScriptGenerateRouteImport } from './routes/api/script/generate'
@@ -89,6 +90,11 @@ const QuentesRoute = QuentesRouteImport.update({
 const ResetPasswordRoute = ResetPasswordRouteImport.update({
   id: '/reset-password',
   path: '/reset-password',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const TermosRoute = TermosRouteImport.update({
+  id: '/termos',
+  path: '/termos',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ApiPaymentsRoute = ApiPaymentsRouteImport.update({
@@ -183,6 +189,7 @@ export interface FileRoutesByFullPath {
   '/planos': typeof PlanosRoute
   '/quentes': typeof QuentesRoute
   '/reset-password': typeof ResetPasswordRoute
+  '/termos': typeof TermosRoute
   '/api/payments': typeof ApiPaymentsRoute
   '/checkout/return': typeof CheckoutReturnRoute
   '/api/script/generate': typeof ApiScriptGenerateRoute
@@ -211,6 +218,7 @@ export interface FileRoutesByTo {
   '/planos': typeof PlanosRoute
   '/quentes': typeof QuentesRoute
   '/reset-password': typeof ResetPasswordRoute
+  '/termos': typeof TermosRoute
   '/api/payments': typeof ApiPaymentsRoute
   '/checkout/return': typeof CheckoutReturnRoute
   '/api/script/generate': typeof ApiScriptGenerateRoute
@@ -240,6 +248,7 @@ export interface FileRoutesById {
   '/planos': typeof PlanosRoute
   '/quentes': typeof QuentesRoute
   '/reset-password': typeof ResetPasswordRoute
+  '/termos': typeof TermosRoute
   '/api/payments': typeof ApiPaymentsRoute
   '/checkout/return': typeof CheckoutReturnRoute
   '/api/script/generate': typeof ApiScriptGenerateRoute
@@ -270,6 +279,7 @@ export interface FileRouteTypes {
     | '/planos'
     | '/quentes'
     | '/reset-password'
+    | '/termos'
     | '/api/payments'
     | '/checkout/return'
     | '/api/script/generate'
@@ -298,6 +308,7 @@ export interface FileRouteTypes {
     | '/planos'
     | '/quentes'
     | '/reset-password'
+    | '/termos'
     | '/api/payments'
     | '/checkout/return'
     | '/api/script/generate'
@@ -326,6 +337,7 @@ export interface FileRouteTypes {
     | '/planos'
     | '/quentes'
     | '/reset-password'
+    | '/termos'
     | '/api/payments'
     | '/checkout/return'
     | '/api/script/generate'
@@ -355,6 +367,7 @@ export interface RootRouteChildren {
   PlanosRoute: typeof PlanosRoute
   QuentesRoute: typeof QuentesRoute
   ResetPasswordRoute: typeof ResetPasswordRoute
+  TermosRoute: typeof TermosRoute
   ApiPaymentsRoute: typeof ApiPaymentsRoute
   CheckoutReturnRoute: typeof CheckoutReturnRoute
   ApiScriptGenerateRoute: typeof ApiScriptGenerateRoute
@@ -449,6 +462,13 @@ declare module '@tanstack/react-router' {
       path: '/reset-password'
       fullPath: '/reset-password'
       preLoaderRoute: typeof ResetPasswordRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/termos': {
+      id: '/termos'
+      path: '/termos'
+      fullPath: '/termos'
+      preLoaderRoute: typeof TermosRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/payments': {
@@ -571,6 +591,7 @@ const rootRouteChildren: RootRouteChildren = {
   PlanosRoute: PlanosRoute,
   QuentesRoute: QuentesRoute,
   ResetPasswordRoute: ResetPasswordRoute,
+  TermosRoute: TermosRoute,
   ApiPaymentsRoute: ApiPaymentsRoute,
   CheckoutReturnRoute: CheckoutReturnRoute,
   ApiScriptGenerateRoute: ApiScriptGenerateRoute,
