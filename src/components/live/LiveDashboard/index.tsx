@@ -78,6 +78,7 @@ import { QuickStartModal } from "../QuickStartModal";
 import { useUserSubscription } from "@/hooks/useUserSubscription";
 import { PaymentGuardOverlay } from "../PaymentGuardModal";
 import { useLiveStore } from "@/stores/useLiveStore";
+import { useShallow } from "zustand/react/shallow";
 import { ProductsSection } from "./ProductsSection";
 import { AiConfigSection } from "./AiConfigSection";
 import { VoiceSettings } from "./VoiceSettings";
@@ -112,14 +113,16 @@ const THEME_OPTIONS: { id: ThemeStyle; name: string; tag: string; icon: any; col
 
 export function LiveDashboard() {
   // Usando a store global
-  const { config, loading, errors, updateConfig, setLoading, setError } = useLiveStore((state) => ({
-    config: state.config,
-    loading: state.loading,
-    errors: state.errors,
-    updateConfig: state.actions.updateConfig,
-    setLoading: state.actions.setLoading,
-    setError: state.actions.setError,
-  }));
+  const { config, loading, errors, updateConfig, setLoading, setError } = useLiveStore(
+    useShallow((state) => ({
+      config: state.config,
+      loading: state.loading,
+      errors: state.errors,
+      updateConfig: state.actions.updateConfig,
+      setLoading: state.actions.setLoading,
+      setError: state.actions.setError,
+    })),
+  );
 
   // Hook de assinatura
   const {

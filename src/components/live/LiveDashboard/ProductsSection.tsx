@@ -11,6 +11,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Plus, Trash2, ShoppingBag, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { useLiveStore } from "@/stores/useLiveStore";
+import { useShallow } from "zustand/react/shallow";
 import { newProduct, type Product, type LiveConfig } from "@/lib/live/config";
 import { useVitrineSync } from "@/hooks/live/useVitrineSync";
 import { safeFetch } from "@/lib/api";
@@ -21,15 +22,17 @@ export interface ProductsSectionProps {
 
 export function ProductsSection({ compact = false }: ProductsSectionProps) {
   const { config, vitrineItems, vitrineStatus, vitrineAt, loading, errors, updateConfig } =
-    useLiveStore((state) => ({
-      config: state.config,
-      vitrineItems: state.vitrineItems,
-      vitrineStatus: state.vitrineStatus,
-      vitrineAt: state.vitrineAt,
-      loading: state.loading,
-      errors: state.errors,
-      updateConfig: state.actions.updateConfig,
-    }));
+    useLiveStore(
+      useShallow((state) => ({
+        config: state.config,
+        vitrineItems: state.vitrineItems,
+        vitrineStatus: state.vitrineStatus,
+        vitrineAt: state.vitrineAt,
+        loading: state.loading,
+        errors: state.errors,
+        updateConfig: state.actions.updateConfig,
+      })),
+    );
 
   const { syncVitrine } = useVitrineSync({
     autoSync: true,

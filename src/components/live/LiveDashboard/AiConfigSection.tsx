@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Brain } from "lucide-react";
 import { useLiveStore } from "@/stores/useLiveStore";
+import { useShallow } from "zustand/react/shallow";
 import { PresetPicker } from "../PresetPicker";
 import { type AIContext } from "@/lib/live/config";
 
@@ -15,10 +16,12 @@ export interface AiConfigSectionProps {
 }
 
 export function AiConfigSection({ compact = false }: AiConfigSectionProps) {
-  const { config, updateConfig } = useLiveStore((state) => ({
-    config: state.config,
-    updateConfig: state.actions.updateConfig,
-  }));
+  const { config, updateConfig } = useLiveStore(
+    useShallow((state) => ({
+      config: state.config,
+      updateConfig: state.actions.updateConfig,
+    })),
+  );
 
   // Função para atualizar o contexto da IA
   const updateContext = <K extends keyof AIContext>(key: K, value: AIContext[K]) => {

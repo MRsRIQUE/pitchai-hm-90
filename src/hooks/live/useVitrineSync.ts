@@ -42,6 +42,17 @@ export function useVitrineSync(options: VitrineSyncOptions = {}): VitrineSyncRes
   const isMountedRef = useRef<boolean>(true);
   const isSyncingRef = useRef<boolean>(false);
 
+  // Guarda os callbacks em refs para que mudem sem recriar `syncVitrine`.
+  // Callbacks passados inline (ex.: onError=(e)=>...) mudam a cada render;
+  // se entrassem nas deps do useCallback/useEffect, o auto-sync re-executaria
+  // em loop infinito ("Maximum update depth exceeded").
+  const onSuccessRef = useRef(onSuccess);
+  const onErrorRef = useRef(onError);
+  useEffect(() => {
+    onSuccessRef.current = onSuccess;
+    onErrorRef.current = onError;
+  }, [onSuccess, onError]);
+
   // Função principal de sincronização
   const syncVitrine = useCallback(async () => {
     // Evita sincronizações simultâneas
@@ -107,7 +118,7 @@ export function useVitrineSync(options: VitrineSyncOptions = {}): VitrineSyncRes
           result.items.length === 0 ? "vazia" : "ok",
           result.updatedAt ?? null,
         );
-        onSuccess?.(result.items, result.updatedAt ?? null);
+        onSuccessRef.current?.(result.items, result.updatedAt ?? null);
       }
     } catch (error) {
       if (!isMountedRef.current) return;
@@ -124,14 +135,14 @@ export function useVitrineSync(options: VitrineSyncOptions = {}): VitrineSyncRes
 
       console.error("[useVitrineSync] Erro na sincronização:", error);
       setError("vitrine", errorMessage);
-      onError?.(errorMessage);
+      onErrorRef.current?.(errorMessage);
     } finally {
       isSyncingRef.current = false;
       if (isMountedRef.current) {
         setLoading("vitrine", false);
       }
     }
-  }, [setVitrine, setLoading, setError, onSuccess, onError]);
+  }, [setVitrine, setLoading, setError]);
 
   // Função para cancelar sincronização
   const cancelSync = useCallback(() => {

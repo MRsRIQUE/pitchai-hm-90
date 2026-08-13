@@ -17,6 +17,7 @@ import {
 import { Mic, AudioLines, Play, Volume2, Loader2, Zap } from "lucide-react";
 import { toast } from "sonner";
 import { useLiveStore } from "@/stores/useLiveStore";
+import { useShallow } from "zustand/react/shallow";
 import { VOICES, SAMPLE_PHRASE, type VoiceId } from "@/lib/live/voices";
 import { aiHeaders } from "@/lib/live/ai-headers";
 import { safeFetch } from "@/lib/api";
@@ -34,11 +35,13 @@ export function VoiceSettings({
   audioPermGranted,
   onRequestAudioPermission,
 }: VoiceSettingsProps) {
-  const { config, updateConfig, loading } = useLiveStore((state) => ({
-    config: state.config,
-    updateConfig: state.actions.updateConfig,
-    loading: state.loading,
-  }));
+  const { config, updateConfig, loading } = useLiveStore(
+    useShallow((state) => ({
+      config: state.config,
+      updateConfig: state.actions.updateConfig,
+      loading: state.loading,
+    })),
+  );
 
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const [testingVoice, setTestingVoice] = useState(false);

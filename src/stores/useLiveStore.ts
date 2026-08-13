@@ -1,4 +1,5 @@
-﻿import { create } from "zustand";
+import { create } from "zustand";
+import { useShallow } from "zustand/react/shallow";
 import {
   LiveConfig,
   DEFAULT_CONFIG,
@@ -155,11 +156,13 @@ export const useLiveStore = create<LiveState>()((set, get) => createLiveStore(se
 // Selector hooks para facilitar o uso
 export const useConfig = () => useLiveStore((state) => state.config);
 export const useVitrine = () =>
-  useLiveStore((state) => ({
-    items: state.vitrineItems,
-    status: state.vitrineStatus,
-    at: state.vitrineAt,
-  }));
+  useLiveStore(
+    useShallow((state) => ({
+      items: state.vitrineItems,
+      status: state.vitrineStatus,
+      at: state.vitrineAt,
+    })),
+  );
 export const useLoading = () => useLiveStore((state) => state.loading);
 export const useErrors = () => useLiveStore((state) => state.errors);
 export const useLiveActions = () => useLiveStore((state) => state.actions);

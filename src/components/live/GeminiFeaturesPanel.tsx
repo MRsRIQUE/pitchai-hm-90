@@ -248,12 +248,12 @@ export function GeminiFeaturesPanel() {
             />
             <div>
               <h3 className="font-semibold text-sm">Conversas por Voz em Tempo Real</h3>
-              <p className="text-xs text-muted-foreground">
+              <span className="flex items-center gap-1 text-xs text-muted-foreground">
                 Live API ·{" "}
                 <Badge variant="outline" className="text-[10px]">
                   gemini-3.1-flash-live-preview
                 </Badge>
-              </p>
+              </span>
             </div>
           </div>
           <Button
@@ -296,12 +296,12 @@ export function GeminiFeaturesPanel() {
             <FileAudio className="h-5 w-5 text-blue-500" />
             <div>
               <h3 className="font-semibold text-sm">Transcrever Áudio com Microfone</h3>
-              <p className="text-xs text-muted-foreground">
+              <span className="flex items-center gap-1 text-xs text-muted-foreground">
                 Transcrição com{" "}
                 <Badge variant="outline" className="text-[10px]">
                   gemini-3.5-flash
                 </Badge>
-              </p>
+              </span>
             </div>
           </div>
           <Button
