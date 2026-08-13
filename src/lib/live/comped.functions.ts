@@ -82,9 +82,10 @@ export const grantCompedAccess = createServerFn({ method: "POST" })
       );
       return { ok: true };
     } catch (error) {
-      console.error("[v0] Falha ao liberar cortesia", error);
+      const detail = error instanceof Error ? error.message : String(error ?? "erro desconhecido");
+      console.error("[v0] Falha ao liberar cortesia", { email: data.email, detail });
       return {
-        error: error instanceof Error ? error.message : "Não foi possível liberar a cortesia",
+        error: `Não foi possível liberar a cortesia: ${detail}`,
       };
     }
   });
