@@ -1,0 +1,7 @@
+# Protege binários contra pipelines de texto (causa da corrupção do zip da extensão)
+*.zip binary
+*.png binary
+*.ico binary
+*.jpg binary
+*.jpeg binary
+*.woff2 binary

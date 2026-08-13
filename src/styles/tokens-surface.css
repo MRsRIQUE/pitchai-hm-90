@@ -1,0 +1,60 @@
+﻿/* ============================================================
+   Surface + Glass tokens
+   ------------------------------------------------------------
+   Single source of truth for the dark-gray base, hairline
+   surface variants, and tiered glassmorphism.
+
+   Rules:
+   - Components must NEVER hardcode #000, #0A0A0A or similar.
+     Use bg-background / bg-surface-input / .glass / .glass-strong.
+   - Pure black (#000) is reserved for translucent scrims only
+     (e.g. bg-black/60 on modal overlays) — never as a solid fill.
+   ============================================================ */
+
+:root {
+  /* Base surfaces (Pitch AI dark) ----------------------------- */
+  --surface-base: #0f0f1a; /* canonical app background */
+  --surface-raised: #17172a; /* inputs, inset wells */
+  --surface-overlay: #1d1d33; /* popovers / menus */
+
+  /* Text on the accent -------------------------------------- */
+  --on-accent: #ffffff;
+
+  /* Glass tiers ---------------------------------------------- */
+  --glass-bg-subtle: rgba(24, 24, 40, 0.4);
+  --glass-bg: rgba(20, 20, 34, 0.55);
+  --glass-bg-strong: rgba(20, 20, 34, 0.75);
+  --glass-border: rgba(255, 255, 255, 0.08);
+  --glass-border-strong: rgba(255, 255, 255, 0.12);
+
+  --glass-blur-subtle: blur(16px) saturate(140%);
+  --glass-blur: blur(22px) saturate(160%);
+  --glass-blur-strong: blur(30px) saturate(200%);
+}
+
+.light {
+  --surface-base: #f9fafb;
+  --surface-raised: #ffffff;
+  --surface-overlay: #ffffff;
+
+  --on-accent: #ffffff;
+
+  --glass-bg-subtle: rgba(255, 255, 255, 0.55);
+  --glass-bg: rgba(255, 255, 255, 0.65);
+  --glass-bg-strong: rgba(255, 255, 255, 0.85);
+  --glass-border: rgba(17, 24, 39, 0.06);
+  --glass-border-strong: rgba(17, 24, 39, 0.1);
+}
+
+@theme inline {
+  --color-surface-base: var(--surface-base);
+  --color-surface-raised: var(--surface-raised);
+  --color-surface-overlay: var(--surface-overlay);
+  --color-on-accent: var(--on-accent);
+}
+
+@utility glass-subtle {
+  background: var(--glass-bg-subtle);
+  backdrop-filter: var(--glass-blur-subtle);
+  border: 1px solid var(--glass-border);
+}

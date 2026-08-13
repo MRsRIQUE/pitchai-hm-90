@@ -1,0 +1,3 @@
+export function renderErrorPage(): string {
+  return `<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><title>Erro</title><meta name="viewport" content="width=device-width,initial-scale=1"><style>body{font-family:system-ui,sans-serif;background:#0a0a0a;color:#fafafa;display:flex;align-items:center;justify-content:center;min-height:100vh;margin:0;padding:24px}main{max-width:420px;text-align:center}h1{font-size:24px;margin:0 0 8px}p{color:#a1a1aa;margin:0 0 24px}a{color:#fafafa;text-decoration:underline}</style></head><body><main><h1>Algo deu errado</h1><p>Tente recarregar a página.</p><a href="/">Voltar ao início</a></main></body></html>`;
+}

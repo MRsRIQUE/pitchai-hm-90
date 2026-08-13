@@ -1,0 +1,50 @@
+{
+  "manifest_version": 3,
+  "name": "Pitch AI",
+  "version": "0.14.5",
+  "description": "Automatize sua LIVE do TikTok Shop: respostas com IA, auto-fixar produto, encerrar por tempo e proteção contra violações.",
+  "permissions": ["storage", "activeTab"],
+  "host_permissions": ["https://shop.tiktok.com/*", "https://pitchai-live.lovable.app/*"],
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "Pitch AI",
+    "default_icon": "icon.png"
+  },
+  "icons": {
+    "48": "icon.png",
+    "128": "icon.png"
+  },
+  "content_scripts": [
+    {
+      "matches": ["https://shop.tiktok.com/streamer/*", "https://shop.tiktok.com/*live*"],
+      "js": ["hook.js"],
+      "world": "MAIN",
+      "run_at": "document_start",
+      "all_frames": true
+    },
+    {
+      "matches": ["https://shop.tiktok.com/streamer/*", "https://shop.tiktok.com/*live*"],
+      "js": ["net-bridge.js"],
+      "run_at": "document_start",
+      "all_frames": true
+    },
+    {
+      "matches": [
+        "https://shop.tiktok.com/streamer/*",
+        "https://shop.tiktok.com/*live*",
+        "https://pitchai-live.lovable.app/*",
+        "http://localhost/*",
+        "http://127.0.0.1/*"
+      ],
+      "js": ["regions.js", "dom-map.js", "content.js"],
+      "css": ["styles.css"],
+      "run_at": "document_idle"
+    }
+  ],
+  "web_accessible_resources": [
+    {
+      "resources": ["panel.html", "panel.js", "panel.css", "styles.css", "hook.js", "icon.png"],
+      "matches": ["https://shop.tiktok.com/*", "https://pitchai-live.lovable.app/*"]
+    }
+  ]
+}

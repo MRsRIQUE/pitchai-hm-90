@@ -1,0 +1,366 @@
+/**
+ * ProductsSection - Componente para gerenciamento de produtos
+ * Parte do LiveDashboard
+ */
+import { useState, useEffect } from "react";
+import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Switch } from "@/components/ui/switch";
+import { Textarea } from "@/components/ui/textarea";
+import { Plus, Trash2, ShoppingBag, Loader2 } from "lucide-react";
+import { toast } from "sonner";
+import { useLiveStore } from "@/stores/useLiveStore";
+import { newProduct, type Product, type LiveConfig } from "@/lib/live/config";
+import { useVitrineSync } from "@/hooks/live/useVitrineSync";
+import { safeFetch } from "@/lib/api";
+
+export interface ProductsSectionProps {
+  compact?: boolean;
+}
+
+export function ProductsSection({ compact = false }: ProductsSectionProps) {
+  const { config, vitrineItems, vitrineStatus, vitrineAt, loading, errors, updateConfig } =
+    useLiveStore((state) => ({
+      config: state.config,
+      vitrineItems: state.vitrineItems,
+      vitrineStatus: state.vitrineStatus,
+      vitrineAt: state.vitrineAt,
+      loading: state.loading,
+      errors: state.errors,
+      updateConfig: state.actions.updateConfig,
+    }));
+
+  const { syncVitrine } = useVitrineSync({
+    autoSync: true,
+    syncInterval: 20000,
+    onError: (error) => {
+      toast.error(`Erro ao sincronizar vitrine: ${error}`);
+    },
+  });
+
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [importing, setImporting] = useState(false);
+
+  // Seleciona o primeiro produto para editar se não houver nenhum selecionado
+  useEffect(() => {
+    if (!editingId && config.produtos[0]) {
+      setEditingId(config.produtos[0].id);
+    }
+  }, [config.produtos, editingId]);
+
+  const editing = config.produtos.find((p) => p.id === editingId) ?? null;
+  const activeProduct = config.produtos.find((p) => p.active) ?? null;
+
+  // Sincroniza com a vitrine
+  const handleImportVitrine = async () => {
+    setImporting(true);
+    try {
+      await syncVitrine();
+      toast.success("Vitrine sincronizada com sucesso");
+    } catch (error) {
+      toast.error(
+        `Falha ao sincronizar: ${error instanceof Error ? error.message : String(error)}`,
+      );
+    } finally {
+      setImporting(false);
+    }
+  };
+
+  // Importa do clipboard (extensão)
+  const importFromExtension = async () => {
+    try {
+      let raw = "";
+      try {
+        raw = await navigator.clipboard.readText();
+      } catch {
+        raw =
+          window.prompt(
+            "Cole aqui o JSON do catálogo (gerado pelo botão 'Buscar catálogo' da extensão no TikTok Shop):",
+            "",
+          ) ?? "";
+      }
+
+      if (!raw.trim()) return;
+
+      const scraped = JSON.parse(raw) as { name: string; price?: string; description?: string }[];
+      if (!Array.isArray(scraped) || scraped.length === 0) {
+        toast.error("Catálogo vazio ou inválido");
+        return;
+      }
+
+      const existentes = new Set(config.produtos.map((p) => p.name.toLowerCase().trim()));
+      const novos = scraped
+        .filter((s) => s?.name && !existentes.has(String(s.name).toLowerCase().trim()))
+        .map((s) => ({
+          id: crypto.randomUUID(),
+          name: String(s.name),
+          price: s.price ?? "",
+          description: s.description ?? "",
+          active: false,
+        }));
+
+      if (novos.length === 0) {
+        toast.info("Nenhum produto novo — todos já existiam");
+        return;
+      }
+
+      updateConfig((c) => ({ ...c, produtos: [...c.produtos, ...novos] }));
+      toast.success(`${novos.length} produto(s) importado(s) do catálogo`);
+    } catch (e) {
+      toast.error("Falha ao importar", {
+        description: e instanceof Error ? e.message : "JSON inválido",
+      });
+    }
+  };
+
+  // Adiciona novo produto
+  const addProduct = () => {
+    const p = newProduct();
+    updateConfig((c) => ({ ...c, produtos: [...c.produtos, p] }));
+    setEditingId(p.id);
+  };
+
+  // Atualiza campo de produto
+  const updateProductField = <K extends keyof Product>(field: K, value: Product[K]) => {
+    if (!editing) return;
+    updateConfig((c) => ({
+      ...c,
+      produtos: c.produtos.map((p) => (p.id === editing.id ? { ...p, [field]: value } : p)),
+    }));
+  };
+
+  // Atualiza o produto ativo (só um por vez)
+  const setActiveProduct = (productId: string, active: boolean) => {
+    updateConfig((c) => ({
+      ...c,
+      produtos: c.produtos.map((p) =>
+        p.id === productId ? { ...p, active: active } : { ...p, active: false },
+      ),
+    }));
+  };
+
+  // Remove produto
+  const removeProduct = (productId: string) => {
+    updateConfig((c) => ({
+      ...c,
+      produtos: c.produtos.filter((p) => p.id !== productId),
+    }));
+    if (editingId === productId) {
+      setEditingId(null);
+    }
+  };
+
+  // Mensagem de status da vitrine
+  const getVitrineStatusMessage = () => {
+    if (vitrineStatus === "ok" && vitrineAt) {
+      return `Vitrine sincronizada em ${new Date(vitrineAt).toLocaleTimeString("pt-BR")}.`;
+    }
+    if (vitrineStatus === "vazia") {
+      return "Abra o Gerenciador de LIVE do TikTok com a extensão Pitch AI ativa para a vitrine aparecer aqui.";
+    }
+    return "Importe a vitrine do TikTok pela extensão, ou adicione manualmente.";
+  };
+
+  if (compact) {
+    return (
+      <Card className="p-4">
+        <div className="flex items-center justify-between mb-3">
+          <h4 className="font-semibold text-sm">Produtos</h4>
+          <div className="flex gap-2">
+            <Button size="sm" onClick={handleImportVitrine} disabled={importing || loading.vitrine}>
+              {importing || loading.vitrine ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              ) : (
+                <ShoppingBag className="h-3.5 w-3.5" />
+              )}
+              Importar
+            </Button>
+            <Button size="sm" variant="outline" onClick={addProduct}>
+              <Plus className="h-3.5 w-3.5" />
+            </Button>
+          </div>
+        </div>
+        <p className="text-xs text-muted-foreground mb-3">{getVitrineStatusMessage()}</p>
+
+        {config.produtos.length === 0 ? (
+          <p className="text-xs text-muted-foreground">Nenhum produto. Adicione um.</p>
+        ) : (
+          <div className="space-y-2">
+            {config.produtos.map((p) => (
+              <div
+                key={p.id}
+                className={`flex items-center justify-between p-2 rounded border text-xs ${
+                  p.active ? "border-primary bg-primary/5" : "border-border"
+                }`}
+              >
+                <div className="flex items-center gap-2">
+                  <span
+                    className={`h-2 w-2 rounded-full ${p.active ? "bg-primary" : "bg-muted"}`}
+                  />
+                  <span className="truncate max-w-[150px]">{p.name}</span>
+                  {p.price && <span className="text-muted-foreground">{p.price}</span>}
+                </div>
+                <div className="flex gap-2">
+                  <Switch
+                    checked={p.active}
+                    onCheckedChange={(v) => setActiveProduct(p.id, v)}
+                    className="h-5 w-8"
+                  />
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-6 w-6"
+                    onClick={() => setEditingId(p.id)}
+                  >
+                    ✏️
+                  </Button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </Card>
+    );
+  }
+
+  return (
+    <div id="sec-produtos" className="scroll-mt-24 pt-2">
+      <h4 className="mb-3 font-display text-sm font-semibold">
+        Produtos
+        <span className="ml-2 font-sans text-xs font-normal text-muted-foreground">
+          a IA responde com base no produto marcado como ATIVO
+        </span>
+      </h4>
+
+      <Card className="p-4">
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+          <p className="text-xs text-muted-foreground">{getVitrineStatusMessage()}</p>
+          <div className="flex flex-wrap items-center gap-2">
+            <Button size="sm" onClick={handleImportVitrine} disabled={importing || loading.vitrine}>
+              {importing || loading.vitrine ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              ) : (
+                <ShoppingBag className="h-3.5 w-3.5" />
+              )}
+              Importar vitrine do TikTok
+            </Button>
+            <Button size="sm" variant="secondary" onClick={importFromExtension}>
+              <Loader2 className={`h-3.5 w-3.5 ${loading.vitrine ? "animate-spin" : "hidden"}`} />
+              <ShoppingBag className={`h-3.5 w-3.5 ${loading.vitrine ? "hidden" : ""}`} />
+              Colar catálogo
+            </Button>
+          </div>
+        </div>
+
+        <div className="grid gap-4 md:grid-cols-[220px_1fr]">
+          {/* Lista de produtos */}
+          <div>
+            <div className="mb-2 flex items-center justify-between">
+              <span className="text-xs uppercase tracking-wide text-muted-foreground">
+                Seus produtos
+              </span>
+              <Button size="sm" variant="outline" onClick={addProduct}>
+                <Plus className="h-3.5 w-3.5" />
+                Novo
+              </Button>
+            </div>
+
+            <div className="space-y-1">
+              {config.produtos.length === 0 && (
+                <p className="rounded-md border border-dashed border-border p-3 text-xs text-muted-foreground">
+                  Nenhum produto. Clique em "+ Novo".
+                </p>
+              )}
+              {config.produtos.map((p) => (
+                <button
+                  key={p.id}
+                  onClick={() => setEditingId(p.id)}
+                  className={`flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm transition ${
+                    editingId === p.id ? "bg-primary/15 text-foreground" : "hover:bg-accent"
+                  }`}
+                >
+                  <span
+                    className={`h-1.5 w-1.5 rounded-full ${
+                      p.active ? "bg-primary" : "bg-muted-foreground/40"
+                    }`}
+                  />
+                  <span className="truncate">{p.name}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Editor de produto */}
+          <div>
+            {editing ? (
+              <div className="space-y-3">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-xs uppercase tracking-wide text-muted-foreground">
+                    Editar produto
+                  </span>
+                  <div className="flex items-center gap-2">
+                    <label className="flex items-center gap-2 text-xs">
+                      Ativo
+                      <Switch
+                        checked={editing.active}
+                        onCheckedChange={(v) => setActiveProduct(editing.id, v)}
+                      />
+                    </label>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => {
+                        removeProduct(editing.id);
+                        setEditingId(null);
+                      }}
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="mb-1 block text-xs uppercase tracking-wide text-muted-foreground">
+                    Nome
+                  </label>
+                  <Input
+                    value={editing.name}
+                    onChange={(e) => updateProductField("name", e.target.value)}
+                  />
+                </div>
+
+                <div>
+                  <label className="mb-1 block text-xs uppercase tracking-wide text-muted-foreground">
+                    Preço
+                  </label>
+                  <Input
+                    value={editing.price}
+                    onChange={(e) => updateProductField("price", e.target.value)}
+                    placeholder="R$ 0,00"
+                  />
+                </div>
+
+                <div>
+                  <label className="mb-1 block text-xs uppercase tracking-wide text-muted-foreground">
+                    Descrição / benefícios
+                  </label>
+                  <Textarea
+                    value={editing.description}
+                    onChange={(e) => updateProductField("description", e.target.value)}
+                    rows={4}
+                    placeholder="A IA usa este texto para responder perguntas."
+                  />
+                </div>
+              </div>
+            ) : (
+              <p className="text-sm text-muted-foreground">
+                Selecione ou crie um produto para editar.
+              </p>
+            )}
+          </div>
+        </div>
+      </Card>
+    </div>
+  );
+}

@@ -1,0 +1,25 @@
+name: perf
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  aluno-home:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+      VITE_SUPABASE_PUBLISHABLE_KEY: ${{ secrets.VITE_SUPABASE_PUBLISHABLE_KEY }}
+      VITE_SUPABASE_PROJECT_ID: ${{ secrets.VITE_SUPABASE_PROJECT_ID }}
+      E2E_ALUNO_EMAIL: ${{ secrets.E2E_ALUNO_EMAIL }}
+      E2E_ALUNO_PASSWORD: ${{ secrets.E2E_ALUNO_PASSWORD }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+      - run: bun install --frozen-lockfile
+      - run: bunx playwright install --with-deps chromium
+      - run: bun run test:perf

@@ -1,0 +1,23 @@
+{
+  "id": "/app",
+  "name": "Pitchaí — Automação de LIVE",
+  "short_name": "Pitchaí",
+  "description": "Automatize sua LIVE do TikTok Shop com IA: pitch em voz, respostas no chat e proteção.",
+  "start_url": "/app",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#0F0F1A",
+  "theme_color": "#0F0F1A",
+  "categories": ["business", "productivity", "shopping"],
+  "icons": [
+    { "src": "/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    {
+      "src": "/icon-512-maskable.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ]
+}

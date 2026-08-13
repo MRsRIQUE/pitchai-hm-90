@@ -1,0 +1,65 @@
+{
+  "entities": {
+    "UserAiUsageStat": {
+      "title": "User AI Usage Stat",
+      "description": "Real-time AI usage statistics and metrics per user",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "userEmail": { "type": "string" },
+        "tokensInput": { "type": "number" },
+        "tokensOutput": { "type": "number" },
+        "totalTokens": { "type": "number" },
+        "apiCallCount": { "type": "number" },
+        "callFrequencyPerMin": { "type": "number" },
+        "lastApiCallAt": { "type": "string" },
+        "activeModel": { "type": "string" },
+        "status": { "type": "string" },
+        "costEstimateUsd": { "type": "number" },
+        "updatedAt": { "type": "string" }
+      },
+      "required": [
+        "userId",
+        "userEmail",
+        "tokensInput",
+        "tokensOutput",
+        "totalTokens",
+        "apiCallCount"
+      ]
+    },
+    "AiApiLog": {
+      "title": "AI API Log",
+      "description": "Individual AI API execution log entry",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "userEmail": { "type": "string" },
+        "endpoint": { "type": "string" },
+        "model": { "type": "string" },
+        "promptTokens": { "type": "number" },
+        "completionTokens": { "type": "number" },
+        "latencyMs": { "type": "number" },
+        "timestamp": { "type": "string" }
+      },
+      "required": [
+        "userId",
+        "userEmail",
+        "endpoint",
+        "model",
+        "promptTokens",
+        "completionTokens",
+        "timestamp"
+      ]
+    }
+  },
+  "firestore": {
+    "/ai_usage_stats/{userId}": {
+      "schema": { "$ref": "#/entities/UserAiUsageStat" },
+      "description": "Stores user aggregated AI usage metrics"
+    },
+    "/ai_api_logs/{logId}": {
+      "schema": { "$ref": "#/entities/AiApiLog" },
+      "description": "Stores real-time AI API request logs"
+    }
+  }
+}

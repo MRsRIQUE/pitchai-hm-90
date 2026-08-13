@@ -1,0 +1,13 @@
+{
+  "indexes": [
+    {
+      "collectionGroup": "referral_commissions",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "referrerUid", "order": "ASCENDING" },
+        { "fieldPath": "createdAt", "order": "DESCENDING" }
+      ]
+    }
+  ],
+  "fieldOverrides": []
+}
