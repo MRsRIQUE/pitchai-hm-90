@@ -1,5 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useEffect } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   ArrowRight,
   Check,
@@ -92,6 +92,8 @@ const FEATURES = [
     hi: false,
   },
 ];
+
+const PHONE_VIDEOS = Array.from({ length: 10 }, (_, index) => `/videos/demo-${String(index + 1).padStart(2, "0")}.mp4`);
 
 const METRICS = [
   { value: "<2s", label: "Resposta no chat", sub: "Ninguém desiste da compra esperando" },
@@ -192,6 +194,24 @@ function Marquee({ rev = false }: { rev?: boolean }) {
 }
 
 function Landing() {
+  const [phoneVideoIndex, setPhoneVideoIndex] = useState(0);
+  const phoneVideoRef = useRef<HTMLVideoElement>(null);
+
+  useEffect(() => {
+    const video = phoneVideoRef.current;
+    if (!video) return;
+    video.load();
+    void video.play().catch(() => undefined);
+  }, [phoneVideoIndex]);
+
+  useEffect(() => {
+    const video = phoneVideoRef.current;
+    if (!video) return;
+    const onEnded = () => setPhoneVideoIndex((index) => (index + 1) % PHONE_VIDEOS.length);
+    video.addEventListener("ended", onEnded);
+    return () => video.removeEventListener("ended", onEnded);
+  }, []);
+
   useEffect(() => {
     const els = document.querySelectorAll(".landing .rv");
     const io = new IntersectionObserver(
@@ -353,18 +373,15 @@ function Landing() {
                 </div>
                 <div className="stage">
                   <video
+                    ref={phoneVideoRef}
                     className="stage-video"
+                    src={PHONE_VIDEOS[phoneVideoIndex]}
                     autoPlay
                     muted
-                    loop
                     playsInline
                     preload="metadata"
-                    aria-label="Demonstração da live no TikTok Shop"
-                  >
-                    <source src="/videos/live-demo.webm" type="video/webm" />
-                    <source src="/videos/live-demo.mp4" type="video/mp4" />
-                  </video>
-                  <div className="silhouette" aria-hidden="true" />
+                    aria-label={`Demonstração ${phoneVideoIndex + 1} da live no TikTok Shop`}
+                  />
                 </div>
                 <div className="screen-bottom">
                   <div className="chat">
