@@ -27,16 +27,23 @@ export async function requireAuthBeforeLoad({
   if (fbAuth.currentUser) return;
 
   // Espera o primeiro fire do Firebase Auth (persistence hydrated).
-  await new Promise<void>((resolve) => {
-    const unsub = onAuthStateChanged(fbAuth, (user) => {
+  // Não lance redirect dentro do executor da Promise: exceções ali viram
+  // erros não tratados e não são propagadas pelo await.
+  const user = await new Promise<NonNullable<typeof fbAuth.currentUser> | null>((resolve) => {
+    let settled = false;
+    const unsub = onAuthStateChanged(fbAuth, (nextUser) => {
+      if (settled) return;
+      settled = true;
       unsub();
-      if (!user) {
-        throw redirect({
-          to: "/entrar",
-          search: { next: location.pathname },
-        });
-      }
-      resolve();
+      resolve(nextUser);
     });
   });
+
+  if (!user) {
+    throw redirect({
+      to: "/entrar",
+      search: { next: location.pathname },
+      replace: true,
+    });
+  }
 }
