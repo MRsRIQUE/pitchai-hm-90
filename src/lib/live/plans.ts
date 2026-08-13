@@ -66,7 +66,7 @@ export const PLAN_FEATURES = [
   "Suporte prioritário",
 ];
 
-/** Limites do modo gratuito (sem assinatura). */
+/** Limites técnicos do estado interno sem assinatura; não é oferta pública. */
 export const FREE_LIMITS = [
   "100 respostas de chat por dia",
   "50 áudios de voz por dia",

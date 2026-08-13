@@ -71,6 +71,9 @@ export default defineConfig({
     },
     plugins: [
       VitePWA({
+        // O Nitro/Vercel controla o diretório final; gerar o SW aqui causa
+        // ENOENT porque o plugin roda depois que o output é reorganizado.
+        disable: process.env.NODE_ENV === "production",
         outDir: ".output/public",
         selfDestroying: true,
         registerType: "autoUpdate",

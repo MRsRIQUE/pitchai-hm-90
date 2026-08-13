@@ -77,8 +77,41 @@ function EntrarPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
+  const [emailError, setEmailError] = useState<string | null>(null);
+  const [passwordError, setPasswordError] = useState<string | null>(null);
+  const [confirmError, setConfirmError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const dest = safeNext(next);
+
+  function changeMode(nextMode: "login" | "signup" | "forgot") {
+    setMode(nextMode);
+    setFormError(null);
+    setEmailError(null);
+    setPasswordError(null);
+    setConfirmError(null);
+    setPassword("");
+    setConfirmPassword("");
+    setShowPassword(false);
+    setShowConfirmPassword(false);
+  }
+
+  function validateEmail(value: string) {
+    if (!value.trim()) return "Digite seu e-mail.";
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.trim())) return "Digite um e-mail válido.";
+    return null;
+  }
+
+  function validateForm() {
+    const nextEmailError = validateEmail(email);
+    const nextPasswordError =
+      mode !== "forgot" && password.length < 8 ? "Use pelo menos 8 caracteres na senha." : null;
+    const nextConfirmError =
+      mode === "signup" && password !== confirmPassword ? "As senhas não coincidem." : null;
+    setEmailError(nextEmailError);
+    setPasswordError(nextPasswordError);
+    setConfirmError(nextConfirmError);
+    return !nextEmailError && !nextPasswordError && !nextConfirmError;
+  }
 
   useEffect(() => {
     const fbAuth = getFirebaseAuth();
@@ -99,10 +132,7 @@ function EntrarPage() {
     e.preventDefault();
     setFormError(null);
 
-    if (mode === "signup" && password !== confirmPassword) {
-      setFormError("As senhas não coincidem. Digite a mesma senha nos dois campos.");
-      return;
-    }
+    if (!validateForm()) return;
 
     setBusy(true);
     const fbAuth = getFirebaseAuth();
@@ -223,6 +253,7 @@ function EntrarPage() {
         </div>
 
         <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-6 shadow-[0_20px_60px_rgba(0,0,0,0.4)] backdrop-blur-2xl">
+          {mode !== "forgot" && <>
           <button
             onClick={google}
             type="button"
@@ -253,33 +284,52 @@ function EntrarPage() {
           <div className="my-5 flex items-center gap-3 text-xs text-white/30">
             <span className="h-px flex-1 bg-white/10" /> ou <span className="h-px flex-1 bg-white/10" />
           </div>
+          </>}
 
           <form onSubmit={submit} className="space-y-3">
-            <div className="relative">
-              <Mail className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-white/35" />
-              <input
-                type="email"
-                required
-                autoComplete="email"
-                placeholder="seu@email.com"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                className="w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2.5 pl-9 text-sm outline-none transition focus:border-[#8b5cf6] focus:ring-1 focus:ring-[#8b5cf6]/40"
-              />
+            <div>
+              <label htmlFor="account-email" className="sr-only">E-mail</label>
+              <div className="relative">
+                <Mail className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-white/35" />
+                <input
+                  id="account-email"
+                  type="email"
+                  required
+                  autoComplete="email"
+                  placeholder="seu@email.com"
+                  value={email}
+                  aria-invalid={Boolean(emailError)}
+                  aria-describedby={emailError ? "account-email-error" : undefined}
+                  onChange={(e) => {
+                    setEmail(e.target.value);
+                    if (emailError) setEmailError(validateEmail(e.target.value));
+                  }}
+                  onBlur={() => setEmailError(validateEmail(email))}
+                  className={`w-full rounded-lg border bg-white/5 px-3 py-2.5 pl-9 text-sm outline-none transition focus:border-[#8b5cf6] focus:ring-1 focus:ring-[#8b5cf6]/40 ${emailError ? "border-[#f87171]" : "border-white/10"}`}
+                />
+              </div>
+              {emailError && <p id="account-email-error" className="mt-1 text-xs text-[#fca5a5]">{emailError}</p>}
             </div>
 
             {mode !== "forgot" && (
               <div className="relative">
                 <Lock className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-white/35" />
                 <input
+                  id="account-password"
                   type={showPassword ? "text" : "password"}
                   required
                   minLength={8}
                   autoComplete={mode === "login" ? "current-password" : "new-password"}
                   placeholder="Senha (mín. 8 caracteres)"
                   value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  className="w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2.5 pl-9 pr-10 text-sm outline-none transition focus:border-[#8b5cf6] focus:ring-1 focus:ring-[#8b5cf6]/40"
+                  aria-invalid={Boolean(passwordError)}
+                  aria-describedby={passwordError ? "account-password-error" : "account-password-hint"}
+                  onChange={(e) => {
+                    setPassword(e.target.value);
+                    if (passwordError) setPasswordError(e.target.value.length >= 8 ? null : "Use pelo menos 8 caracteres na senha.");
+                  }}
+                  onBlur={() => setPasswordError(mode !== "forgot" && password.length < 8 ? "Use pelo menos 8 caracteres na senha." : null)}
+                  className={`w-full rounded-lg border bg-white/5 px-3 py-2.5 pl-9 pr-10 text-sm outline-none transition focus:border-[#8b5cf6] focus:ring-1 focus:ring-[#8b5cf6]/40 ${passwordError ? "border-[#f87171]" : "border-white/10"}`}
                 />
                 <button
                   type="button"
@@ -290,6 +340,12 @@ function EntrarPage() {
                 >
                   {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                 </button>
+                {mode === "signup" && !passwordError && (
+                  <p id="account-password-hint" className="mt-1 text-xs text-white/40">
+                    Use pelo menos 8 caracteres.
+                  </p>
+                )}
+                {passwordError && <p id="account-password-error" className="mt-1 text-xs text-[#fca5a5]">{passwordError}</p>}
               </div>
             )}
 
@@ -297,14 +353,21 @@ function EntrarPage() {
               <div className="relative">
                 <Lock className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-white/35" />
                 <input
+                  id="account-confirm-password"
                   type={showConfirmPassword ? "text" : "password"}
                   required
                   minLength={8}
                   autoComplete="new-password"
                   placeholder="Confirmar senha"
                   value={confirmPassword}
-                  onChange={(e) => setConfirmPassword(e.target.value)}
-                  className="w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2.5 pl-9 pr-10 text-sm outline-none transition focus:border-[#8b5cf6] focus:ring-1 focus:ring-[#8b5cf6]/40"
+                  aria-invalid={Boolean(confirmError)}
+                  aria-describedby={confirmError ? "account-confirm-error" : undefined}
+                  onChange={(e) => {
+                    setConfirmPassword(e.target.value);
+                    if (confirmError) setConfirmError(e.target.value === password ? null : "As senhas não coincidem.");
+                  }}
+                  onBlur={() => setConfirmError(confirmPassword && confirmPassword !== password ? "As senhas não coincidem." : null)}
+                  className={`w-full rounded-lg border bg-white/5 px-3 py-2.5 pl-9 pr-10 text-sm outline-none transition focus:border-[#8b5cf6] focus:ring-1 focus:ring-[#8b5cf6]/40 ${confirmError ? "border-[#f87171]" : "border-white/10"}`}
                 />
                 <button
                   type="button"
@@ -319,6 +382,7 @@ function EntrarPage() {
                     <Eye className="h-4 w-4" />
                   )}
                 </button>
+                {confirmError && <p id="account-confirm-error" className="mt-1 text-xs text-[#fca5a5]">{confirmError}</p>}
               </div>
             )}
 
@@ -335,21 +399,26 @@ function EntrarPage() {
           </form>
         </div>
 
+        <div className="flex items-center justify-center gap-3 text-center text-xs text-white/45">
+          <span className="rounded-full border border-white/10 bg-white/[0.03] px-3 py-1.5">Seus dados protegidos</span>
+          <span className="rounded-full border border-white/10 bg-white/[0.03] px-3 py-1.5">Cancele quando quiser</span>
+        </div>
+
         <div className="space-y-2 text-center text-sm text-white/50">
           {mode === "login" && (
             <>
-              <button onClick={() => setMode("signup")} className="underline hover:text-white">
+              <button onClick={() => changeMode("signup")} className="underline hover:text-white">
                 Ainda não tenho conta
               </button>
               <div>
-                <button onClick={() => setMode("forgot")} className="underline hover:text-white">
+                <button onClick={() => changeMode("forgot")} className="underline hover:text-white">
                   Esqueci minha senha
                 </button>
               </div>
             </>
           )}
           {mode !== "login" && (
-            <button onClick={() => setMode("login")} className="underline hover:text-white">
+            <button onClick={() => changeMode("login")} className="underline hover:text-white">
               Voltar para o login
             </button>
           )}

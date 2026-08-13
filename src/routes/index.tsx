@@ -153,24 +153,10 @@ const FAQ = [
     a: "Sim. O que muda é a ficha técnica dos produtos e o tom de voz escolhido. Moda, beleza, casa, eletrônicos e suplementos são os nichos mais usados hoje.",
   },
   {
-    q: "Consigo cancelar quando quiser?",
+    q: "Posso cancelar quando quiser?",
     a: "Sim, sem fidelidade e sem multa. O acesso continua até o fim do período já pago e você pode exportar suas configurações antes.",
   },
-  {
-    q: "Preciso de cartão para testar?",
-    a: "Não. O modo gratuito inclui 100 respostas de chat por dia com auto-fixar — sem pedir cartão em nenhum momento.",
-  },
 ];
-
-const FREE_PLAN = {
-  name: "Grátis",
-  desc: "Para testar em uma live e ver o chat responder sozinho.",
-  price: "0",
-  per: "/mês",
-  note: "Para sempre",
-  features: ["100 respostas de chat por dia", "Auto-fixar produto", "1 canal de live"],
-  muted: "Sem narração por voz",
-};
 
 function brl(cents: number): string {
   return (cents / 100).toFixed(2).replace(".", ",");
@@ -332,8 +318,8 @@ function Landing() {
             </p>
 
             <div className="hero-actions">
-              <Link to="/app" className="btn btn-primary btn-lg btn-glow">
-                Começar grátis <ArrowRight style={{ width: 15, height: 15 }} />
+              <Link to="/planos" className="btn btn-primary btn-lg btn-glow">
+                Ver planos e começar <ArrowRight style={{ width: 15, height: 15 }} />
               </Link>
               <Link to="/download" className="btn btn-outline btn-lg">
                 <Download style={{ width: 15, height: 15 }} /> Baixar o app
@@ -492,39 +478,14 @@ function Landing() {
         <div className="wrap">
           <div className="sec-head rv">
             <div className="eyebrow">Planos</div>
-            <h2>Comece de graça. Pague quando vender mais.</h2>
+            <h2>Escolha o ritmo da sua próxima live.</h2>
             <p>
-              Todos os planos incluem respostas no chat e auto-fixar. Sem fidelidade e sem taxa por
-              venda.
+              Todos os planos incluem respostas no chat e auto-fixar. Sem fidelidade, sem taxa por
+              venda e com cancelamento quando quiser.
             </p>
           </div>
 
           <div className="plans rv">
-            {/* Grátis */}
-            <div className="plan">
-              <div className="plan-name">{FREE_PLAN.name}</div>
-              <div className="plan-desc">{FREE_PLAN.desc}</div>
-              <div className="plan-price">
-                <span className="cur">R$</span>
-                <span className="val">{FREE_PLAN.price}</span>
-                <span className="per">{FREE_PLAN.per}</span>
-              </div>
-              <div className="plan-note">{FREE_PLAN.note}</div>
-              <Link to="/app" className="btn btn-outline">
-                Começar agora
-              </Link>
-              <ul>
-                {FREE_PLAN.features.map((f) => (
-                  <li key={f}>
-                    <Check className="check" /> {f}
-                  </li>
-                ))}
-                <li className="muted-li">
-                  <Minus className="check" style={{ color: "var(--ink-3)" }} /> {FREE_PLAN.muted}
-                </li>
-              </ul>
-            </div>
-
             {/* Planos pagos */}
             {PITCHAI_PLANS.map((p) => {
               const per = p.months === 1 ? "/mês" : p.months === 3 ? "/trimestre" : "/ano";
@@ -660,7 +621,7 @@ function Landing() {
             </p>
             <div className="cta-actions">
               <Link to="/app" className="btn btn-primary btn-lg btn-glow">
-                Começar grátis
+                Escolher meu plano
               </Link>
               <Link to="/planos" className="btn btn-outline btn-lg">
                 Ver planos
