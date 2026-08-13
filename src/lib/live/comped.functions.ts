@@ -1,6 +1,6 @@
 import { createServerFn } from "@tanstack/react-start";
 import { requireFirebaseAuth } from "@/lib/firebase-auth";
-import { isAdmin, fsQuery, fsSet, setSubscription } from "@/lib/firebase.server";
+import { getUserByEmail, isAdmin, fsSet, setSubscription } from "@/lib/firebase.server";
 
 export type CompedAccess = {
   userId: string;
@@ -48,41 +48,45 @@ export const grantCompedAccess = createServerFn({ method: "POST" })
     return { email, days, note: String(data.note ?? "").slice(0, 300) };
   })
   .handler(async ({ data, context }): Promise<{ ok: true } | { error: string }> => {
-    await assertAdmin(context);
+    try {
+      await assertAdmin(context);
 
-    const hits = await fsQuery("users", {
-      where: [{ field: "email", op: "EQUAL", value: data.email }],
-      limit: 1,
-      mode: "server",
-    });
-    if (!hits.length) return { error: "Nenhuma conta encontrada com esse e-mail" };
+      const user = await getUserByEmail(data.email, { mode: "server" });
+      if (!user) return { error: "Nenhuma conta encontrada com esse e-mail" };
 
-    const uid = hits[0].id;
-    const until = new Date(Date.now() + data.days * 86400000).toISOString();
-    await setSubscription(
-      uid,
-      {
-        plan: "pro",
-        status: "comped",
-        granted_until: until,
-        current_period_end: until,
-        updated_at: new Date().toISOString(),
-      },
-      { mode: "server" },
-    );
-    await fsSet(
-      `comped_access/${uid}`,
-      {
-        email: data.email,
-        plan: "pro",
-        status: "comped",
-        grantedUntil: until,
-        note: data.note || null,
-        grantedBy: context.userId,
-      },
-      { mode: "server" },
-    );
-    return { ok: true };
+      const uid = user.id;
+      const until = new Date(Date.now() + data.days * 86400000).toISOString();
+      const now = new Date().toISOString();
+      await setSubscription(
+        uid,
+        {
+          plan: "pro",
+          status: "comped",
+          granted_until: until,
+          current_period_end: until,
+          updated_at: now,
+        },
+        { mode: "server" },
+      );
+      await fsSet(
+        `comped_access/${uid}`,
+        {
+          email: data.email,
+          plan: "pro",
+          status: "comped",
+          grantedUntil: until,
+          note: data.note || null,
+          grantedBy: context.userId,
+        },
+        { mode: "server" },
+      );
+      return { ok: true };
+    } catch (error) {
+      console.error("[v0] Falha ao liberar cortesia", error);
+      return {
+        error: error instanceof Error ? error.message : "Não foi possível liberar a cortesia",
+      };
+    }
   });
 
 /* Revoga o acesso de cortesia de uma conta. */
