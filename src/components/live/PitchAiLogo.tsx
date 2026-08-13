@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useState } from "react";
 
 interface PitchAiLogoProps {
   className?: string;
@@ -24,6 +24,7 @@ export function PitchAiLogo({
   };
 
   const currentSize = sizeMap[size];
+  const [logoFailed, setLogoFailed] = useState(false);
 
   const textColor =
     variant === "white"
@@ -33,11 +34,25 @@ export function PitchAiLogo({
   return (
     <div className={`inline-flex items-center ${currentSize.gap} ${className}`}>
       {/* Nova logo oficial do Pitch AI (PNG, emblema 'P' neon sobre fundo escuro) */}
-      <img
-        src="/logo-nav.png"
-        alt="Pitch AI"
-        className={`${currentSize.icon} shrink-0 object-contain transition-transform hover:scale-105`}
-      />
+      {logoFailed ? (
+        <span
+          className={`${currentSize.icon} flex shrink-0 items-center justify-center rounded-xl bg-[#7c3aed] font-sora text-sm font-extrabold text-white shadow-[0_8px_24px_rgba(124,58,237,0.28)]`}
+          aria-hidden="true"
+        >
+          P
+        </span>
+      ) : (
+        <img
+          src="/logo-nav.png"
+          alt="Pitch AI"
+          width={64}
+          height={64}
+          loading="eager"
+          decoding="async"
+          onError={() => setLogoFailed(true)}
+          className={`${currentSize.icon} shrink-0 object-contain transition-transform hover:scale-105`}
+        />
+      )}
 
       {showWordmark && (
         <span className={`font-sora font-extrabold tracking-tight ${currentSize.text} ${textColor} select-none`}>

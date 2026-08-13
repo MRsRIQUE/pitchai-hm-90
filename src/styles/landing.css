@@ -263,10 +263,14 @@
 /* ---- product mock ---- */
 .landing .mock {
   position: relative;
+  width: min(100%, 390px);
+  min-width: 0;
   justify-self: center;
+  display: grid;
+  place-items: center;
 }
 .landing .phone {
-  width: 290px;
+  width: min(290px, 100%);
   border-radius: 34px;
   background: var(--surface);
   border: 1px solid var(--line);
@@ -351,6 +355,34 @@
 }
 .landing .stage-video:not([src]) {
   display: none;
+}
+.landing .stage-fallback {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  display: grid;
+  place-items: center;
+  align-content: center;
+  gap: 14px;
+  padding: 24px;
+  color: rgba(255, 255, 255, 0.72);
+  text-align: center;
+  background: radial-gradient(120% 90% at 30% 20%, #2a2a33 0%, #17171c 60%, #101014 100%);
+}
+.landing .stage-fallback img {
+  width: 58px;
+  height: 58px;
+  object-fit: contain;
+  opacity: 0.95;
+}
+.landing .stage-fallback span {
+  max-width: 13ch;
+  font-size: 11px;
+  line-height: 1.45;
+}
+.landing .stage-fallback:not(.is-visible) {
+  opacity: 0;
+  pointer-events: none;
 }
 .landing .silhouette {
   position: absolute;
@@ -1628,6 +1660,26 @@ html {
   }
   .landing .hero {
     padding: 56px 0 0;
+  }
+  .landing .hero-grid {
+    gap: 32px;
+  }
+  .landing .hero-grid > * {
+    min-width: 0;
+  }
+  .landing .mock {
+    width: min(100%, 320px);
+  }
+  .landing .phone {
+    border-radius: 28px;
+    padding: 7px;
+  }
+  .landing .screen {
+    border-radius: 21px;
+  }
+  .landing .stage-fallback img {
+    width: 48px;
+    height: 48px;
   }
   .landing .feat {
     grid-template-columns: 1fr;
