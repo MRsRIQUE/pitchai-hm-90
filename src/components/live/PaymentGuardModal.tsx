@@ -8,12 +8,12 @@ import {
   ExternalLink,
   Sparkles,
   ShieldAlert,
-  KeyRound,
+  Mail,
   Loader2,
   HelpCircle,
   Zap,
 } from "lucide-react";
-import { PITCHAI_PLANS, formatBRL } from "@/lib/live/plans";
+import { PITCHAI_PLANS, formatBRL, type PitchaiPlan } from "@/lib/live/plans";
 import { getFirebaseAuth } from "@/lib/firebase";
 
 interface PaymentGuardProps {
@@ -21,10 +21,21 @@ interface PaymentGuardProps {
   onActivated?: () => void;
 }
 
+/** Anexa o e-mail do usuário logado ao link de checkout da PerfectPay para pré-popular o campo. */
+function checkoutUrlWithEmail(plan: PitchaiPlan, email?: string): string {
+  if (!email) return plan.checkoutUrl;
+  try {
+    const url = new URL(plan.checkoutUrl);
+    url.searchParams.set("email", email);
+    return url.toString();
+  } catch {
+    return plan.checkoutUrl;
+  }
+}
+
 export function PaymentGuardOverlay({ userEmail, onActivated }: PaymentGuardProps) {
   const [activeTab, setActiveTab] = useState<"checkout" | "activate">("checkout");
   const [emailInput, setEmailInput] = useState(userEmail || "");
-  const [licenseKeyInput, setLicenseKeyInput] = useState("");
   const [loading, setLoading] = useState(false);
   const [statusMsg, setStatusMsg] = useState<{ type: "success" | "error"; text: string } | null>(
     null,
@@ -39,19 +50,25 @@ export function PaymentGuardOverlay({ userEmail, onActivated }: PaymentGuardProp
     setStatusMsg(null);
 
     try {
-      // Chamada para a API de ativação por e-mail ou licença
+      // Ativação depende só de e-mail: o backend só libera acesso se existir
+      // um pagamento aprovado real registrado pelo webhook para esse e-mail.
       const auth = getFirebaseAuth();
       const token = auth.currentUser ? await auth.currentUser.getIdToken() : null;
+      if (!token) {
+        setStatusMsg({
+          type: "error",
+          text: "Faça login no Pitch AI antes de ativar sua licença.",
+        });
+        setLoading(false);
+        return;
+      }
       const res = await fetch("/api/public/payments/activate", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          Authorization: `Bearer ${token}`,
         },
-        body: JSON.stringify({
-          email: emailInput.trim(),
-          licenseKey: licenseKeyInput.trim(),
-        }),
+        body: JSON.stringify({ email: emailInput.trim() }),
       });
 
       const data = await res.json();
@@ -59,12 +76,14 @@ export function PaymentGuardOverlay({ userEmail, onActivated }: PaymentGuardProp
       if (!res.ok || !data.success) {
         setStatusMsg({
           type: "error",
-          text: data.message || "Pagamento não localizado. Verifique o e-mail ou chave digitada.",
+          text:
+            data.message ||
+            "Pagamento não localizado ainda para este e-mail. Verifique se digitou o mesmo e-mail usado na compra.",
         });
       } else {
         setStatusMsg({
           type: "success",
-          text: "🎉 Licença ativada com sucesso! Liberando acesso à ferramenta...",
+          text: "Licença ativada com sucesso! Liberando acesso à ferramenta...",
         });
         // Invalida queries de subscription para que hooks refetcham do Firestore.
         await queryClient.invalidateQueries({ queryKey: ["subscription"] });
@@ -126,8 +145,8 @@ export function PaymentGuardOverlay({ userEmail, onActivated }: PaymentGuardProp
                 : "text-slate-300 hover:text-white"
             }`}
           >
-            <KeyRound className="h-3.5 w-3.5" />
-            <span>Já paguei? Ativar Licença</span>
+            <Mail className="h-3.5 w-3.5" />
+            <span>Já paguei? Verificar Acesso</span>
           </button>
         </div>
       </div>
@@ -180,7 +199,7 @@ export function PaymentGuardOverlay({ userEmail, onActivated }: PaymentGuardProp
 
                 <div className="mt-6">
                   <a
-                    href={plan.checkoutUrl}
+                    href={checkoutUrlWithEmail(plan, userEmail)}
                     target="_blank"
                     rel="noopener noreferrer"
                     className={`w-full py-3 px-4 rounded-xl font-extrabold text-xs text-center flex items-center justify-center gap-2 transition-all shadow-md ${
@@ -208,12 +227,12 @@ export function PaymentGuardOverlay({ userEmail, onActivated }: PaymentGuardProp
       {activeTab === "activate" && (
         <div className="relative z-10 mt-8 w-full max-w-md rounded-2xl border border-white/15 bg-white/5 p-6 backdrop-blur-md">
           <h3 className="font-bold text-base text-white flex items-center gap-2">
-            <KeyRound className="h-4 w-4 text-[#FF8C00]" />
-            <span>Ativar Minha Licença de Compra</span>
+            <Mail className="h-4 w-4 text-[#FF8C00]" />
+            <span>Verificar Meu Pagamento</span>
           </h3>
           <p className="mt-1 text-xs text-slate-300">
-            Digite o e-mail cadastrado na hora do pagamento ou a Chave de Licença enviada no seu
-            e-mail.
+            Digite o mesmo e-mail que você usou na hora do pagamento. Verificamos automaticamente
+            — sem precisar de código ou chave de licença.
           </p>
 
           <form onSubmit={handleActivate} className="mt-4 space-y-3">
@@ -228,19 +247,6 @@ export function PaymentGuardOverlay({ userEmail, onActivated }: PaymentGuardProp
                 onChange={(e) => setEmailInput(e.target.value)}
                 required
                 className="border-white/20 bg-black/40 text-white placeholder:text-slate-500"
-              />
-            </div>
-
-            <div>
-              <label className="block text-[11px] font-bold text-slate-300 mb-1">
-                Chave de Licença ou Código da Transação (Opcional)
-              </label>
-              <Input
-                type="text"
-                placeholder="Ex: PITCHAI-PRO-88X12 ou PP-10492"
-                value={licenseKeyInput}
-                onChange={(e) => setLicenseKeyInput(e.target.value)}
-                className="border-white/20 bg-black/40 text-white placeholder:text-slate-500 font-mono text-xs"
               />
             </div>
 

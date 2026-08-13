@@ -1,4 +1,4 @@
-import { getUserByEmail, setSubscription } from "@/lib/firebase.server";
+import { getUserByEmail, setPendingPayment, setSubscription } from "@/lib/firebase.server";
 
 /**
  * Processador unificado de webhooks de pagamento (PerfectPay, Kiwify, Hotmart, Eduzz, Mercado Pago).
@@ -124,9 +124,28 @@ export async function handlePaymentWebhook(request: Request): Promise<Response> 
       activated = true;
       console.log(`[webhook-payments] Licença Pro ativada para ${userDoc.id} (${customerEmail})`);
     } else {
-      console.log(
-        `[webhook-payments] Pagamento aprovado para ${customerEmail}. Usuário criará conta posteriormente.`,
-      );
+      // Ainda não existe conta com esse e-mail: guarda o pagamento aprovado
+      // para ativação automática no primeiro login/cadastro (ver entrar.tsx).
+      const amountRaw = body.sale_amount ?? body.amount ?? body.value ?? body.price ?? null;
+      const amount = amountRaw != null && !Number.isNaN(Number(amountRaw)) ? Number(amountRaw) : null;
+      try {
+        await setPendingPayment(
+          customerEmail,
+          {
+            amount,
+            origin: "perfectpay",
+            status: statusRaw,
+            approvedAt: new Date().toISOString(),
+            consumed: false,
+          },
+          { mode: "server" },
+        );
+        console.log(
+          `[webhook-payments] Pagamento aprovado registrado para ${customerEmail}. Ativação ocorrerá no 1º login/cadastro.`,
+        );
+      } catch (err) {
+        console.error("[webhook-payments] Falha ao registrar pending_payment:", err);
+      }
     }
 
     return Response.json(

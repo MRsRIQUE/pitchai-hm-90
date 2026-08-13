@@ -441,6 +441,51 @@ export async function setUserEmailIndex(
   await fsSet(`users/${uid}`, { email: email.toLowerCase().trim() }, options);
 }
 
+// pending_payments/{emailId} — pagamentos aprovados de e-mails que ainda não
+// criaram conta no Pitch AI. Consumido (e removido) quando a licença é ativada.
+function pendingPaymentDocId(email: string): string {
+  // Firestore aceita "/" em nomes de documento apenas como separador de path,
+  // então usamos um encode simples e reversível para o e-mail completo.
+  return encodeURIComponent(email.toLowerCase().trim());
+}
+
+export interface PendingPaymentData {
+  email: string;
+  amount?: number | null;
+  origin?: string | null;
+  status?: string | null;
+  approvedAt: string;
+  consumed?: boolean;
+  consumedBy?: string | null;
+  consumedAt?: string | null;
+}
+
+export async function setPendingPayment(
+  email: string,
+  data: Omit<PendingPaymentData, "email">,
+  options: { mode?: FirestoreAuthMode; userToken?: string } = {},
+): Promise<void> {
+  await fsSet(
+    `pending_payments/${pendingPaymentDocId(email)}`,
+    { ...data, email: email.toLowerCase().trim() },
+    options,
+  );
+}
+
+export async function getPendingPayment(
+  email: string,
+  options: { mode?: FirestoreAuthMode; userToken?: string } = {},
+): Promise<FirestoreDocument | null> {
+  return fsGet(`pending_payments/${pendingPaymentDocId(email)}`, options);
+}
+
+export async function deletePendingPayment(
+  email: string,
+  options: { mode?: FirestoreAuthMode; userToken?: string } = {},
+): Promise<void> {
+  await fsDelete(`pending_payments/${pendingPaymentDocId(email)}`, options);
+}
+
 // users/{uid}/sessions — sessões de live
 export async function listSessions(
   uid: string,
