@@ -38,7 +38,7 @@ export const Route = createFileRoute("/admin")({
   component: AdminPage,
 });
 
-type Tab = "ranking" | "indicacoes" | "usuarios" | "usage_firestore" | "planos" | "custos";
+type Tab = "overview" | "ranking" | "indicacoes" | "usuarios" | "usage_firestore" | "planos" | "custos";
 
 function AdminPage() {
   const [status, setStatus] = useState<"loading" | "signed-out" | "not-admin" | "ok">("loading");
@@ -164,7 +164,7 @@ function NotAdmin({ email, onLogout }: { email: string; onLogout: () => void }) 
 
 /* ---------- Dashboard ---------- */
 function Dashboard({ email, onLogout }: { email: string; onLogout: () => void }) {
-  const [tab, setTab] = useState<Tab>("ranking");
+  const [tab, setTab] = useState<Tab>("overview");
   return (
     <div className="min-h-dvh bg-[#0F0F1A] text-white">
       <header className="border-b border-white/10 bg-black/40 backdrop-blur sticky top-0 z-10">
@@ -181,7 +181,7 @@ function Dashboard({ email, onLogout }: { email: string; onLogout: () => void })
         </div>
         <nav className="max-w-6xl mx-auto px-4 flex gap-1 overflow-x-auto">
           {(
-            ["ranking", "indicacoes", "usuarios", "usage_firestore", "planos", "custos"] as Tab[]
+            ["overview", "ranking", "indicacoes", "usuarios", "usage_firestore", "planos", "custos"] as Tab[]
           ).map((t) => (
             <button
               key={t}
@@ -192,6 +192,7 @@ function Dashboard({ email, onLogout }: { email: string; onLogout: () => void })
                   : "border-transparent text-white/60 hover:text-white"
               }`}
             >
+              {t === "overview" && "Visão geral"}
               {t === "ranking" && "Ranking de produtos"}
               {t === "indicacoes" && "Indicações"}
               {t === "usuarios" && "Usuários, Custos & Cotas"}
@@ -203,6 +204,7 @@ function Dashboard({ email, onLogout }: { email: string; onLogout: () => void })
         </nav>
       </header>
       <main className="max-w-6xl mx-auto px-4 py-6">
+        {tab === "overview" && <OverviewTab />}
         {tab === "ranking" && <RankingTab />}
         {tab === "indicacoes" && <IndicacoesTab />}
         {tab === "usuarios" && <UsuariosTab />}
@@ -212,6 +214,75 @@ function Dashboard({ email, onLogout }: { email: string; onLogout: () => void })
       </main>
     </div>
   );
+}
+
+/* ---------- Visão geral ---------- */
+function OverviewTab() {
+  const plans = useQuery({ queryKey: ["admin", "plans"], queryFn: fetchPlans });
+  const costs = useQuery({ queryKey: ["admin", "costs"], queryFn: fetchCosts });
+  const commissions = useQuery({ queryKey: ["admin", "commissions"], queryFn: fetchCommissions });
+  const ranking = useQuery({ queryKey: ["admin", "ranking"], queryFn: fetchRanking });
+  const loading = plans.isLoading || costs.isLoading || commissions.isLoading || ranking.isLoading;
+  const planRows = plans.data ?? [];
+  const activePlans = planRows.filter((plan) => plan.active !== false);
+  const monthlyRevenue = activePlans.reduce((sum, plan) => sum + (Number(plan.price_cents ?? 0) / 100), 0);
+  const pendingCommissions = (commissions.data ?? []).filter((item) => item.status === "pendente");
+  const commissionTotal = pendingCommissions.reduce((sum, item) => sum + item.amount_cents, 0) / 100;
+  const costTotal = (costs.data ?? []).reduce((sum, item) => sum + Number(item.amount_cents ?? 0), 0) / 100;
+
+  return (
+    <div className="space-y-6">
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#A78BFA]">Centro de comando</p>
+          <h1 className="mt-1 text-2xl font-semibold tracking-tight">Visão geral do negócio</h1>
+          <p className="mt-1 text-sm text-white/50">Indicadores operacionais para decidir o próximo movimento.</p>
+        </div>
+        <p className="text-xs text-white/40">Atualizado sob demanda</p>
+      </div>
+      {loading ? (
+        <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-8 text-center text-sm text-white/50">Carregando indicadores reais…</div>
+      ) : (
+        <>
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            <ExecutiveStat label="Receita configurada" value={brl(monthlyRevenue)} detail={`${activePlans.length} planos ativos`} tone="violet" />
+            <ExecutiveStat label="Custo registrado" value={brl(costTotal)} detail="Custos cadastrados no painel" tone="orange" />
+            <ExecutiveStat label="Comissões pendentes" value={brl(commissionTotal)} detail={`${pendingCommissions.length} pagamentos aguardando`} tone="rose" />
+            <ExecutiveStat label="Produtos ranqueados" value={String((ranking.data ?? []).length)} detail="Catálogo operacional" tone="green" />
+          </div>
+          <div className="grid gap-4 lg:grid-cols-[1.4fr_1fr]">
+            <Card title="Leitura rápida" hint="Sinais para acompanhar nesta sessão.">
+              <div className="space-y-3">
+                <Insight label="Planos ativos" value={`${activePlans.length}`} tone="positive" />
+                <Insight label="Comissões a pagar" value={commissionTotal > 0 ? brl(commissionTotal) : "Nenhuma pendência"} tone={commissionTotal > 0 ? "warning" : "positive"} />
+                <Insight label="Cobertura de custos" value={monthlyRevenue > costTotal ? "Receita acima dos custos" : "Revisar margem"} tone={monthlyRevenue > costTotal ? "positive" : "warning"} />
+              </div>
+            </Card>
+            <Card title="Atalhos operacionais" hint="Acesse os detalhes sem perder o contexto.">
+              <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-1">
+                <QuickLink label="Usuários, custos e cotas" hint="Acompanhar operação" />
+                <QuickLink label="Planos e receita" hint="Revisar preços ativos" />
+                <QuickLink label="Uso IA Real-Time" hint="Ver consumo Firestore" />
+              </div>
+            </Card>
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+function ExecutiveStat({ label, value, detail, tone }: { label: string; value: string; detail: string; tone: "violet" | "orange" | "rose" | "green" }) {
+  const colors = { violet: "text-[#C4B5FD]", orange: "text-[#FDBA74]", rose: "text-[#FDA4AF]", green: "text-[#86EFAC]" };
+  return <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-4"><p className="text-xs text-white/50">{label}</p><p className={`mt-3 text-2xl font-semibold tracking-tight ${colors[tone]}`}>{value}</p><p className="mt-1 text-xs text-white/40">{detail}</p></div>;
+}
+
+function Insight({ label, value, tone }: { label: string; value: string; tone: "positive" | "warning" }) {
+  return <div className="flex items-center justify-between gap-4 border-b border-white/5 pb-3 last:border-0 last:pb-0"><span className="text-sm text-white/60">{label}</span><span className={`text-sm font-medium ${tone === "positive" ? "text-[#86EFAC]" : "text-[#FDBA74]"}`}>{value}</span></div>;
+}
+
+function QuickLink({ label, hint }: { label: string; hint: string }) {
+  return <div className="flex items-center justify-between rounded-xl border border-white/8 bg-black/15 px-3 py-2.5"><span className="text-sm text-white/80">{label}</span><span className="text-[11px] text-white/40">{hint}</span></div>;
 }
 
 /* ---------- Indicações ---------- */
