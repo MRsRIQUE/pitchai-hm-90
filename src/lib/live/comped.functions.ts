@@ -1,6 +1,6 @@
 import { createServerFn } from "@tanstack/react-start";
 import { requireFirebaseAuth } from "@/lib/firebase-auth";
-import { getUserByEmail, isAdmin, fsSet, setSubscription } from "@/lib/firebase.server";
+import { getUserByEmail, isAdmin, fsQuery, fsSet, setSubscription } from "@/lib/firebase.server";
 
 export type CompedAccess = {
   userId: string;
@@ -93,8 +93,10 @@ export const grantCompedAccess = createServerFn({ method: "POST" })
 export const revokeCompedAccess = createServerFn({ method: "POST" })
   .middleware([requireFirebaseAuth])
   .validator((data: { userId: string }) => {
-    if (!/^[0-9a-f-]{36}$/i.test(String(data.userId ?? ""))) throw new Error("Conta inválida");
-    return { userId: data.userId };
+    const userId = String(data.userId ?? "").trim();
+    // Firebase Auth UIDs não são necessariamente UUIDs.
+    if (!/^[A-Za-z0-9_-]{6,128}$/.test(userId)) throw new Error("Conta inválida");
+    return { userId };
   })
   .handler(async ({ data, context }): Promise<{ ok: true } | { error: string }> => {
     await assertAdmin(context);

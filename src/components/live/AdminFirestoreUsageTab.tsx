@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   recordAiUsageForUserInFirestore,
   resetUserUsageStatsInFirestore,
@@ -33,7 +33,6 @@ export function AdminFirestoreUsageTab() {
   const [statusFilter, setStatusFilter] = useState("all");
   const [isSimulating, setIsSimulating] = useState(false);
   const [simulatedCount, setSimulatedCount] = useState(0);
-  const hasSeededRef = useRef(false);
 
   // Initialize Firestore listeners
   useEffect(() => {
@@ -44,14 +43,6 @@ export function AdminFirestoreUsageTab() {
       (data) => {
         setIsConnected(true);
         setStats(data);
-        // Seed initial sample data only once if the collection is completely empty,
-        // otherwise this callback re-fires after seeding and loops forever.
-        if (data.length === 0 && !hasSeededRef.current) {
-          hasSeededRef.current = true;
-          seedSampleUsageDataInFirestore();
-        } else if (data.length > 0) {
-          hasSeededRef.current = true;
-        }
       },
       (err) => {
         console.error("Firestore listener error:", err);
