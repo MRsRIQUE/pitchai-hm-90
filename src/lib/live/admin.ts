@@ -1,5 +1,5 @@
 import { createServerFn } from "@tanstack/react-start";
-import { requireFirebaseAuth } from "@/lib/firebase-auth";
+import { requireFirebaseAuth, type FirebaseAuthContext } from "@/lib/firebase-auth";
 import { isAdmin, fsQuery, fsSet, fsDelete, fsGet, getSubscription } from "@/lib/firebase.server";
 
 export type RankedProduct = {
@@ -47,11 +47,12 @@ export type Costs = {
   usd_brl: number;
 };
 
-async function ensureAdmin(ctx: {
-  userId: string;
-  user?: { email?: string | null };
-}): Promise<void> {
+async function ensureAdmin(ctx: FirebaseAuthContext): Promise<void> {
   if (!(await isAdmin(ctx.userId, ctx.user?.email))) throw new Error("Forbidden");
+}
+
+function adminFirestoreOptions(ctx: FirebaseAuthContext) {
+  return { mode: "server" as const, userToken: ctx.firebaseToken };
 }
 
 /* ---------- Auth ---------- */
@@ -68,7 +69,7 @@ const getRanking = createServerFn({ method: "GET" })
   .middleware([requireFirebaseAuth])
   .handler(async ({ context }): Promise<RankedProduct[]> => {
     await ensureAdmin(context);
-    const docs = await fsQuery("ranked_products", { mode: "server" });
+    const docs = await fsQuery("ranked_products", adminFirestoreOptions(context));
     return docs
       .map((d) => ({
         id: d.id,
@@ -101,6 +102,7 @@ const insertProducts = createServerFn({ method: "POST" })
   })
   .handler(async ({ data, context }) => {
     await ensureAdmin(context);
+    const firestore = adminFirestoreOptions(context);
     for (const item of data.items) {
       const id = crypto.randomUUID();
       await fsSet(
@@ -118,7 +120,7 @@ const insertProducts = createServerFn({ method: "POST" })
           ordem: 0,
           createdAt: new Date().toISOString(),
         },
-        { mode: "server" },
+        firestore,
       );
     }
     return { ok: true };
@@ -137,14 +139,11 @@ const updateProduct = createServerFn({ method: "POST" })
   })
   .handler(async ({ data, context }) => {
     await ensureAdmin(context);
+    const firestore = adminFirestoreOptions(context);
     const { id, patch } = data;
-    const current = await fsGet(`ranked_products/${id}`, { mode: "server" });
+    const current = await fsGet(`ranked_products/${id}`, firestore);
     if (!current) throw new Error("Produto não encontrado");
-    await fsSet(
-      `ranked_products/${id}`,
-      { ...(current.data as any), ...patch },
-      { mode: "server" },
-    );
+    await fsSet(`ranked_products/${id}`, { ...(current.data as any), ...patch }, firestore);
     return { ok: true };
   });
 
@@ -160,7 +159,7 @@ const deleteProduct = createServerFn({ method: "POST" })
   })
   .handler(async ({ data, context }) => {
     await ensureAdmin(context);
-    await fsDelete(`ranked_products/${data.id}`, { mode: "server" });
+    await fsDelete(`ranked_products/${data.id}`, adminFirestoreOptions(context));
     return { ok: true };
   });
 
@@ -172,8 +171,9 @@ const deleteAllProducts = createServerFn({ method: "POST" })
   .middleware([requireFirebaseAuth])
   .handler(async ({ context }) => {
     await ensureAdmin(context);
-    const docs = await fsQuery("ranked_products", { mode: "server" });
-    for (const d of docs) await fsDelete(`ranked_products/${d.id}`, { mode: "server" });
+    const firestore = adminFirestoreOptions(context);
+    const docs = await fsQuery("ranked_products", firestore);
+    for (const d of docs) await fsDelete(`ranked_products/${d.id}`, firestore);
     return { ok: true };
   });
 
@@ -265,7 +265,7 @@ const getPlans = createServerFn({ method: "GET" })
     await ensureAdmin(context);
     const docs = await fsQuery("admin_plans", {
       orderBy: { field: "ordem", direction: "ASCENDING" },
-      mode: "server",
+      ...adminFirestoreOptions(context),
     });
     return docs.map((d) => ({
       id: d.id,
@@ -289,13 +289,10 @@ const updatePlanFn = createServerFn({ method: "POST" })
   })
   .handler(async ({ data, context }) => {
     await ensureAdmin(context);
+    const firestore = adminFirestoreOptions(context);
     const { id, patch } = data;
-    const current = await fsGet(`admin_plans/${id}`, { mode: "server" });
-    await fsSet(
-      `admin_plans/${id}`,
-      { ...((current?.data as any) ?? {}), ...patch },
-      { mode: "server" },
-    );
+    const current = await fsGet(`admin_plans/${id}`, firestore);
+    await fsSet(`admin_plans/${id}`, { ...((current?.data as any) ?? {}), ...patch }, firestore);
     return { ok: true };
   });
 
@@ -308,7 +305,7 @@ const getCosts = createServerFn({ method: "GET" })
   .middleware([requireFirebaseAuth])
   .handler(async ({ context }): Promise<Costs> => {
     await ensureAdmin(context);
-    const doc = await fsGet("admin_settings/costs", { mode: "server" });
+    const doc = await fsGet("admin_settings/costs", adminFirestoreOptions(context));
     return {
       chat_per_1k_in: (doc?.data?.chat_per_1k_in as number) ?? 0.0001,
       chat_per_1k_out: (doc?.data?.chat_per_1k_out as number) ?? 0.0004,
@@ -351,12 +348,9 @@ const updateCostsFn = createServerFn({ method: "POST" })
   })
   .handler(async ({ data, context }) => {
     await ensureAdmin(context);
-    const current = await fsGet("admin_settings/costs", { mode: "server" });
-    await fsSet(
-      "admin_settings/costs",
-      { ...((current?.data as any) ?? {}), ...data },
-      { mode: "server" },
-    );
+    const firestore = adminFirestoreOptions(context);
+    const current = await fsGet("admin_settings/costs", firestore);
+    await fsSet("admin_settings/costs", { ...((current?.data as any) ?? {}), ...data }, firestore);
     return { ok: true };
   });
 
@@ -384,7 +378,7 @@ const getCommissions = createServerFn({ method: "GET" })
     const docs = await fsQuery("referral_commissions", {
       orderBy: { field: "createdAt", direction: "DESCENDING" },
       limit: 500,
-      mode: "server",
+      ...adminFirestoreOptions(context),
     });
     return docs.map((d) => ({
       id: d.id,
@@ -412,8 +406,9 @@ const setStatusFn = createServerFn({ method: "POST" })
   })
   .handler(async ({ data, context }) => {
     await ensureAdmin(context);
+    const firestore = adminFirestoreOptions(context);
     const { id, status } = data;
-    const current = await fsGet(`referral_commissions/${id}`, { mode: "server" });
+    const current = await fsGet(`referral_commissions/${id}`, firestore);
     if (current) {
       await fsSet(
         `referral_commissions/${id}`,
@@ -423,7 +418,7 @@ const setStatusFn = createServerFn({ method: "POST" })
           paidAt: status === "pago" ? new Date().toISOString() : null,
           updatedAt: new Date().toISOString(),
         },
-        { mode: "server" },
+        firestore,
       );
     }
     return { ok: true };
@@ -550,11 +545,12 @@ const getUsersWithUsage = createServerFn({ method: "GET" })
   .middleware([requireFirebaseAuth])
   .handler(async ({ context }): Promise<AdminUserUsage[]> => {
     await ensureAdmin(context);
+    const firestore = adminFirestoreOptions(context);
     // Lê todos os docs de ai_usage_stats para obter uso real
-    const docs = await fsQuery("ai_usage_stats", { limit: 500, mode: "server" });
+    const docs = await fsQuery("ai_usage_stats", { limit: 500, ...firestore });
     const out: AdminUserUsage[] = [];
     for (const d of docs) {
-      const sub = await getSubscription(d.id, { mode: "server" });
+      const sub = await getSubscription(d.id, firestore);
       const planFromSub = sub?.plan ?? "gratuito";
       const statFromSub = sub?.status ?? "active";
       const isComped = sub?.status === "comped";
@@ -592,7 +588,8 @@ const setBlockedFn = createServerFn({ method: "POST" })
   })
   .handler(async ({ data, context }) => {
     await ensureAdmin(context);
-    const current = await fsGet(`ai_usage_stats/${data.userId}`, { mode: "server" });
+    const firestore = adminFirestoreOptions(context);
+    const current = await fsGet(`ai_usage_stats/${data.userId}`, firestore);
     const status = data.blocked ? "blocked" : "active";
     await fsSet(
       `ai_usage_stats/${data.userId}`,
@@ -601,7 +598,7 @@ const setBlockedFn = createServerFn({ method: "POST" })
         status,
         updatedAt: new Date().toISOString(),
       },
-      { mode: "server" },
+      firestore,
     );
     return { ok: true };
   });
@@ -618,7 +615,8 @@ const resetUsageAdminFn = createServerFn({ method: "POST" })
   })
   .handler(async ({ data, context }) => {
     await ensureAdmin(context);
-    const current = await fsGet(`ai_usage_stats/${data.userId}`, { mode: "server" });
+    const firestore = adminFirestoreOptions(context);
+    const current = await fsGet(`ai_usage_stats/${data.userId}`, firestore);
     if (!current) return { ok: true };
     await fsSet(
       `ai_usage_stats/${data.userId}`,
@@ -632,7 +630,7 @@ const resetUsageAdminFn = createServerFn({ method: "POST" })
         costEstimateUsd: 0,
         updatedAt: new Date().toISOString(),
       },
-      { mode: "server" },
+      firestore,
     );
     return { ok: true };
   });
@@ -647,7 +645,7 @@ const getPlanQuotas = createServerFn({ method: "GET" })
   .middleware([requireFirebaseAuth])
   .handler(async ({ context }): Promise<Record<string, PlanQuota>> => {
     await ensureAdmin(context);
-    const doc = await fsGet("admin_settings/plan_quotas", { mode: "server" });
+    const doc = await fsGet("admin_settings/plan_quotas", adminFirestoreOptions(context));
     if (!doc?.data) return DEFAULT_PLAN_QUOTAS;
     const stored = doc.data as Record<string, unknown>;
     const out: Record<string, PlanQuota> = {};
@@ -673,7 +671,8 @@ const savePlanQuotasFn = createServerFn({ method: "POST" })
   })
   .handler(async ({ data, context }) => {
     await ensureAdmin(context);
-    const current = await fsGet("admin_settings/plan_quotas", { mode: "server" });
+    const firestore = adminFirestoreOptions(context);
+    const current = await fsGet("admin_settings/plan_quotas", firestore);
     await fsSet(
       "admin_settings/plan_quotas",
       {
@@ -681,7 +680,7 @@ const savePlanQuotasFn = createServerFn({ method: "POST" })
         ...data,
         savedAt: new Date().toISOString(),
       },
-      { mode: "server" },
+      firestore,
     );
     return { ok: true };
   });

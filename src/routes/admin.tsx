@@ -69,7 +69,7 @@ function AdminPage() {
 
   if (status === "loading") {
     return (
-      <div className="min-h-dvh grid place-items-center bg-[#0F0F1A] text-white/60">
+      <div className="marketing-page min-h-dvh grid place-items-center text-white/60">
         Carregando…
       </div>
     );
@@ -100,13 +100,13 @@ function LoginGate() {
   }
 
   return (
-    <div className="min-h-dvh grid place-items-center bg-[#0F0F1A] px-4">
+    <div className="marketing-page min-h-dvh grid place-items-center px-4">
       <form
         onSubmit={onSubmit}
-        className="w-full max-w-sm rounded-2xl border border-white/10 bg-white/5 p-6 space-y-4 backdrop-blur"
+        className="marketing-panel w-full max-w-sm rounded-2xl p-6 space-y-4 backdrop-blur"
       >
         <div>
-          <h1 className="text-xl font-bold text-white">Admin · Pitch AI</h1>
+          <h1 className="marketing-title text-3xl">Admin · Pitch AI</h1>
           <p className="text-sm text-white/60 mt-1">Faça login com uma conta admin.</p>
         </div>
         <input
@@ -145,7 +145,7 @@ function LoginGate() {
 
 function NotAdmin({ email, onLogout }: { email: string; onLogout: () => void }) {
   return (
-    <div className="min-h-dvh grid place-items-center bg-[#0F0F1A] px-4 text-white">
+    <div className="marketing-page min-h-dvh grid place-items-center px-4">
       <div className="max-w-sm text-center space-y-4">
         <h1 className="text-xl font-bold">Sem permissão</h1>
         <p className="text-white/60 text-sm">
@@ -166,7 +166,7 @@ function NotAdmin({ email, onLogout }: { email: string; onLogout: () => void }) 
 function Dashboard({ email, onLogout }: { email: string; onLogout: () => void }) {
   const [tab, setTab] = useState<Tab>("overview");
   return (
-    <div className="min-h-dvh bg-[#0F0F1A] text-white">
+    <div className="marketing-page min-h-dvh">
       <header className="border-b border-white/10 bg-black/40 backdrop-blur sticky top-0 z-10">
         <div className="max-w-6xl mx-auto flex items-center justify-between px-4 py-3">
           <span className="text-lg font-bold">

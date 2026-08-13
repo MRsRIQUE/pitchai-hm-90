@@ -3,6 +3,12 @@ import { createMiddleware } from "@tanstack/react-start";
 import { getRequest } from "@tanstack/react-start/server";
 import { verifyFirebaseIdToken } from "@/lib/firebase.server";
 
+export type FirebaseAuthContext = {
+  userId: string;
+  user: Awaited<ReturnType<typeof verifyFirebaseIdToken>>;
+  firebaseToken: string;
+};
+
 // Servidor: exige um ID token Firebase válido no header Authorization.
 export const requireFirebaseAuth = createMiddleware({ type: "function" }).server(
   async ({ next }) => {
@@ -20,6 +26,9 @@ export const requireFirebaseAuth = createMiddleware({ type: "function" }).server
       context: {
         userId: user.uid,
         user,
+        // Mantemos o token verificado para que operações administrativas
+        // possam acessar o Firestore com a identidade do próprio admin.
+        firebaseToken: token,
       },
     });
   },

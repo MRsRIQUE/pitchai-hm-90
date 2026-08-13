@@ -222,7 +222,7 @@ function EntrarPage() {
   }
 
   return (
-    <main className="relative grid min-h-dvh place-items-center overflow-hidden bg-[#0b0b12] px-4 py-12 text-white">
+    <main className="marketing-page relative grid min-h-dvh place-items-center overflow-hidden px-4 py-12">
       {/* Glow radial roxo, consistente com a identidade visual do restante do site. */}
       <div
         aria-hidden
@@ -238,7 +238,7 @@ function EntrarPage() {
           <Link to="/" className="font-display text-2xl font-bold">
             Pitch<span className="text-[#a855f7]">aí</span>
           </Link>
-          <h1 className="mt-4 text-xl font-semibold text-balance">
+          <h1 className="marketing-title mt-4 text-3xl text-balance">
             {mode === "login"
               ? "Entrar na sua conta"
               : mode === "signup"
@@ -252,7 +252,7 @@ function EntrarPage() {
           </p>
         </div>
 
-        <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-6 shadow-[0_20px_60px_rgba(0,0,0,0.4)] backdrop-blur-2xl">
+        <div className="marketing-panel rounded-2xl p-6 backdrop-blur-2xl">
           {mode !== "forgot" && <>
           <button
             onClick={google}

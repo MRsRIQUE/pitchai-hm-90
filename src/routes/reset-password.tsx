@@ -57,9 +57,9 @@ function ResetPasswordPage() {
   }
 
   return (
-    <main className="grid min-h-dvh place-items-center bg-[#0F0F1A] px-4 text-white">
-      <div className="w-full max-w-sm space-y-5">
-        <h1 className="text-center text-xl font-semibold">Definir nova senha</h1>
+    <main className="marketing-page grid min-h-dvh place-items-center px-4">
+      <div className="marketing-panel w-full max-w-sm space-y-5 rounded-2xl p-6">
+        <h1 className="marketing-title text-center text-3xl">Definir nova senha</h1>
         {!ready ? (
           <p className="text-center text-sm text-white/50">
             Link inválido ou expirado.{" "}

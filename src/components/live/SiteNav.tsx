@@ -1,7 +1,6 @@
 import { Link } from "@tanstack/react-router";
 import { PitchAiLogo } from "@/components/live/PitchAiLogo";
 import { ThemeModeSelector } from "@/components/live/ThemeModeSelector";
-import { useTheme } from "@/lib/use-theme";
 import { Sparkles, ArrowUpRight } from "lucide-react";
 
 const LINKS = [
@@ -22,8 +21,9 @@ export function SiteNav({
   currentTheme?: string;
   onThemeChange?: (theme: string) => void;
 }) {
-  const { isDark } = useTheme();
-  const effTone = isDark ? "dark" : tone;
+  // A landing e as páginas de marketing têm identidade clara independente
+  // da preferência usada dentro do painel autenticado.
+  const effTone = tone;
 
   const wrap =
     effTone === "dark"

@@ -17,9 +17,9 @@ import { ReferralCapture } from "@/components/ReferralCapture";
 
 function NotFoundComponent() {
   return (
-    <div className="flex min-h-screen items-center justify-center bg-background px-4">
-      <div className="max-w-md text-center">
-        <h1 className="text-7xl font-bold text-foreground">404</h1>
+    <div className="marketing-page flex min-h-screen items-center justify-center px-4">
+      <div className="marketing-panel max-w-md rounded-3xl p-8 text-center">
+        <h1 className="marketing-title text-7xl text-foreground">404</h1>
         <p className="mt-4 text-sm text-muted-foreground">Página não encontrada.</p>
         <Link
           to="/"
@@ -38,9 +38,9 @@ function ErrorComponent({ error, reset }: { error: Error; reset: () => void }) {
     reportLovableError(error, { boundary: "tanstack_root_error_component" });
   }, [error]);
   return (
-    <div className="flex min-h-screen items-center justify-center bg-background px-4">
-      <div className="max-w-md text-center">
-        <h1 className="text-xl font-semibold text-foreground">Algo deu errado</h1>
+    <div className="marketing-page flex min-h-screen items-center justify-center px-4">
+      <div className="marketing-panel max-w-md rounded-3xl p-8 text-center">
+        <h1 className="marketing-title text-3xl text-foreground">Algo deu errado</h1>
         <button
           onClick={() => {
             router.invalidate();

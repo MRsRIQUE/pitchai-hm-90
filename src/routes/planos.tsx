@@ -37,11 +37,13 @@ function PlanosPage() {
   const { subscription: sub, isPaidActive: isActive, isComped, userId } = useUserSubscription();
 
   return (
-    <div className="min-h-screen bg-[#0F0F1A] text-white">
-      <SiteNav tone="dark" />
+    <div className="marketing-page min-h-screen">
+      <SiteNav tone="light" />
       <div className="mx-auto max-w-5xl px-4 py-12">
         <header className="text-center mb-10">
-          <h1 className="text-4xl font-bold mb-3">Escolha seu plano do Pitch AI</h1>
+          <h1 className="marketing-title text-4xl mb-3 sm:text-5xl">
+            Escolha seu plano do Pitch AI
+          </h1>
           <p className="text-white/70 max-w-2xl mx-auto text-base">
             O plano <span className="font-semibold text-amber-300">Mensal</span> inclui todas as
             respostas automáticas via chat por texto. Os planos{" "}
@@ -73,7 +75,7 @@ function PlanosPage() {
               className={`relative flex flex-col justify-between rounded-2xl border p-6 transition-all ${
                 p.highlight
                   ? "border-[#7C3AED] bg-[#7C3AED]/10 shadow-[0_0_40px_rgba(124,58,237,0.2)]"
-                  : "border-white/10 bg-white/5 hover:border-white/20"
+                  : "marketing-panel hover:border-[#6D28D9]/30"
               }`}
             >
               {p.badge && (
@@ -171,7 +173,7 @@ function PlanosPage() {
 
         {/* Detalhes de Comparação de Recursos */}
         <section className="mt-12 grid gap-6 md:grid-cols-2">
-          <div className="rounded-2xl border border-white/10 bg-white/5 p-6 space-y-4">
+          <div className="marketing-panel rounded-2xl p-6 space-y-4">
             <div className="flex items-center gap-2 text-base font-bold text-white">
               <ShieldCheck className="w-5 h-5 text-[#00E676]" /> Incluído em todos os planos
             </div>

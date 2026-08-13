@@ -23,6 +23,24 @@ service cloud.firestore {
         && request.auth.token.email == 'pitchaihm-server@gen-lang-client-0224756084.firebaseapp.com';
     }
 
+    function isAdmin() {
+      return isSignedIn()
+        && (
+          request.auth.token.email in [
+            'hferro150@gmail.com',
+            'cortezin66@gmail.com'
+          ]
+          || (
+            exists(/databases/$(database)/documents/admins/$(request.auth.uid))
+            && get(/databases/$(database)/documents/admins/$(request.auth.uid)).data.role == 'admin'
+          )
+        );
+    }
+
+    function isPrivileged() {
+      return isServer() || isAdmin();
+    }
+
     function isOwnerOf(uid) {
       return isSignedIn() && request.auth.uid == uid;
     }
@@ -51,12 +69,12 @@ service cloud.firestore {
     // ------------------------------------------------------------------
 
     match /users/{uid} {
-      allow read, write: if isOwnerOf(uid) || isServer();
+      allow read, write: if isOwnerOf(uid) || isPrivileged();
 
       // Assinatura: muda somente via webhook/servidor (nunca pelo cliente).
       match /subscription/{subId} {
-        allow read: if isOwnerOf(uid) || isServer();
-        allow write: if isServer();
+        allow read: if isOwnerOf(uid) || isPrivileged();
+        allow write: if isPrivileged();
       }
 
       match /sessions/{sessionId} {
@@ -94,12 +112,12 @@ service cloud.firestore {
 
     // Comissões de indicação — somente o servidor acessa.
     match /referral_commissions/{commissionId} {
-      allow read, write: if isServer();
+      allow read, write: if isPrivileged();
     }
 
     // Acessos de cortesia concedidos por admin — somente o servidor.
     match /comped_access/{userId} {
-      allow read, write: if isServer();
+      allow read, write: if isPrivileged();
     }
 
     // Código de indicação — público (é a chave de busca do convite).
@@ -114,7 +132,12 @@ service cloud.firestore {
 
     match /ranked_products/{productId} {
       allow read: if true;
-      allow write: if isServer();
+      allow write: if isPrivileged();
+    }
+
+    // Estatísticas agregadas exibidas e gerenciadas no painel ADMIN.
+    match /ai_usage_stats/{userId} {
+      allow read, write: if isPrivileged();
     }
 
     // ------------------------------------------------------------------
@@ -128,13 +151,11 @@ service cloud.firestore {
 
     // Configurações administrativas (planos e custos) — somente servidor.
     match /admin_plans/{planId} {
-      allow read: if isServer();
-      allow write: if isServer();
+      allow read, write: if isPrivileged();
     }
 
     match /admin_settings/{settingId} {
-      allow read: if isServer();
-      allow write: if isServer();
+      allow read, write: if isPrivileged();
     }
   }
 }

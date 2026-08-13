@@ -65,8 +65,8 @@ function DownloadPage() {
   };
 
   return (
-    <div className="min-h-screen bg-[#070312] text-slate-100 font-sans pb-16">
-      <SiteNav tone="dark" />
+    <div className="marketing-page min-h-screen pb-16">
+      <SiteNav tone="light" />
 
       <main className="mx-auto max-w-4xl px-4 py-10 sm:px-6 space-y-8">
         {/* Banner de Verificação do Status da Extensão */}
@@ -78,7 +78,7 @@ function DownloadPage() {
             <span>Para Google Chrome, Edge, Brave e Opera</span>
           </div>
 
-          <h1 className="mt-4 font-display text-3xl sm:text-5xl font-extrabold text-white tracking-tight">
+          <h1 className="marketing-title mt-4 text-4xl sm:text-5xl">
             Instalar o Pitch AI é Muito Fácil
           </h1>
           <p className="mt-3 text-slate-400 text-sm sm:text-base">
@@ -87,7 +87,7 @@ function DownloadPage() {
         </div>
 
         {/* Card de Download Principal */}
-        <div className="rounded-3xl border border-[#7C3AED]/30 bg-gradient-to-br from-[#1A0B36] to-[#0E051F] p-6 sm:p-8 shadow-[0_10px_40px_rgba(124,58,237,0.2)]">
+        <div className="marketing-panel rounded-3xl border-[#7C3AED]/30 p-6 sm:p-8">
           <div className="flex flex-col gap-6 sm:flex-row sm:items-center sm:justify-between">
             <div className="flex items-center gap-4">
               <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-2xl bg-[#7C3AED] text-white shadow-lg">

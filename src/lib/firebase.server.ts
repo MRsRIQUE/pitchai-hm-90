@@ -99,6 +99,13 @@ async function authorization(
   userToken?: string,
 ): Promise<{ headers: Record<string, string>; key: string }> {
   if (mode === "server") {
+    // Server functions autenticadas podem encaminhar o token Firebase que já
+    // foi verificado pelo middleware. As regras do Firestore continuam sendo
+    // a autoridade e só concedem privilégios a administradores. Rotinas sem
+    // usuário (webhooks/jobs) seguem usando a conta técnica abaixo.
+    if (userToken) {
+      return { headers: { authorization: `Bearer ${userToken}` }, key: "" };
+    }
     const token = await acquireServerToken();
     return { headers: { authorization: `Bearer ${token}` }, key: "" };
   }
@@ -639,10 +646,7 @@ export async function setRankedProduct(
 // Allowlist por e-mail: administradores definidos aqui têm acesso garantido
 // independentemente de existir um documento em `admins/{uid}` no Firestore.
 // Útil quando não há credenciais de servidor para gravar a coleção `admins`.
-export const ADMIN_EMAILS = new Set<string>([
-  "hferro150@gmail.com",
-  "cortezin66@gmail.com",
-]);
+export const ADMIN_EMAILS = new Set<string>(["hferro150@gmail.com", "cortezin66@gmail.com"]);
 
 export function getNormalizedAdminEmail(email?: string | null): string | null {
   const normalized = email?.trim().toLowerCase();

@@ -106,8 +106,8 @@ function LivesPage() {
   }, [rows]);
 
   return (
-    <main className="min-h-screen bg-background">
-      <SiteNav />
+    <main className="marketing-page min-h-screen bg-background">
+      <SiteNav tone="light" />
       <header className="border-b border-border bg-background/80">
         <div className="mx-auto flex max-w-6xl items-center justify-between gap-3 px-4 py-3">
           <Link
@@ -116,7 +116,7 @@ function LivesPage() {
           >
             <ArrowLeft className="h-4 w-4" /> Voltar ao painel
           </Link>
-          <h1 className="text-sm font-semibold">Minhas lives</h1>
+          <h1 className="marketing-title text-2xl">Minhas lives</h1>
           <Button variant="ghost" size="sm" onClick={refresh} disabled={loading}>
             {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : "Atualizar"}
           </Button>

@@ -495,7 +495,7 @@ export function LiveDashboard() {
   const activeProduct = config.produtos.find((p) => p.active) ?? null;
 
   return (
-    <div className="min-h-screen bg-background pb-28 text-foreground lg:pb-0">
+    <div className="marketing-page min-h-screen bg-background pb-28 text-foreground lg:pb-0">
       <MobileBottomNav />
       <audio ref={audioRef} hidden />
 

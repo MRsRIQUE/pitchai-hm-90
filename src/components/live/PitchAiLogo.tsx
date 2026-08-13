@@ -27,9 +27,7 @@ export function PitchAiLogo({
   const [logoFailed, setLogoFailed] = useState(false);
 
   const textColor =
-    variant === "white"
-      ? "text-white"
-      : "text-[#1E0836] dark:text-white";
+    variant === "white" ? "text-white" : variant === "purple" ? "text-[#6D28D9]" : "text-[#1E0836]";
 
   return (
     <div className={`inline-flex items-center ${currentSize.gap} ${className}`}>
@@ -55,7 +53,9 @@ export function PitchAiLogo({
       )}
 
       {showWordmark && (
-        <span className={`font-sora font-extrabold tracking-tight ${currentSize.text} ${textColor} select-none`}>
+        <span
+          className={`font-sora font-extrabold tracking-tight ${currentSize.text} ${textColor} select-none`}
+        >
           pitchai
         </span>
       )}
