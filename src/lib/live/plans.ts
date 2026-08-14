@@ -6,6 +6,14 @@
 
 export type PlanTier = "free" | "pro" | "max";
 
+export type CompedAccessRecord = {
+  email?: string | null;
+  plan?: string | null;
+  status?: string | null;
+  grantedUntil?: string | null;
+  note?: string | null;
+};
+
 export type PitchaiPlan = {
   /** price_id no provedor de pagamento (lookup_key) */
   priceId: string;
@@ -66,11 +74,11 @@ export const PLAN_FEATURES = [
   "Suporte prioritário",
 ];
 
-/** Limites técnicos do estado interno sem assinatura; não é oferta pública. */
+/** Estado sem assinatura: cadastro não concede uso da ferramenta. */
 export const FREE_LIMITS = [
-  "100 respostas de chat por dia",
-  "50 áudios de voz por dia",
-  "1 canal de live",
+  "Painel e extensão bloqueados até a confirmação do pagamento",
+  "Sem respostas de IA ou geração de voz",
+  "Sem sessões de live",
 ];
 
 export function formatBRL(cents: number): string {
@@ -83,33 +91,6 @@ export function formatBRL(cents: number): string {
 /** Preço equivalente por mês, para comparação entre ciclos. */
 export function monthlyEquivalent(plan: PitchaiPlan): string {
   return formatBRL(Math.round(plan.amountCents / plan.months));
-}
-
-/** Busca um plano pelo price_id — usado para retomar o checkout após o cadastro. */
-export function getPlanByPriceId(priceId?: string | null): PitchaiPlan | undefined {
-  if (!priceId) return undefined;
-  return PITCHAI_PLANS.find((plan) => plan.priceId === priceId);
-}
-
-/**
- * Destino do botão "Assinar": o usuário passa pela criação de conta antes do
- * checkout, para que o pagamento já caia numa conta existente.
- */
-export function signupLinkForPlan(plan: PitchaiPlan) {
-  return { to: "/entrar", search: { mode: "signup" as const, plan: plan.priceId } };
-}
-
-/** Anexa o e-mail do usuário ao link de checkout para pré-popular o campo e
- *  permitir que o webhook de pagamento case a compra com a conta. */
-export function checkoutUrlWithEmail(plan: PitchaiPlan, email?: string | null): string {
-  if (!email) return plan.checkoutUrl;
-  try {
-    const url = new URL(plan.checkoutUrl);
-    url.searchParams.set("email", email);
-    return url.toString();
-  } catch {
-    return plan.checkoutUrl;
-  }
 }
 
 /** Mapa price_id → tier interno usado nos limites de uso. */
@@ -134,10 +115,25 @@ export function hasPaidAccess(
   } | null,
 ): boolean {
   if (!sub) return false;
-  if (sub.granted_until && new Date(sub.granted_until) > new Date()) return true;
-  const status = sub.status ?? "";
-  if (!["active", "trialing", "past_due", "comped"].includes(status)) return false;
-  if (sub.plan === "free") return false;
-  if (sub.current_period_end && new Date(sub.current_period_end) < new Date()) return false;
-  return true;
+  if (!sub.plan || sub.plan === "free") return false;
+
+  const isFutureDate = (value?: string | null) => {
+    if (!value) return false;
+    const timestamp = Date.parse(value);
+    return Number.isFinite(timestamp) && timestamp > Date.now();
+  };
+
+  // Cortesia só é válida durante o período explicitamente concedido pelo admin.
+  if (sub.status === "comped") return isFutureDate(sub.granted_until);
+
+  // Somente pagamento confirmado e dentro da vigência libera a ferramenta.
+  // `trialing` ainda pode não ter cobrança e `past_due` representa falha/atraso.
+  if (sub.status !== "active") return false;
+  return isFutureDate(sub.current_period_end) || isFutureDate(sub.granted_until);
+}
+
+export function hasActiveCompedAccess(comped?: CompedAccessRecord | null): boolean {
+  if (!comped || comped.status !== "comped" || !comped.grantedUntil) return false;
+  const timestamp = Date.parse(comped.grantedUntil);
+  return Number.isFinite(timestamp) && timestamp > Date.now();
 }

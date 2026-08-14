@@ -11,10 +11,10 @@ export const Route = createFileRoute("/checkout/return")({
 function CheckoutReturn() {
   const { session_id } = Route.useSearch();
   return (
-    <div className="min-h-screen bg-[#0F0F1A] text-white flex items-center justify-center px-4">
-      <div className="max-w-md text-center">
+    <div className="marketing-page min-h-screen flex items-center justify-center px-4">
+      <div className="marketing-panel max-w-md rounded-3xl p-8 text-center">
         <CheckCircle2 className="w-16 h-16 text-[#00E676] mx-auto mb-4" />
-        <h1 className="text-3xl font-bold mb-2">Pagamento confirmado!</h1>
+        <h1 className="marketing-title text-4xl mb-2">Pagamento confirmado!</h1>
         <p className="text-white/70 mb-6">
           {session_id
             ? "Sua assinatura foi ativada. Em alguns segundos os novos limites já estarão valendo."

@@ -12,6 +12,7 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as AdminRouteImport } from './routes/admin'
 import { Route as AppRouteImport } from './routes/app'
+import { Route as ComprarRouteImport } from './routes/comprar'
 import { Route as DownloadRouteImport } from './routes/download'
 import { Route as EntrarRouteImport } from './routes/entrar'
 import { Route as IndiqueRouteImport } from './routes/indique'
@@ -23,6 +24,9 @@ import { Route as ResetPasswordRouteImport } from './routes/reset-password'
 import { Route as TermosRouteImport } from './routes/termos'
 import { Route as ApiPaymentsRouteImport } from './routes/api/payments'
 import { Route as CheckoutReturnRouteImport } from './routes/checkout.return'
+import { Route as ApiAccountEnsureRouteImport } from './routes/api/account/ensure'
+import { Route as ApiAdminCourtesyRouteImport } from './routes/api/admin/courtesy'
+import { Route as ApiCheckoutStartRouteImport } from './routes/api/checkout/start'
 import { Route as ApiScriptGenerateRouteImport } from './routes/api/script/generate'
 import { Route as ApiTtsPreviewRouteImport } from './routes/api/tts/preview'
 import { Route as ApiPublicChatReplyRouteImport } from './routes/api/public/chat/reply'
@@ -50,6 +54,11 @@ const AdminRoute = AdminRouteImport.update({
 const AppRoute = AppRouteImport.update({
   id: '/app',
   path: '/app',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ComprarRoute = ComprarRouteImport.update({
+  id: '/comprar',
+  path: '/comprar',
   getParentRoute: () => rootRouteImport,
 } as any)
 const DownloadRoute = DownloadRouteImport.update({
@@ -105,6 +114,21 @@ const ApiPaymentsRoute = ApiPaymentsRouteImport.update({
 const CheckoutReturnRoute = CheckoutReturnRouteImport.update({
   id: '/checkout/return',
   path: '/checkout/return',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiAccountEnsureRoute = ApiAccountEnsureRouteImport.update({
+  id: '/api/account/ensure',
+  path: '/api/account/ensure',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiAdminCourtesyRoute = ApiAdminCourtesyRouteImport.update({
+  id: '/api/admin/courtesy',
+  path: '/api/admin/courtesy',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiCheckoutStartRoute = ApiCheckoutStartRouteImport.update({
+  id: '/api/checkout/start',
+  path: '/api/checkout/start',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ApiScriptGenerateRoute = ApiScriptGenerateRouteImport.update({
@@ -181,6 +205,7 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/admin': typeof AdminRoute
   '/app': typeof AppRoute
+  '/comprar': typeof ComprarRoute
   '/download': typeof DownloadRoute
   '/entrar': typeof EntrarRoute
   '/indique': typeof IndiqueRoute
@@ -192,6 +217,9 @@ export interface FileRoutesByFullPath {
   '/termos': typeof TermosRoute
   '/api/payments': typeof ApiPaymentsRoute
   '/checkout/return': typeof CheckoutReturnRoute
+  '/api/account/ensure': typeof ApiAccountEnsureRoute
+  '/api/admin/courtesy': typeof ApiAdminCourtesyRoute
+  '/api/checkout/start': typeof ApiCheckoutStartRoute
   '/api/script/generate': typeof ApiScriptGenerateRoute
   '/api/tts/preview': typeof ApiTtsPreviewRoute
   '/api/public/chat/reply': typeof ApiPublicChatReplyRoute
@@ -210,6 +238,7 @@ export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/admin': typeof AdminRoute
   '/app': typeof AppRoute
+  '/comprar': typeof ComprarRoute
   '/download': typeof DownloadRoute
   '/entrar': typeof EntrarRoute
   '/indique': typeof IndiqueRoute
@@ -221,6 +250,9 @@ export interface FileRoutesByTo {
   '/termos': typeof TermosRoute
   '/api/payments': typeof ApiPaymentsRoute
   '/checkout/return': typeof CheckoutReturnRoute
+  '/api/account/ensure': typeof ApiAccountEnsureRoute
+  '/api/admin/courtesy': typeof ApiAdminCourtesyRoute
+  '/api/checkout/start': typeof ApiCheckoutStartRoute
   '/api/script/generate': typeof ApiScriptGenerateRoute
   '/api/tts/preview': typeof ApiTtsPreviewRoute
   '/api/public/chat/reply': typeof ApiPublicChatReplyRoute
@@ -240,6 +272,7 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/admin': typeof AdminRoute
   '/app': typeof AppRoute
+  '/comprar': typeof ComprarRoute
   '/download': typeof DownloadRoute
   '/entrar': typeof EntrarRoute
   '/indique': typeof IndiqueRoute
@@ -251,6 +284,9 @@ export interface FileRoutesById {
   '/termos': typeof TermosRoute
   '/api/payments': typeof ApiPaymentsRoute
   '/checkout/return': typeof CheckoutReturnRoute
+  '/api/account/ensure': typeof ApiAccountEnsureRoute
+  '/api/admin/courtesy': typeof ApiAdminCourtesyRoute
+  '/api/checkout/start': typeof ApiCheckoutStartRoute
   '/api/script/generate': typeof ApiScriptGenerateRoute
   '/api/tts/preview': typeof ApiTtsPreviewRoute
   '/api/public/chat/reply': typeof ApiPublicChatReplyRoute
@@ -271,6 +307,7 @@ export interface FileRouteTypes {
     | '/'
     | '/admin'
     | '/app'
+    | '/comprar'
     | '/download'
     | '/entrar'
     | '/indique'
@@ -282,6 +319,9 @@ export interface FileRouteTypes {
     | '/termos'
     | '/api/payments'
     | '/checkout/return'
+    | '/api/account/ensure'
+    | '/api/admin/courtesy'
+    | '/api/checkout/start'
     | '/api/script/generate'
     | '/api/tts/preview'
     | '/api/public/chat/reply'
@@ -300,6 +340,7 @@ export interface FileRouteTypes {
     | '/'
     | '/admin'
     | '/app'
+    | '/comprar'
     | '/download'
     | '/entrar'
     | '/indique'
@@ -311,6 +352,9 @@ export interface FileRouteTypes {
     | '/termos'
     | '/api/payments'
     | '/checkout/return'
+    | '/api/account/ensure'
+    | '/api/admin/courtesy'
+    | '/api/checkout/start'
     | '/api/script/generate'
     | '/api/tts/preview'
     | '/api/public/chat/reply'
@@ -329,6 +373,7 @@ export interface FileRouteTypes {
     | '/'
     | '/admin'
     | '/app'
+    | '/comprar'
     | '/download'
     | '/entrar'
     | '/indique'
@@ -340,6 +385,9 @@ export interface FileRouteTypes {
     | '/termos'
     | '/api/payments'
     | '/checkout/return'
+    | '/api/account/ensure'
+    | '/api/admin/courtesy'
+    | '/api/checkout/start'
     | '/api/script/generate'
     | '/api/tts/preview'
     | '/api/public/chat/reply'
@@ -359,6 +407,7 @@ export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AdminRoute: typeof AdminRoute
   AppRoute: typeof AppRoute
+  ComprarRoute: typeof ComprarRoute
   DownloadRoute: typeof DownloadRoute
   EntrarRoute: typeof EntrarRoute
   IndiqueRoute: typeof IndiqueRoute
@@ -370,6 +419,9 @@ export interface RootRouteChildren {
   TermosRoute: typeof TermosRoute
   ApiPaymentsRoute: typeof ApiPaymentsRoute
   CheckoutReturnRoute: typeof CheckoutReturnRoute
+  ApiAccountEnsureRoute: typeof ApiAccountEnsureRoute
+  ApiAdminCourtesyRoute: typeof ApiAdminCourtesyRoute
+  ApiCheckoutStartRoute: typeof ApiCheckoutStartRoute
   ApiScriptGenerateRoute: typeof ApiScriptGenerateRoute
   ApiTtsPreviewRoute: typeof ApiTtsPreviewRoute
   ApiPublicChatReplyRoute: typeof ApiPublicChatReplyRoute
@@ -406,6 +458,13 @@ declare module '@tanstack/react-router' {
       path: '/app'
       fullPath: '/app'
       preLoaderRoute: typeof AppRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/comprar': {
+      id: '/comprar'
+      path: '/comprar'
+      fullPath: '/comprar'
+      preLoaderRoute: typeof ComprarRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/download': {
@@ -483,6 +542,27 @@ declare module '@tanstack/react-router' {
       path: '/checkout/return'
       fullPath: '/checkout/return'
       preLoaderRoute: typeof CheckoutReturnRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/account/ensure': {
+      id: '/api/account/ensure'
+      path: '/api/account/ensure'
+      fullPath: '/api/account/ensure'
+      preLoaderRoute: typeof ApiAccountEnsureRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/admin/courtesy': {
+      id: '/api/admin/courtesy'
+      path: '/api/admin/courtesy'
+      fullPath: '/api/admin/courtesy'
+      preLoaderRoute: typeof ApiAdminCourtesyRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/checkout/start': {
+      id: '/api/checkout/start'
+      path: '/api/checkout/start'
+      fullPath: '/api/checkout/start'
+      preLoaderRoute: typeof ApiCheckoutStartRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/script/generate': {
@@ -583,6 +663,7 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AdminRoute: AdminRoute,
   AppRoute: AppRoute,
+  ComprarRoute: ComprarRoute,
   DownloadRoute: DownloadRoute,
   EntrarRoute: EntrarRoute,
   IndiqueRoute: IndiqueRoute,
@@ -594,6 +675,9 @@ const rootRouteChildren: RootRouteChildren = {
   TermosRoute: TermosRoute,
   ApiPaymentsRoute: ApiPaymentsRoute,
   CheckoutReturnRoute: CheckoutReturnRoute,
+  ApiAccountEnsureRoute: ApiAccountEnsureRoute,
+  ApiAdminCourtesyRoute: ApiAdminCourtesyRoute,
+  ApiCheckoutStartRoute: ApiCheckoutStartRoute,
   ApiScriptGenerateRoute: ApiScriptGenerateRoute,
   ApiTtsPreviewRoute: ApiTtsPreviewRoute,
   ApiPublicChatReplyRoute: ApiPublicChatReplyRoute,

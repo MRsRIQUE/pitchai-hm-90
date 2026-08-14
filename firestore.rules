@@ -23,8 +23,40 @@ service cloud.firestore {
         && request.auth.token.email == 'pitchaihm-server@gen-lang-client-0224756084.firebaseapp.com';
     }
 
+    function isAdmin() {
+      return isSignedIn()
+        && (
+          request.auth.token.email in [
+            'hferro150@gmail.com',
+            'cortezin66@gmail.com'
+          ]
+          || (
+            exists(/databases/$(database)/documents/admins/$(request.auth.uid))
+            && get(/databases/$(database)/documents/admins/$(request.auth.uid)).data.role == 'admin'
+          )
+        );
+    }
+
+    function isPrivileged() {
+      return isServer() || isAdmin();
+    }
+
     function isOwnerOf(uid) {
       return isSignedIn() && request.auth.uid == uid;
+    }
+
+    // Defesa adicional no acesso direto pelo SDK: somente registros de
+    // assinatura confirmada/cortesia podem criar tokens e operar a ferramenta.
+    // A validade exata das datas continua sendo conferida pelo backend.
+    function hasAccessRecord(uid) {
+      return (
+        exists(/databases/$(database)/documents/users/$(uid)/subscription/current)
+        && get(/databases/$(database)/documents/users/$(uid)/subscription/current).data.plan != 'free'
+        && get(/databases/$(database)/documents/users/$(uid)/subscription/current).data.status == 'active'
+      ) || (
+        exists(/databases/$(database)/documents/comped_access/$(uid))
+        && get(/databases/$(database)/documents/comped_access/$(uid)).data.status == 'comped'
+      );
     }
 
     // ------------------------------------------------------------------
@@ -33,17 +65,24 @@ service cloud.firestore {
 
     match /sync_tokens/{token} {
       allow get: if true;
-      allow create, update, delete: if isServer()
-        || (isSignedIn() && request.resource.data.uid == request.auth.uid);
+      allow create, update: if isPrivileged()
+        || (isSignedIn()
+          && request.resource.data.uid == request.auth.uid
+          && hasAccessRecord(request.auth.uid));
+      allow delete: if isPrivileged()
+        || (isSignedIn() && resource.data.uid == request.auth.uid);
     }
 
     // Config pública por token (consumida pela extensão via REST).
     // O dono só pode escrever no próprio token; leitura é aberta por design.
     match /live_configs_by_token/{token} {
       allow get: if true;
-      allow write: if isServer()
+      allow create, update: if isPrivileged()
         || (isSignedIn()
-          && get(/databases/$(database)/documents/sync_tokens/$(token)).data.uid == request.auth.uid);
+          && get(/databases/$(database)/documents/sync_tokens/$(token)).data.uid == request.auth.uid
+          && hasAccessRecord(request.auth.uid));
+      allow delete: if isPrivileged()
+        || (isSignedIn() && resource.data.uid == request.auth.uid);
     }
 
     // ------------------------------------------------------------------
@@ -51,22 +90,27 @@ service cloud.firestore {
     // ------------------------------------------------------------------
 
     match /users/{uid} {
-      allow read, write: if isOwnerOf(uid) || isServer();
+      allow read, write: if isOwnerOf(uid) || isPrivileged();
 
       // Assinatura: muda somente via webhook/servidor (nunca pelo cliente).
       match /subscription/{subId} {
-        allow read: if isOwnerOf(uid) || isServer();
-        allow write: if isServer();
+        allow read: if isOwnerOf(uid) || isPrivileged();
+        allow write: if isPrivileged();
       }
 
       match /sessions/{sessionId} {
-        allow read, write: if isOwnerOf(uid) || isServer();
+        allow read, write: if (isOwnerOf(uid) && hasAccessRecord(uid)) || isServer();
       }
 
-      // Código de indicação do usuário — escrito pelo servidor.
+      // Código de indicação do usuário — o dono cria; o código é imutável.
       match /referral/{refId} {
         allow read: if isOwnerOf(uid) || isServer();
-        allow write: if isServer();
+        allow create: if isOwnerOf(uid)
+          && request.resource.data.code is string
+          && get(/databases/$(database)/documents/referral_codes/$(request.resource.data.code)).data.uid == uid;
+        allow update: if isOwnerOf(uid)
+          && request.resource.data.code == resource.data.code;
+        allow delete: if isServer();
       }
 
       // Vínculos indicador -> indicado — escritos pelo servidor.
@@ -87,25 +131,48 @@ service cloud.firestore {
     // ------------------------------------------------------------------
 
     match /referral_claims/{claimId} {
-      allow read: if isServer() || isSignedIn();
-      allow create: if isServer() || isSignedIn();
+      allow read: if isPrivileged()
+        || (isSignedIn()
+          && (resource.data.referrerUid == request.auth.uid
+            || resource.data.refereeUid == request.auth.uid));
+      allow create: if isServer()
+        || (isSignedIn()
+          && claimId == request.auth.uid
+          && request.resource.data.refereeUid == request.auth.uid
+          && request.resource.data.referrerUid != request.auth.uid
+          && get(/databases/$(database)/documents/referral_codes/$(request.resource.data.code)).data.uid
+            == request.resource.data.referrerUid);
       allow update, delete: if isServer();
     }
 
-    // Comissões de indicação — somente o servidor acessa.
+    // Comissões de indicação — o indicador lê as próprias; servidor administra.
     match /referral_commissions/{commissionId} {
-      allow read, write: if isServer();
+      allow read: if isPrivileged()
+        || (isSignedIn() && resource.data.referrerUid == request.auth.uid);
+      allow write: if isPrivileged();
     }
 
     // Acessos de cortesia concedidos por admin — somente o servidor.
     match /comped_access/{userId} {
+      allow read: if isOwnerOf(userId) || isPrivileged();
+      allow write: if isPrivileged();
+    }
+
+    // Criado pelo backend antes do redirecionamento ao provedor de pagamento.
+    match /checkout_intents/{intentId} {
+      allow read, write: if isServer();
+    }
+
+    match /payment_events/{eventId} {
       allow read, write: if isServer();
     }
 
     // Código de indicação — público (é a chave de busca do convite).
     match /referral_codes/{code} {
       allow get: if true;
-      allow create, update, delete: if isServer();
+      allow create: if isServer()
+        || (isSignedIn() && request.resource.data.uid == request.auth.uid);
+      allow update, delete: if isServer();
     }
 
     // ------------------------------------------------------------------
@@ -114,7 +181,12 @@ service cloud.firestore {
 
     match /ranked_products/{productId} {
       allow read: if true;
-      allow write: if isServer();
+      allow write: if isPrivileged();
+    }
+
+    // Estatísticas agregadas exibidas e gerenciadas no painel ADMIN.
+    match /ai_usage_stats/{userId} {
+      allow read, write: if isPrivileged();
     }
 
     // ------------------------------------------------------------------
@@ -128,13 +200,11 @@ service cloud.firestore {
 
     // Configurações administrativas (planos e custos) — somente servidor.
     match /admin_plans/{planId} {
-      allow read: if isServer();
-      allow write: if isServer();
+      allow read, write: if isPrivileged();
     }
 
     match /admin_settings/{settingId} {
-      allow read: if isServer();
-      allow write: if isServer();
+      allow read, write: if isPrivileged();
     }
   }
 }

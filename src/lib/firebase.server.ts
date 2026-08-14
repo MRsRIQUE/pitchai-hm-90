@@ -7,6 +7,7 @@ export const FIREBASE_SERVER_EMAIL = process.env.FIREBASE_SERVER_EMAIL || "";
 
 const IDENTITYTOOLKIT_URL = "https://identitytoolkit.googleapis.com/v1";
 const FIRESTORE_BASE_URL = `https://firestore.googleapis.com/v1/projects/${FIREBASE_PROJECT_ID}/databases/${FIREBASE_DATABASE_ID}`;
+const FIRESTORE_RESOURCE_ROOT = `projects/${FIREBASE_PROJECT_ID}/databases/${FIREBASE_DATABASE_ID}`;
 
 export interface FirebaseUserInfo {
   uid: string;
@@ -99,6 +100,13 @@ async function authorization(
   userToken?: string,
 ): Promise<{ headers: Record<string, string>; key: string }> {
   if (mode === "server") {
+    // Server functions autenticadas podem encaminhar o token Firebase que já
+    // foi verificado pelo middleware. As regras do Firestore continuam sendo
+    // a autoridade e só concedem privilégios a administradores. Rotinas sem
+    // usuário (webhooks/jobs) seguem usando a conta técnica abaixo.
+    if (userToken) {
+      return { headers: { authorization: `Bearer ${userToken}` }, key: "" };
+    }
     const token = await acquireServerToken();
     return { headers: { authorization: `Bearer ${token}` }, key: "" };
   }
@@ -162,12 +170,16 @@ function decodeFields(fields: Record<string, Record<string, unknown>>): Record<s
 
 export interface FirestoreDocument {
   id: string;
+  /** Caminho relativo completo dentro de /documents. */
+  path: string;
   data: Record<string, unknown>;
 }
 
 function parseDocument(doc: any): FirestoreDocument {
-  const id = doc?.name?.split("/").pop() ?? "";
-  return { id, data: decodeFields(doc?.fields ?? {}) };
+  const fullName = String(doc?.name ?? "");
+  const path = fullName.split("/documents/")[1] ?? fullName;
+  const id = path.split("/").pop() ?? "";
+  return { id, path, data: decodeFields(doc?.fields ?? {}) };
 }
 
 // ---------------------------------------------------------------------------
@@ -187,6 +199,52 @@ export async function fsGet(
     throw new Error(`Firestore GET ${path} falhou: ${body?.error?.message ?? res.status}`);
   }
   return parseDocument(await res.json());
+}
+
+/** Lê documentos conhecidos em lotes, evitando uma requisição por documento. */
+export async function fsGetMany(
+  paths: string[],
+  options: { mode?: FirestoreAuthMode; userToken?: string } = {},
+): Promise<FirestoreDocument[]> {
+  if (!paths.length) return [];
+  const { headers, key } = await authorization(options.mode ?? "public", options.userToken);
+  const chunks: string[][] = [];
+  for (let index = 0; index < paths.length; index += 100)
+    chunks.push(paths.slice(index, index + 100));
+
+  const pages = await Promise.all(
+    chunks.map(async (chunk) => {
+      const res = await fetch(`${FIRESTORE_BASE_URL}/documents:batchGet${key}`, {
+        method: "POST",
+        headers: { "content-type": "application/json", ...headers },
+        body: JSON.stringify({
+          // batchGet exige nomes de recurso, não URLs HTTP completas.
+          documents: chunk.map((path) => `${FIRESTORE_RESOURCE_ROOT}/documents/${path}`),
+        }),
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(`Firestore BATCH GET falhou: ${body?.error?.message ?? res.status}`);
+      }
+      const responseText = await res.text();
+      let responses: any[];
+      try {
+        const parsed = JSON.parse(responseText);
+        responses = Array.isArray(parsed) ? parsed : [parsed];
+      } catch {
+        // batchGet pode ser entregue como um fluxo JSON, com um objeto por linha.
+        responses = responseText
+          .split(/\r?\n/)
+          .map((line) => line.trim())
+          .filter(Boolean)
+          .map((line) => JSON.parse(line));
+      }
+      return (Array.isArray(responses) ? responses : [])
+        .filter((item: any) => item?.found)
+        .map((item: any) => parseDocument(item.found));
+    }),
+  );
+  return pages.flat();
 }
 
 export async function fsSet(
@@ -235,7 +293,11 @@ export type FirestoreWhere = {
 export interface FirestoreQueryOptions {
   where?: FirestoreWhere[];
   orderBy?: { field: string; direction: "ASCENDING" | "DESCENDING" };
+  /** Valor exclusivo do campo de ordenação usado para buscar a próxima página. */
+  startAfter?: unknown;
   limit?: number;
+  /** Executa uma collection-group query a partir da raiz do banco. */
+  collectionGroup?: boolean;
   mode?: FirestoreAuthMode;
   userToken?: string;
 }
@@ -249,9 +311,16 @@ export async function fsQuery(
   // detecta subcoleção (path com > 2 segmentos: col/doc/col2 → parent + child).
   const hasParent = segments.length > 2;
   const collectionId = segments[segments.length - 1];
-  const parent = hasParent ? segments.slice(0, -1).join("/") : "";
+  const parent = options.collectionGroup ? "" : hasParent ? segments.slice(0, -1).join("/") : "";
   const structuredQuery: Record<string, unknown> = {
-    from: hasParent ? [{ collectionId, allDescendants: false }] : [{ collectionId }],
+    from: [
+      {
+        collectionId,
+        ...(options.collectionGroup || hasParent
+          ? { allDescendants: Boolean(options.collectionGroup) }
+          : {}),
+      },
+    ],
   };
   if (options.where?.length) {
     structuredQuery.where = buildFilter(options.where);
@@ -260,6 +329,9 @@ export async function fsQuery(
     structuredQuery.orderBy = [
       { field: { fieldPath: options.orderBy.field }, direction: options.orderBy.direction },
     ];
+    if (options.startAfter !== undefined) {
+      structuredQuery.startAt = { before: false, values: [encodeValue(options.startAfter)] };
+    }
   }
   if (options.limit != null) {
     structuredQuery.limit = { value: options.limit };
@@ -343,6 +415,8 @@ export type SubscriptionData = {
   stripe_customer_id?: string;
   stripe_subscription_id?: string;
   cancel_at_period_end?: boolean;
+  provider?: string;
+  provider_sale_code?: string | null;
 };
 
 export type UsageEvent = {
@@ -471,6 +545,9 @@ export interface PendingPaymentData {
   consumed?: boolean;
   consumedBy?: string | null;
   consumedAt?: string | null;
+  plan?: string | null;
+  months?: number | null;
+  saleCode?: string | null;
 }
 
 export async function setPendingPayment(
@@ -548,8 +625,8 @@ export async function incrementUsage(
   const { headers, key } = await authorization(options.mode ?? "public", options.userToken);
   const docPath = `users/${uid}/usage/${day}`;
   const docName = `projects/${FIREBASE_PROJECT_ID}/databases/${FIREBASE_DATABASE_ID}/documents/${docPath}`;
-  // URL do commit no parent da collection.
-  const url = `${FIRESTORE_BASE_URL}/documents/users/${uid}/usage:commit${key}`;
+  const url = `${FIRESTORE_BASE_URL}/documents:commit${key}`;
+  const now = new Date().toISOString();
 
   const res = await fetch(url, {
     method: "POST",
@@ -557,12 +634,9 @@ export async function incrementUsage(
     body: JSON.stringify({
       writes: [
         {
-          // Transform atômico no campo `endpoint`: incrementa em 1.
-          // O Firestore cria o documento automaticamente se não existir.
-          transform: {
-            field: endpoint,
-            incrementValue: { integerValue: "1" },
-          },
+          update: { name: docName, fields: { updatedAt: encodeValue(now) } },
+          updateMask: { fieldPaths: ["updatedAt"] },
+          updateTransforms: [{ fieldPath: endpoint, increment: { integerValue: "1" } }],
         },
       ],
     }),
@@ -575,9 +649,42 @@ export async function incrementUsage(
     );
   }
 
+  // A telemetria administrativa nunca pode impedir a cota principal.
+  await incrementAdminUsageCountBestEffort(uid, now, options).catch(() => undefined);
+
   // Lê o valor pós-increment para retornar o contador atualizado.
   const updated = await getUserUsage(uid, day, options);
   return (updated ?? {})[endpoint] ?? 0;
+}
+
+async function incrementAdminUsageCountBestEffort(
+  uid: string,
+  now: string,
+  options: { mode?: FirestoreAuthMode; userToken?: string },
+): Promise<void> {
+  const { headers, key } = await authorization(options.mode ?? "public", options.userToken);
+  const statsName = `projects/${FIREBASE_PROJECT_ID}/databases/${FIREBASE_DATABASE_ID}/documents/ai_usage_stats/${uid}`;
+  const res = await fetch(`${FIRESTORE_BASE_URL}/documents:commit${key}`, {
+    method: "POST",
+    headers: { "content-type": "application/json", ...headers },
+    body: JSON.stringify({
+      writes: [
+        {
+          update: {
+            name: statsName,
+            fields: {
+              userId: encodeValue(uid),
+              lastApiCallAt: encodeValue(now),
+              updatedAt: encodeValue(now),
+            },
+          },
+          updateMask: { fieldPaths: ["userId", "lastApiCallAt", "updatedAt"] },
+          updateTransforms: [{ fieldPath: "apiCallCount", increment: { integerValue: "1" } }],
+        },
+      ],
+    }),
+  });
+  if (!res.ok) throw new Error(`Firestore admin usage increment falhou: ${res.status}`);
 }
 
 /**
@@ -639,10 +746,7 @@ export async function setRankedProduct(
 // Allowlist por e-mail: administradores definidos aqui têm acesso garantido
 // independentemente de existir um documento em `admins/{uid}` no Firestore.
 // Útil quando não há credenciais de servidor para gravar a coleção `admins`.
-export const ADMIN_EMAILS = new Set<string>([
-  "hferro150@gmail.com",
-  "cortezin66@gmail.com",
-]);
+export const ADMIN_EMAILS = new Set<string>(["hferro150@gmail.com", "cortezin66@gmail.com"]);
 
 export function getNormalizedAdminEmail(email?: string | null): string | null {
   const normalized = email?.trim().toLowerCase();

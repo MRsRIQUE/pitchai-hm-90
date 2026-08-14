@@ -1,6 +1,6 @@
 import { createServerFn } from "@tanstack/react-start";
 import { requireFirebaseAuth } from "@/lib/firebase-auth";
-import { fsQuery } from "@/lib/firebase.server";
+import { fsGet, fsQuery } from "@/lib/firebase.server";
 import {
   ensureReferralCode,
   resolveReferralCode,
@@ -30,21 +30,22 @@ export const getMyReferralSummary = createServerFn({ method: "GET" })
   .middleware([requireFirebaseAuth])
   .handler(async ({ context }): Promise<ReferralSummary> => {
     const userId = context.userId;
-    const code = await ensureReferralCode(userId);
+    const firestore = { mode: "server" as const, userToken: context.firebaseToken };
+    const code = await ensureReferralCode(userId, context.firebaseToken);
 
     const claims = await fsQuery("referral_claims", {
       where: [
         { field: "referrerUid", op: "EQUAL", value: userId },
         { field: "status", op: "EQUAL", value: "claimed" },
       ],
-      mode: "server",
+      ...firestore,
     });
 
     const commissions = await fsQuery("referral_commissions", {
       where: [{ field: "referrerUid", op: "EQUAL", value: userId }],
       orderBy: { field: "createdAt", direction: "DESCENDING" },
       limit: 200,
-      mode: "server",
+      ...firestore,
     });
 
     const mappedCommissions: ReferralCommission[] = commissions.map((c) => ({
@@ -53,8 +54,8 @@ export const getMyReferralSummary = createServerFn({ method: "GET" })
       base_cents: (c.data.base_cents as number) ?? 0,
       amount_cents: (c.data.amount_cents as number) ?? 0,
       status: (c.data.status as string) ?? "pendente",
-      created_at: (c.data.createdAt as string) ?? "",
-      paid_at: (c.data.paidAt as string) ?? null,
+      created_at: (c.data.createdAt as string) ?? (c.data.created_at as string) ?? "",
+      paid_at: (c.data.paidAt as string) ?? (c.data.paid_at as string) ?? null,
     }));
 
     return {
@@ -83,16 +84,15 @@ export const claimReferral = createServerFn({ method: "POST" })
     const code = normalizeCode(data.code);
     if (!code) return { ok: false, reason: "invalid" };
 
-    const existing = await fsQuery("referral_claims", {
-      where: [{ field: "refereeUid", op: "EQUAL", value: userId }],
-      limit: 1,
+    const existing = await fsGet(`referral_claims/${userId}`, {
       mode: "server",
+      userToken: context.firebaseToken,
     });
-    if (existing.length) return { ok: false, reason: "already" };
+    if (existing) return { ok: false, reason: "already" };
 
     const ownerUid = await resolveReferralCode(code);
     if (!ownerUid || ownerUid === userId) return { ok: false, reason: "notfound" };
 
-    await createReferralLink(ownerUid, userId, code);
+    await createReferralLink(ownerUid, userId, code, context.firebaseToken);
     return { ok: true };
   });

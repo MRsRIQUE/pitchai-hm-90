@@ -235,7 +235,7 @@ export const DEFAULT_CONFIG: Config = {
   produtos: [],
   roteirosPorProduto: {},
   ultimoRoteiro: "",
-  version: "0.15.0",
+  version: "0.15.1",
   lastUpdated: Date.now(),
 };
 

@@ -1,4 +1,147 @@
 /* Pitch AI injected UI */
+
+/* ---- Scanner ambiente: malha roxa + cortina de leitura ---- */
+#pitchai-scan-overlay {
+  position: fixed !important;
+  inset: 0 !important;
+  z-index: 2147483638 !important;
+  pointer-events: none !important;
+  overflow: hidden !important;
+  opacity: 0 !important;
+  visibility: hidden !important;
+  transition: opacity 0.5s ease, visibility 0.5s ease !important;
+  isolation: isolate !important;
+  contain: strict !important;
+}
+
+#pitchai-scan-overlay.is-active {
+  opacity: 0.32 !important;
+  visibility: visible !important;
+}
+
+#pitchai-scan-overlay.is-scanning {
+  opacity: 0.72 !important;
+}
+
+#pitchai-scan-overlay .pitchai-scan-mesh {
+  position: absolute !important;
+  inset: -18% !important;
+  background:
+    radial-gradient(circle at 22% 18%, rgba(192, 132, 252, 0.28), transparent 28%),
+    radial-gradient(circle at 78% 65%, rgba(124, 58, 237, 0.26), transparent 34%),
+    linear-gradient(rgba(168, 85, 247, 0.12) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(139, 92, 246, 0.12) 1px, transparent 1px) !important;
+  background-size: auto, auto, 42px 42px, 42px 42px !important;
+  mask-image: radial-gradient(ellipse at center, #000 15%, transparent 76%) !important;
+  animation: pitchai-mesh-drift 11s ease-in-out infinite alternate !important;
+  transform: perspective(700px) rotateX(54deg) scale(1.35) !important;
+  transform-origin: center 72% !important;
+}
+
+#pitchai-scan-overlay::before {
+  content: "" !important;
+  position: absolute !important;
+  inset: 0 !important;
+  background:
+    repeating-linear-gradient(
+      118deg,
+      transparent 0 28px,
+      rgba(216, 180, 254, 0.08) 29px,
+      transparent 31px 58px
+    ),
+    radial-gradient(circle at 50% 50%, transparent 50%, rgba(76, 29, 149, 0.14)) !important;
+  mix-blend-mode: screen !important;
+  animation: pitchai-mesh-flow 8s linear infinite !important;
+}
+
+#pitchai-scan-overlay::after {
+  content: "" !important;
+  position: absolute !important;
+  left: -6% !important;
+  right: -6% !important;
+  top: -44vh !important;
+  height: 42vh !important;
+  background: linear-gradient(
+    180deg,
+    transparent 0%,
+    rgba(126, 34, 206, 0.04) 22%,
+    rgba(147, 51, 234, 0.16) 67%,
+    rgba(216, 180, 254, 0.55) 94%,
+    rgba(233, 213, 255, 0.92) 100%
+  ) !important;
+  border-bottom: 1px solid rgba(233, 213, 255, 0.95) !important;
+  box-shadow:
+    0 12px 42px rgba(168, 85, 247, 0.48),
+    0 2px 12px rgba(233, 213, 255, 0.8) !important;
+  filter: saturate(1.2) !important;
+  animation: pitchai-scan-curtain 4.8s cubic-bezier(0.42, 0, 0.58, 1) infinite !important;
+}
+
+#pitchai-scan-overlay .pitchai-scan-label {
+  position: absolute !important;
+  left: 22px !important;
+  bottom: 22px !important;
+  display: flex !important;
+  align-items: center !important;
+  gap: 8px !important;
+  padding: 7px 11px !important;
+  border: 1px solid rgba(216, 180, 254, 0.34) !important;
+  border-radius: 999px !important;
+  background: rgba(30, 10, 55, 0.64) !important;
+  color: #f3e8ff !important;
+  box-shadow: 0 8px 28px rgba(76, 29, 149, 0.3) !important;
+  backdrop-filter: blur(12px) saturate(1.4) !important;
+  font: 700 10px/1.2 ui-monospace, SFMono-Regular, Consolas, monospace !important;
+  letter-spacing: 0.14em !important;
+  text-transform: uppercase !important;
+  opacity: 0.72 !important;
+}
+
+#pitchai-scan-overlay .pitchai-scan-label::before {
+  content: "" !important;
+  width: 6px !important;
+  height: 6px !important;
+  border-radius: 999px !important;
+  background: #d8b4fe !important;
+  box-shadow: 0 0 0 4px rgba(192, 132, 252, 0.15), 0 0 12px #c084fc !important;
+  animation: pitchai-scanner-dot 1.25s ease-in-out infinite !important;
+}
+
+#pitchai-scan-overlay.is-scanning .pitchai-scan-label {
+  opacity: 1 !important;
+  border-color: rgba(233, 213, 255, 0.65) !important;
+}
+
+@keyframes pitchai-scan-curtain {
+  0% { transform: translateY(0); opacity: 0; }
+  8% { opacity: 1; }
+  88% { opacity: 1; }
+  100% { transform: translateY(145vh); opacity: 0; }
+}
+
+@keyframes pitchai-mesh-drift {
+  from { transform: perspective(700px) rotateX(54deg) translate3d(-1.5%, -1%, 0) scale(1.35); }
+  to { transform: perspective(700px) rotateX(50deg) translate3d(1.5%, 2%, 0) scale(1.42); }
+}
+
+@keyframes pitchai-mesh-flow {
+  to { background-position: 120px -80px, center; }
+}
+
+@keyframes pitchai-scanner-dot {
+  50% { opacity: 0.45; transform: scale(0.72); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  #pitchai-scan-overlay::before,
+  #pitchai-scan-overlay::after,
+  #pitchai-scan-overlay .pitchai-scan-mesh,
+  #pitchai-scan-overlay .pitchai-scan-label::before {
+    animation: none !important;
+  }
+  #pitchai-scan-overlay::after { top: 42% !important; opacity: 0.45 !important; }
+}
+
 .pitchai-header {
   position: fixed !important;
   top: 12px !important;
@@ -7,32 +150,86 @@
   z-index: 2147483647 !important;
   display: flex !important;
   align-items: center !important;
-  gap: 10px !important;
-  padding: 6px 14px !important;
-  background: #0f0f1a !important;
-  border: 1px solid rgba(255, 255, 255, 0.08) !important;
-  border-radius: 999px !important;
+  justify-content: space-between !important;
+  gap: 8px !important;
+  width: min(1180px, calc(100vw - 32px)) !important;
+  min-height: 52px !important;
+  padding: 7px 8px 7px 14px !important;
+  background:
+    linear-gradient(105deg, rgba(17, 16, 30, 0.96), rgba(10, 10, 17, 0.94)) !important;
+  border: 1px solid rgba(167, 139, 250, 0.2) !important;
+  border-radius: 18px !important;
   color: #f9fafb !important;
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, sans-serif !important;
   font-size: 13px !important;
-  box-shadow: 0 10px 30px -10px rgba(0, 0, 0, 0.6) !important;
-  flex-wrap: wrap !important;
-  max-width: 96vw !important;
+  box-shadow:
+    0 18px 50px -18px rgba(0, 0, 0, 0.85),
+    0 0 0 1px rgba(124, 58, 237, 0.05) inset !important;
+  backdrop-filter: blur(22px) saturate(140%) !important;
+  -webkit-backdrop-filter: blur(22px) saturate(140%) !important;
+  flex-wrap: nowrap !important;
   box-sizing: border-box !important;
   opacity: 1 !important;
   visibility: visible !important;
 }
+.pitchai-header-brand,
+.pitchai-header-controls,
+.pitchai-header-actions,
+.pitchai-protection {
+  display: flex !important;
+  align-items: center !important;
+}
+.pitchai-header-brand {
+  flex: 0 0 auto !important;
+  gap: 7px !important;
+  min-width: 0 !important;
+  padding-right: 10px !important;
+  border-right: 1px solid rgba(255, 255, 255, 0.08) !important;
+}
+.pitchai-header-controls {
+  flex: 1 1 auto !important;
+  gap: 6px !important;
+  min-width: 0 !important;
+  overflow-x: auto !important;
+  scrollbar-width: none !important;
+}
+.pitchai-header-controls::-webkit-scrollbar {
+  display: none !important;
+}
+.pitchai-header-actions {
+  flex: 0 0 auto !important;
+  gap: 6px !important;
+  padding-left: 8px !important;
+  border-left: 1px solid rgba(255, 255, 255, 0.08) !important;
+}
+.pitchai-protection {
+  gap: 7px !important;
+  height: 34px !important;
+  padding: 0 9px !important;
+  border-radius: 11px !important;
+  background: rgba(255, 255, 255, 0.035) !important;
+  border: 1px solid rgba(255, 255, 255, 0.07) !important;
+}
+.pitchai-control-label {
+  color: #a1a1aa !important;
+  font-size: 11px !important;
+  font-weight: 600 !important;
+}
 .pitchai-header .pitchai-logo {
-  font-weight: 700;
-  letter-spacing: -0.01em;
+  font-weight: 800 !important;
+  letter-spacing: -0.03em !important;
+  white-space: nowrap !important;
 }
 .pitchai-header .pitchai-logo b {
   color: #7c3aed;
 }
 .pitchai-header .pitchai-ver {
-  font-size: 10px;
-  color: #71717a;
-  font-family: ui-monospace, monospace;
+  font-size: 9px !important;
+  color: #a78bfa !important;
+  font-family: ui-monospace, monospace !important;
+  padding: 2px 5px !important;
+  border-radius: 999px !important;
+  background: rgba(124, 58, 237, 0.11) !important;
 }
 .pitchai-dot {
   display: inline-block;
@@ -50,7 +247,11 @@
   display: inline-flex;
   align-items: center;
   color: #a1a1aa;
-  font-size: 12px;
+  font-size: 11px;
+  max-width: 210px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .pitchai-header .pitchai-status.warn {
   color: #ff6b35;
@@ -94,23 +295,57 @@
 
 .pitchai-btn {
   cursor: pointer;
-  background: transparent;
-  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.035);
+  border: 1px solid rgba(255, 255, 255, 0.1);
   color: #f9fafb;
-  padding: 4px 10px;
-  border-radius: 999px;
-  font-size: 12px;
-  transition: background 0.15s;
+  min-height: 34px;
+  padding: 0 11px;
+  border-radius: 11px;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1;
+  white-space: nowrap;
+  transition:
+    transform 0.15s ease,
+    background 0.15s ease,
+    border-color 0.15s ease;
   font-family: inherit;
 }
 .pitchai-btn:hover {
-  background: rgba(255, 255, 255, 0.06);
+  background: rgba(255, 255, 255, 0.09);
+  border-color: rgba(167, 139, 250, 0.36);
+  transform: translateY(-1px);
 }
 .pitchai-btn.primary {
-  background: #7c3aed;
+  background: linear-gradient(135deg, #8b5cf6, #6d28d9);
   color: #fff;
-  border-color: #7c3aed;
-  font-weight: 600;
+  border-color: rgba(196, 181, 253, 0.45);
+  font-weight: 700;
+  box-shadow: 0 6px 18px -8px rgba(124, 58, 237, 0.9);
+}
+.pitchai-panel-trigger {
+  min-width: 88px !important;
+}
+.pitchai-open-tab {
+  color: #c4b5fd !important;
+  background: rgba(124, 58, 237, 0.08) !important;
+}
+
+@media (max-width: 900px) {
+  .pitchai-header {
+    left: 10px !important;
+    right: 10px !important;
+    transform: none !important;
+    width: auto !important;
+  }
+  .pitchai-header .pitchai-status,
+  .pitchai-control-label,
+  .pitchai-open-tab {
+    display: none !important;
+  }
+  .pitchai-header-brand {
+    padding-right: 7px !important;
+  }
 }
 
 .pitchai-toggle {
@@ -197,8 +432,65 @@
   border-radius: 16px !important;
 }
 
-/* ---- Activity panel (fila de chat + IA ao vivo) ---- */
+/* A fila flutuante foi removida. Revisoes aparecem uma por vez, sem PiP. */
+.pitchai-review-toast {
+  position: fixed !important;
+  right: 22px !important;
+  bottom: 22px !important;
+  z-index: 2147483647 !important;
+  width: min(390px, calc(100vw - 44px)) !important;
+  padding: 16px !important;
+  border-radius: 18px !important;
+  background:
+    linear-gradient(145deg, rgba(25, 20, 43, 0.98), rgba(10, 10, 17, 0.98)) !important;
+  border: 1px solid rgba(167, 139, 250, 0.3) !important;
+  box-shadow:
+    0 24px 70px -20px rgba(0, 0, 0, 0.9),
+    0 0 30px -18px rgba(139, 92, 246, 0.9) !important;
+  color: #f9fafb !important;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, sans-serif !important;
+  animation: pitchai-review-in 0.22s ease-out !important;
+}
+.pitchai-review-label {
+  display: inline-flex !important;
+  margin-bottom: 9px !important;
+  padding: 4px 7px !important;
+  border-radius: 999px !important;
+  background: rgba(139, 92, 246, 0.16) !important;
+  color: #c4b5fd !important;
+  font-size: 9px !important;
+  font-weight: 800 !important;
+  letter-spacing: 0.08em !important;
+}
+.pitchai-review-question,
+.pitchai-review-answer {
+  margin: 0 !important;
+  line-height: 1.45 !important;
+}
+.pitchai-review-question {
+  color: #a1a1aa !important;
+  font-size: 11px !important;
+}
+.pitchai-review-answer {
+  margin-top: 7px !important;
+  color: #fff !important;
+  font-size: 13px !important;
+  font-weight: 600 !important;
+}
+.pitchai-review-actions {
+  display: flex !important;
+  justify-content: flex-end !important;
+  gap: 7px !important;
+  margin-top: 13px !important;
+}
+@keyframes pitchai-review-in {
+  from { opacity: 0; transform: translateY(12px) scale(0.98); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+/* Legacy: mantido apenas para nao quebrar instalacoes que ainda tenham o no antigo. */
 .pitchai-activity {
+  display: none !important;
   position: fixed;
   left: 16px;
   bottom: 16px;

@@ -32,11 +32,11 @@ function QuentesPage() {
   });
 
   return (
-    <div className="min-h-dvh bg-[#0F0F1A] text-white">
-      <SiteNav tone="dark" />
+    <div className="marketing-page min-h-dvh">
+      <SiteNav />
 
       <main className="mx-auto max-w-5xl px-4 py-6">
-        <h1 className="text-2xl font-bold">Produtos quentes 🔥</h1>
+        <h1 className="marketing-title text-4xl sm:text-5xl">Produtos quentes 🔥</h1>
         <p className="mt-2 text-sm text-white/60">
           Seleção da equipe Pitch AI com os produtos que mais estão vendendo em live. Clique para
           abrir a página do produto.
@@ -51,10 +51,7 @@ function QuentesPage() {
         ) : (
           <div className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {items.map((p, i) => (
-              <article
-                key={p.id}
-                className="overflow-hidden rounded-2xl border border-white/10 bg-white/[0.03]"
-              >
+              <article key={p.id} className="marketing-panel overflow-hidden rounded-2xl">
                 <div className="relative aspect-[4/3] bg-black/40">
                   {p.imagem_url ? (
                     <img

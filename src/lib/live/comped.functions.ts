@@ -1,6 +1,6 @@
 import { createServerFn } from "@tanstack/react-start";
-import { requireFirebaseAuth } from "@/lib/firebase-auth";
-import { getUserByEmail, isAdmin, fsQuery, fsSet, setSubscription } from "@/lib/firebase.server";
+import { requireFirebaseAuth, type FirebaseAuthContext } from "@/lib/firebase-auth";
+import { getUserByEmail, isAdmin, fsQuery, fsSet } from "@/lib/firebase.server";
 
 export type CompedAccess = {
   userId: string;
@@ -11,8 +11,12 @@ export type CompedAccess = {
   note: string | null;
 };
 
-async function assertAdmin(ctx: { userId: string; user?: { email?: string | null } }) {
+async function assertAdmin(ctx: FirebaseAuthContext) {
   if (!(await isAdmin(ctx.userId, ctx.user?.email))) throw new Error("Forbidden");
+}
+
+function adminFirestoreOptions(ctx: FirebaseAuthContext) {
+  return { mode: "server" as const, userToken: ctx.firebaseToken };
 }
 
 /* Lista os acessos de cortesia concedidos por administradores. */
@@ -20,10 +24,11 @@ export const listCompedAccess = createServerFn({ method: "POST" })
   .middleware([requireFirebaseAuth])
   .handler(async ({ context }): Promise<CompedAccess[]> => {
     await assertAdmin(context);
+    const firestore = adminFirestoreOptions(context);
     const docs = await fsQuery("comped_access", {
       orderBy: { field: "grantedUntil", direction: "DESCENDING" },
       limit: 200,
-      mode: "server",
+      ...firestore,
     });
     return docs.map((d) => ({
       userId: d.id,
@@ -50,24 +55,14 @@ export const grantCompedAccess = createServerFn({ method: "POST" })
   .handler(async ({ data, context }): Promise<{ ok: true } | { error: string }> => {
     try {
       await assertAdmin(context);
+      const firestore = adminFirestoreOptions(context);
 
-      const user = await getUserByEmail(data.email, { mode: "server" });
+      const user = await getUserByEmail(data.email, firestore);
       if (!user) return { error: "Nenhuma conta encontrada com esse e-mail" };
 
       const uid = user.id;
       const until = new Date(Date.now() + data.days * 86400000).toISOString();
       const now = new Date().toISOString();
-      await setSubscription(
-        uid,
-        {
-          plan: "pro",
-          status: "comped",
-          granted_until: until,
-          current_period_end: until,
-          updated_at: now,
-        },
-        { mode: "server" },
-      );
       await fsSet(
         `comped_access/${uid}`,
         {
@@ -77,8 +72,10 @@ export const grantCompedAccess = createServerFn({ method: "POST" })
           grantedUntil: until,
           note: data.note || null,
           grantedBy: context.userId,
+          grantedAt: now,
+          updatedAt: now,
         },
-        { mode: "server" },
+        firestore,
       );
       return { ok: true };
     } catch (error) {
@@ -102,28 +99,17 @@ export const revokeCompedAccess = createServerFn({ method: "POST" })
   .handler(async ({ data, context }): Promise<{ ok: true } | { error: string }> => {
     await assertAdmin(context);
     try {
-      await setSubscription(
-        data.userId,
-        {
-          plan: "free",
-          status: "free",
-          granted_until: null,
-          current_period_end: null,
-          updated_at: new Date().toISOString(),
-        },
-        { mode: "server" },
-      );
+      const firestore = adminFirestoreOptions(context);
       await fsSet(
         `comped_access/${data.userId}`,
         {
-          email: "",
-          plan: "free",
-          status: "free",
-          grantedUntil: null,
+          status: "revoked",
+          grantedUntil: new Date(0).toISOString(),
           note: "revoked",
           grantedBy: context.userId,
+          updatedAt: new Date().toISOString(),
         },
-        { mode: "server" },
+        firestore,
       );
     } catch (err) {
       return { error: err instanceof Error ? err.message : "revoke_failed" };

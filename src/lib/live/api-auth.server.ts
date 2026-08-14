@@ -1,13 +1,13 @@
 import crypto from "node:crypto";
 import {
   getSyncTokenOwner,
-  getSubscription,
   getUserUsage,
   incrementUsageBestEffort,
   isAdmin,
 } from "@/lib/firebase.server";
 import { verifyFirebaseIdToken } from "@/lib/firebase.server";
 import { PRICE_TO_PLAN, type PlanTier } from "@/lib/live/plans";
+import { resolveUserAccess } from "@/lib/live/access.server";
 
 const seenNonces = new Map<string, number>();
 const MAX_NONCES = 10000;
@@ -69,8 +69,8 @@ function verifyHmac(request: Request, token: string, endpoint: string): boolean 
   }
 }
 
-const CHAT_LIMITS: Record<PlanTier, number> = { free: 100, pro: 5000, max: 50000 };
-const TTS_LIMITS: Record<PlanTier, number> = { free: 50, pro: 3000, max: 30000 };
+const CHAT_LIMITS: Record<PlanTier, number> = { free: 0, pro: 5000, max: 50000 };
+const TTS_LIMITS: Record<PlanTier, number> = { free: 0, pro: 3000, max: 30000 };
 
 export function planLimits(plan: string): { chat: number; tts: number; allowAudio: boolean } {
   const tier: PlanTier =
@@ -80,12 +80,14 @@ export function planLimits(plan: string): { chat: number; tts: number; allowAudi
     plan === "pitchai_pro_monthly"
       ? "pro"
       : PRICE_TO_PLAN[plan] || (plan !== "free" && plan ? "pro" : "free");
-  const allowAudio = !(
-    plan === "pitchai_mensal" ||
-    plan === "mensal" ||
-    plan === "pro_mensal" ||
-    plan === "pitchai_pro_monthly"
-  );
+  const allowAudio =
+    tier !== "free" &&
+    !(
+      plan === "pitchai_mensal" ||
+      plan === "mensal" ||
+      plan === "pro_mensal" ||
+      plan === "pitchai_pro_monthly"
+    );
   return { chat: CHAT_LIMITS[tier], tts: TTS_LIMITS[tier], allowAudio };
 }
 
@@ -112,21 +114,56 @@ async function resolveByUserToken(token: string): Promise<string | null> {
   }
 }
 
+async function authorizeUser(userId: string): Promise<GuardResult> {
+  const access = await resolveUserAccess(userId, { mode: "server" });
+  if (!access.active) {
+    return {
+      ok: false,
+      status: 403,
+      message: "Assinatura paga ativa necessária para utilizar o Pitch AI.",
+      userId,
+      plan: "free",
+      remaining: 0,
+      tier: "free",
+    };
+  }
+
+  const plan = access.plan;
+  return {
+    ok: true,
+    userId,
+    plan,
+    tier: PRICE_TO_PLAN[plan] || "pro",
+  };
+}
+
+/** Autoriza operações da extensão apenas para uma licença paga/cortesia vigente. */
+export async function authorizeSyncToken(token: string): Promise<GuardResult> {
+  if (!token || !UUID_RE.test(token)) {
+    return { ok: false, status: 401, message: "Sync token ausente ou inválido." };
+  }
+
+  const userId = await resolveBySyncToken(token).catch(() => null);
+  if (!userId) return { ok: false, status: 401, message: "Sync token inválido." };
+  return authorizeUser(userId);
+}
+
 async function resolveAndAuthorize(
-  request: Request,
   endpoint: "chat_reply" | "tts_speak",
   token: string,
 ): Promise<GuardResult> {
-  const userId = UUID_RE.test(token)
-    ? await resolveBySyncToken(token)
-    : await resolveByUserToken(token);
-  if (!userId) return { ok: false, status: 401, message: "Credenciais inválidas" };
+  const userId = UUID_RE.test(token) ? null : await resolveByUserToken(token);
+  const access = UUID_RE.test(token)
+    ? await authorizeSyncToken(token)
+    : userId
+      ? await authorizeUser(userId)
+      : { ok: false, status: 401, message: "Credenciais inválidas" };
 
-  const sub = await getSubscription(userId, { mode: "server" }).catch(() => null);
-  const plan =
-    sub && sub.status && ["active", "trialing", "past_due", "comped"].includes(sub.status)
-      ? sub.plan || "free"
-      : "free";
+  if (!access.ok) return access;
+  const authorizedUserId = access.userId;
+  if (!authorizedUserId) return { ok: false, status: 401, message: "Credenciais inválidas" };
+
+  const plan = access.plan || "free";
   const { chat, tts, allowAudio } = planLimits(plan);
 
   if (endpoint === "tts_speak" && !allowAudio) {
@@ -140,23 +177,23 @@ async function resolveAndAuthorize(
 
   const day = new Date().toISOString().split("T")[0];
   const limit = endpoint === "chat_reply" ? chat : tts;
-  const usage = await getUserUsage(userId, day, { mode: "server" }).catch(() => null);
+  const usage = await getUserUsage(authorizedUserId, day, { mode: "server" }).catch(() => null);
   const used = (usage ?? {})[endpoint] ?? 0;
   if (used >= limit) {
     return {
       ok: false,
       status: 429,
       message: `Cota diária de IA esgotada para o plano '${plan}'. Faça upgrade para continuar.`,
-      userId,
+      userId: authorizedUserId,
       plan,
       remaining: 0,
     };
   }
 
-  const { count } = await incrementUsageBestEffort(userId, day, endpoint);
+  const { count } = await incrementUsageBestEffort(authorizedUserId, day, endpoint);
   return {
     ok: true,
-    userId,
+    userId: authorizedUserId,
     plan,
     remaining: Math.max(0, limit - count),
     tier: PRICE_TO_PLAN[plan] || "free",
@@ -174,7 +211,7 @@ export async function guardApiRequest(
   if (!verifyHmac(request, token, endpoint)) {
     return { ok: false, status: 401, message: "Invalid HMAC signature" };
   }
-  return resolveAndAuthorize(request, endpoint, token);
+  return resolveAndAuthorize(endpoint, token);
 }
 
 export async function guardAiRequest(
@@ -184,7 +221,7 @@ export async function guardAiRequest(
   const auth = request.headers.get("authorization") || "";
   const token = auth.replace(/^Bearer\s+/i, "").trim();
   if (!token) return { ok: false, status: 401, message: "Missing credentials" };
-  return resolveAndAuthorize(request, endpoint, token);
+  return resolveAndAuthorize(endpoint, token);
 }
 
 export async function getSyncTokenStatus(token: string) {
@@ -198,29 +235,26 @@ export async function getSyncTokenStatus(token: string) {
     };
   }
 
-  const userId = await getSyncTokenOwner(token);
-  if (!userId) {
+  const access = await authorizeSyncToken(token);
+  if (!access.ok || !access.userId) {
+    const paymentRequired = access.status === 403;
     return {
-      ok: false,
-      valid: false,
+      ok: paymentRequired,
+      valid: paymentRequired,
       locked: true,
-      reason: "invalid_token",
-      message: "Sync token não encontrado no servidor.",
+      reason: paymentRequired ? "payment_required" : "invalid_token",
+      userId: access.userId,
+      plan: "free",
+      remainingChat: 0,
+      remainingTts: 0,
+      chatLimit: 0,
+      ttsLimit: 0,
+      message: access.message,
     };
   }
 
-  const sub = await getSubscription(userId, { mode: "server" }).catch(() => null);
-  let plan = "free";
-  let active = false;
-  if (sub) {
-    if (sub.granted_until && new Date(sub.granted_until) > new Date()) {
-      plan = "pro";
-      active = true;
-    } else if (["active", "trialing", "comped"].includes(sub.status || "")) {
-      plan = sub.plan || "free";
-      active = true;
-    }
-  }
+  const userId = access.userId;
+  const plan = access.plan || "free";
 
   const { chat: chatLimit, tts: ttsLimit, allowAudio } = planLimits(plan);
   const day = new Date().toISOString().split("T")[0];

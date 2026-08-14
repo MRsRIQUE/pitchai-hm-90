@@ -7,15 +7,13 @@
   try {
     window.pitchAiExtensionInstalled = true;
     window.dispatchEvent(
-      new CustomEvent("pitchai-extension-detected", { detail: { version: "0.14.5" } }),
+      new CustomEvent("pitchai-extension-detected", { detail: { version: "0.15.1" } }),
     );
 
     // Allowlist de origins aceitos pelo content script — evita que iframes/scripts
     // maliciosos injetem sync tokens fake ou captured network payloads.
     const ALLOWED_ORIGINS = [
       "https://shop.tiktok.com",
-      "https://pitchai.ai.studio",
-      "https://pitchai-live.lovable.app",
       location.origin,
     ];
     function isAllowedOrigin(origin) {
@@ -267,7 +265,7 @@
     if (window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1") {
       return window.location.origin;
     }
-    return "https://pitchai.ai.studio";
+    return "https://pitchai-moon-e5ad.vercel.app";
   }
   const API_BASE = resolveApiBase();
 
@@ -337,14 +335,15 @@
     return salt;
   }
 
-  async function getStorageKey() {
+  async function getStorageKey(seed) {
     try {
       const enc = new TextEncoder();
-      const origin = window.location ? window.location.origin : "pitchai";
+      const extensionId = chrome.runtime?.id || "pitchai";
+      const keySeed = seed || `pitchai-extension:${extensionId}`;
       const salt = await getOrCreateSalt();
       const keyMaterial = await crypto.subtle.importKey(
         "raw",
-        enc.encode(origin),
+        enc.encode(keySeed),
         { name: "PBKDF2" },
         false,
         ["deriveKey"],
@@ -385,24 +384,36 @@
 
   async function decryptConfigObj(data) {
     if (!data || typeof data !== "object" || !data.__enc || !data.__iv) return data;
-    try {
-      const cryptoKey = await getStorageKey();
-      if (!cryptoKey) return data;
-      const iv = new Uint8Array(data.__iv.match(/.{1,2}/g).map((b) => parseInt(b, 16)));
-      const encBuf = new Uint8Array(data.__enc.match(/.{1,2}/g).map((b) => parseInt(b, 16)));
-      const decBuf = await crypto.subtle.decrypt({ name: "AES-GCM", iv }, cryptoKey, encBuf);
-      const decStr = new TextDecoder().decode(decBuf);
-      return JSON.parse(decStr);
-    } catch {
-      return data;
+    const extensionId = chrome.runtime?.id || "pitchai";
+    const seeds = [
+      `pitchai-extension:${extensionId}`,
+      window.location?.origin,
+      `chrome-extension://${extensionId}`,
+      "https://shop.tiktok.com",
+    ].filter((seed, index, all) => seed && all.indexOf(seed) === index);
+    for (let index = 0; index < seeds.length; index += 1) {
+      try {
+        const cryptoKey = await getStorageKey(seeds[index]);
+        if (!cryptoKey) continue;
+        const iv = new Uint8Array(data.__iv.match(/.{1,2}/g).map((b) => parseInt(b, 16)));
+        const encBuf = new Uint8Array(data.__enc.match(/.{1,2}/g).map((b) => parseInt(b, 16)));
+        const decBuf = await crypto.subtle.decrypt({ name: "AES-GCM", iv }, cryptoKey, encBuf);
+        const decoded = JSON.parse(new TextDecoder().decode(decBuf));
+        if (index > 0) {
+          const migrated = await encryptConfigObj(decoded);
+          chrome.storage.local.set({ [STORAGE_KEY]: migrated });
+        }
+        return decoded;
+      } catch {}
     }
+    return {};
   }
 
   // Trava de segurança da extensão e verificação de cota de tokens
   const extSecurity = {
-    isLocked: false,
-    reason: null,
-    message: null,
+    isLocked: true,
+    reason: "verification_pending",
+    message: "Aguardando confirmação da licença.",
     plan: "free",
     remainingChat: 0,
     remainingTts: 0,
@@ -446,14 +457,20 @@
         return false;
       }
     } catch {
-      // Se a conexão falhar temporariamente, só trava se não tiver token
-      if (!syncToken) extSecurity.isLocked = true;
+      // Falha fechada: sem confirmação do servidor, nenhuma automação é liberada.
+      extSecurity.isLocked = true;
+      extSecurity.reason = "verification_unavailable";
+      extSecurity.message =
+        "Não foi possível confirmar sua licença. Verifique a internet e tente novamente.";
       updateLockUI();
-      return !extSecurity.isLocked;
+      return false;
     }
   }
 
   function updateLockUI() {
+    try {
+      scanFx.setLicensed(!extSecurity.isLocked);
+    } catch {}
     let banner = document.getElementById("pitchai-lock-banner");
     if (extSecurity.isLocked) {
       if (!banner) {
@@ -634,6 +651,12 @@
   // última leitura consolidada (API + DOM) — usada no diagnóstico
   let lastScrape = { api: 0, dom: 0, total: 0, at: 0 };
 
+  function productFingerprint(p) {
+    return [p?.pid, p?.name, p?.price, p?.description, p?.image, p?.stock]
+      .map((value) => String(value || "").trim())
+      .join("\u241f");
+  }
+
   function onNetProducts(list) {
     let changed = 0;
     for (const p of list) {
@@ -641,14 +664,17 @@
       const key = p.pid ? `#${p.pid}` : normKey(p.name);
       if (!key || key === "#") continue;
       const prev = net.products.get(key);
-      if (prev && prev.price === p.price && prev.name === p.name) continue;
+      if (prev && productFingerprint(prev) === productFingerprint({ ...prev, ...p })) continue;
       if (prev) {
         net.products.set(key, {
           ...prev,
           ...p,
           name: (p.name || "").length > (prev.name || "").length ? p.name : prev.name,
           price: p.price || prev.price,
-          description: p.description || prev.description,
+          description:
+            (p.description || "").length > (prev.description || "").length
+              ? p.description
+              : prev.description,
         });
       } else {
         net.products.set(key, p);
@@ -665,6 +691,7 @@
   }
 
   async function onNetMessages(list) {
+    if (extSecurity.isLocked) return;
     if (demo.isOn()) return;
     const cfg = await loadConfig();
     if (!cfg.respostasIA) return;
@@ -691,6 +718,7 @@
 
   /** Dispara eventos reais de ponteiro — o React do TikTok ignora .click() puro. */
   function realClick(target) {
+    if (extSecurity.isLocked) return false;
     if (!(target instanceof HTMLElement)) return false;
     try {
       target.scrollIntoView({ block: "center", inline: "center" });
@@ -1122,9 +1150,12 @@
   }
 
   function mergeProduct(prev, item) {
-    if (!prev.price && item.price) prev.price = item.price;
-    if (!prev.description && item.description) prev.description = item.description;
+    if (item.price) prev.price = item.price;
+    if ((item.description || "").length > (prev.description || "").length)
+      prev.description = item.description;
     if (!prev.pid && item.pid) prev.pid = item.pid;
+    if (item.image && !prev.image) prev.image = item.image;
+    if (item.stock != null) prev.stock = item.stock;
     if (item.active) prev.active = true;
     if (item.name && item.name.length > (prev.name || "").length) prev.name = item.name;
     return prev;
@@ -1389,28 +1420,58 @@
     });
   }
 
-  /** Rola a lista para materializar itens virtualizados antes de raspar. */
-  async function materializeList(list) {
-    if (!list) return;
+  /**
+   * Rola a lista e coleta em CADA posição. Listas React virtualizadas removem
+   * os itens anteriores do DOM, portanto coletar apenas no final perdia produtos.
+   */
+  async function materializeList(list, collectAtPosition) {
+    if (!list) return { passes: 0, complete: false };
     let scroller = list;
+    let foundScrollable = false;
     for (let i = 0; i < 4 && scroller; i++) {
       try {
         const st = getComputedStyle(scroller);
-        if (/auto|scroll/.test(st.overflowY) && scroller.scrollHeight > scroller.clientHeight + 40)
+        if (/auto|scroll/.test(st.overflowY) && scroller.scrollHeight > scroller.clientHeight + 40) {
+          foundScrollable = true;
           break;
+        }
       } catch {}
       scroller = scroller.parentElement;
     }
-    if (!scroller) return;
+    if (!scroller || !foundScrollable) {
+      collectAtPosition?.(list);
+      return { passes: 1, complete: true };
+    }
     const start = scroller.scrollTop;
+    let passes = 0;
+    let complete = false;
     try {
-      const step = Math.max(200, scroller.clientHeight - 60);
-      for (let y = 0; y <= scroller.scrollHeight; y += step) {
-        scroller.scrollTop = y;
-        await sleep(160);
+      const step = Math.max(160, Math.floor(scroller.clientHeight * 0.72));
+      let y = 0;
+      let stableBottom = 0;
+      while (passes < 100) {
+        scroller.scrollTop = Math.min(y, Math.max(0, scroller.scrollHeight - scroller.clientHeight));
+        await sleep(90);
+        collectAtPosition?.(list);
+        passes++;
+        const bottom = scroller.scrollTop + scroller.clientHeight;
+        const height = scroller.scrollHeight;
+        if (bottom >= height - 4) {
+          stableBottom++;
+          if (stableBottom >= 2) {
+            complete = true;
+            break;
+          }
+        } else {
+          stableBottom = 0;
+        }
+        y = Math.max(y + step, scroller.scrollTop + step);
       }
       scroller.scrollTop = start;
+      await sleep(40);
+      collectAtPosition?.(list);
     } catch {}
+    return { passes, complete };
   }
 
   /** Lê a vitrine: rede (API do TikTok) + container mapeado + fallback heurístico. */
@@ -1432,11 +1493,25 @@
     const apiCount = results.size;
 
     const cards = new Set();
+    const domKeys = new Set();
+    const collectParsed = (root) => {
+      const snapshot = new Set();
+      collectProductCards(root, snapshot);
+      snapshot.forEach((card) => {
+        let parsed = null;
+        try {
+          parsed = parseProductCard(card);
+        } catch {}
+        if (!parsed || isBadProductName(parsed.name)) return;
+        domKeys.add(productKey(parsed));
+        upsertProduct(results, parsed, resultsIdx);
+      });
+    };
     // setor PRODUTOS: tudo abaixo é raspado só dentro dele
     const sector = await regionNode("products");
     const list = (await mapNode("products")) || sector;
     if (list) {
-      if (deep) await materializeList(list);
+      if (deep) await materializeList(list, collectParsed);
       collectProductCards(list, cards);
     }
 
@@ -1522,7 +1597,7 @@
       });
     }
 
-    let domCount = 0;
+    let domCount = domKeys.size;
     cards.forEach((card) => {
       let parsed = null;
       try {
@@ -1532,7 +1607,9 @@
       }
       if (!parsed) return;
       if (isBadProductName(parsed.name)) return;
-      domCount++;
+      const key = productKey(parsed);
+      if (!domKeys.has(key)) domCount++;
+      domKeys.add(key);
       upsertProduct(results, parsed, resultsIdx);
     });
 
@@ -1740,7 +1817,7 @@
 
   // ---------- Chat state ----------
   const chatState = {
-    seen: new Set(),
+    seen: new Map(),
     queue: [],
     busy: false,
     lastReplyAt: 0,
@@ -1759,6 +1836,7 @@
   const MIN_INTERVAL_MS = 4000;
   const PITCH_IDLE_MS = 8000;
   const NO_MSG_WARN_MS = 60000;
+  const CHAT_DEDUPE_MS = 45000;
 
   function splitPitchLines(script) {
     if (!script) return [];
@@ -1780,6 +1858,7 @@
   }
 
   async function pitchTick() {
+    if (extSecurity.isLocked) return;
     const cfg = await loadConfig();
     if (!cfg.respostasIA) return;
     if (isAudioBusy() || chatState.busy || chatState.queue.length) return;
@@ -1960,9 +2039,15 @@
 
   function enqueueMessage(msg) {
     const key = `${msg.author}|${msg.text}`.toLowerCase();
-    if (chatState.seen.has(key)) return;
-    chatState.seen.add(key);
-    if (chatState.seen.size > 500) chatState.seen = new Set(Array.from(chatState.seen).slice(-300));
+    const now = Date.now();
+    const last = chatState.seen.get(key) || 0;
+    if (now - last < CHAT_DEDUPE_MS) return;
+    chatState.seen.set(key, now);
+    if (chatState.seen.size > 800) {
+      for (const [oldKey, at] of chatState.seen) {
+        if (now - at > CHAT_DEDUPE_MS * 2) chatState.seen.delete(oldKey);
+      }
+    }
 
     chatState.lastMsgAt = Date.now();
     updateHealth();
@@ -2023,10 +2108,10 @@
       if (!m) continue;
       const key = `${m.author}|${m.text}`.toLowerCase();
       if (silent) {
-        chatState.seen.add(key);
+        chatState.seen.set(key, Date.now());
         continue;
       }
-      if (chatState.seen.has(key)) continue;
+      if (Date.now() - (chatState.seen.get(key) || 0) < CHAT_DEDUPE_MS) continue;
       enqueueMessage(m);
       n++;
     }
@@ -2422,15 +2507,75 @@
     },
   };
 
+  // ---------- Feedback visual de leitura da tela ----------
+  const scanFx = {
+    root: null,
+    label: null,
+    depth: 0,
+    mounted: false,
+    mount() {
+      if (this.root?.isConnected || !document.body) return;
+      document.getElementById("pitchai-scan-overlay")?.remove();
+      const root = document.createElement("div");
+      root.id = "pitchai-scan-overlay";
+      root.setAttribute("aria-hidden", "true");
+      const mesh = document.createElement("div");
+      mesh.className = "pitchai-scan-mesh";
+      const label = document.createElement("div");
+      label.className = "pitchai-scan-label";
+      label.textContent = "Pitch AI · monitoramento ativo";
+      root.append(mesh, label);
+      document.body.appendChild(root);
+      this.root = root;
+      this.label = label;
+      this.mounted = true;
+    },
+    setLicensed(licensed) {
+      this.mount();
+      this.root?.classList.toggle("is-active", !!licensed);
+      if (!licensed) {
+        this.depth = 0;
+        this.root?.classList.remove("is-scanning");
+      }
+      if (this.label)
+        this.label.textContent = licensed
+          ? "Pitch AI · monitoramento ativo"
+          : "Pitch AI · aguardando licença";
+    },
+    begin(label = "digitalizando catálogo") {
+      if (extSecurity.isLocked) return;
+      this.mount();
+      this.depth++;
+      this.root?.classList.add("is-active", "is-scanning");
+      if (this.label) this.label.textContent = `Pitch AI · ${label}`;
+    },
+    end(label = "monitoramento ativo") {
+      this.depth = Math.max(0, this.depth - 1);
+      if (this.depth) return;
+      window.setTimeout(() => {
+        if (this.depth) return;
+        this.root?.classList.remove("is-scanning");
+        if (this.label) this.label.textContent = `Pitch AI · ${label}`;
+      }, 420);
+    },
+  };
+
   // ================= Automações do Gerenciador de LIVE =================
   const auto = {
     catalogObserver: null,
+    catalogBoot: null,
     catalogTimer: null,
+    catalogWatchdog: null,
+    catalogSyncPromise: null,
+    catalogQueuedDeep: false,
+    catalogLastDeepAt: 0,
     pinTimer: null,
     pinIdx: 0,
     nextPinAt: 0,
     saleObserver: null,
+    saleBoot: null,
     saleSeen: new Set(),
+    saleTimes: new Map(),
     violationTimer: null,
     violationActive: false,
     liveTimer: null,
@@ -2457,11 +2602,13 @@
   }
 
   /** Lê a vitrine e sincroniza cfg.produtos (sem apagar produtos manuais ativos). */
-  async function syncCatalog({ silent = true, deep = false } = {}) {
-    if (demo.isOn()) return 0;
+  async function runCatalogSync({ silent = true, deep = false } = {}) {
+    if (demo.isOn() || extSecurity.isLocked) return 0;
+    if (deep) auto.catalogLastDeepAt = Date.now();
     const cfg = await loadConfig();
     const cleaned = cleanupProducts(cfg);
     const items = await scrapeCatalog({ deep });
+    if (extSecurity.isLocked) return 0;
     if (!items.length) {
       if (cleaned) saveConfig(cfg);
       return 0;
@@ -2479,13 +2626,16 @@
     }
 
     let added = 0;
+    let updated = 0;
     for (const s of items) {
       const key = productKey(s);
       if (!key || isBadProductName(s.name)) continue;
       const match = findProductEntry(index, s, nameIndex);
       const found = match ? index.get(match) : null;
       if (found) {
+        const before = productFingerprint(found);
         mergeProduct(found, s);
+        if (productFingerprint(found) !== before) updated++;
         if (found.pid) index.set(`#${found.pid}`, found);
         const nk = normKey(found.name || "");
         if (nk) {
@@ -2527,27 +2677,50 @@
       cleanupProducts(f);
     });
     cfg.produtos = savedCfg.produtos;
-    if (added || cleaned) pushConfigToBackend(savedCfg);
+    if (added || updated || cleaned) pushConfigToBackend(savedCfg);
 
-    if ((added || cleaned) && !silent) {
+    if ((added || updated || cleaned) && !silent) {
       activity.log({
         type: "catalog",
-        text: `Produtos: ${cfg.produtos.length} na live (+${added} novo(s))`,
+        text: `Produtos: ${cfg.produtos.length} na live (+${added} novo(s), ${updated} atualizado(s))`,
         ts: Date.now(),
       });
     }
     return added;
   }
 
+  /** Uma única raspagem por vez; eventos simultâneos ficam consolidados. */
+  async function syncCatalog(options = {}) {
+    if (demo.isOn() || extSecurity.isLocked) return 0;
+    if (auto.catalogSyncPromise) {
+      auto.catalogQueuedDeep ||= !!options.deep;
+      return auto.catalogSyncPromise;
+    }
+    if (options.deep) scanFx.begin("digitalizando catálogo completo");
+    auto.catalogSyncPromise = runCatalogSync(options);
+    try {
+      return await auto.catalogSyncPromise;
+    } finally {
+      auto.catalogSyncPromise = null;
+      if (options.deep) scanFx.end("monitoramento ativo");
+      if (auto.catalogQueuedDeep && !extSecurity.isLocked) {
+        auto.catalogQueuedDeep = false;
+        setTimeout(() => syncCatalog({ silent: true, deep: true }).catch(() => {}), 150);
+      }
+    }
+  }
+
   function startCatalogWatcher() {
     if (auto.catalogTimer || demo.isOn()) return;
     // primeira leitura automática: tenta a lista, mas também varre a página inteira
     let tries = 0;
-    const boot = setInterval(async () => {
+    const boot = (auto.catalogBoot = setInterval(async () => {
       const list = await findProductList();
-      const added = await syncCatalog({ silent: false, deep: true }).catch(() => 0);
+      const deep = Date.now() - auto.catalogLastDeepAt > 120000;
+      const added = await syncCatalog({ silent: false, deep }).catch(() => 0);
       if (list || added > 0 || net.products.size) {
         clearInterval(boot);
+        auto.catalogBoot = null;
         try {
           const target = list?.node || document.body;
           auto.catalogObserver = new MutationObserver(() => {
@@ -2558,16 +2731,18 @@
         } catch {}
       } else if (++tries > 120) {
         clearInterval(boot);
+        auto.catalogBoot = null;
       }
-    }, 1500);
+    }, 1500));
     // loop contínuo: nunca para enquanto a página estiver aberta
-    let n = 0;
     auto.catalogLastRun = Date.now();
     const tick = async () => {
       auto.catalogLastRun = Date.now();
-      n++;
       try {
-        await syncCatalog({ deep: n % 15 === 0 });
+        // A varredura profunda movimenta a lista virtualizada; faça-a no máximo
+        // a cada 2 minutos. Nos demais ciclos, rede + DOM visível são suficientes.
+        const deep = Date.now() - auto.catalogLastDeepAt > 120000;
+        await syncCatalog({ deep });
       } catch {}
     };
     auto.catalogTimer = setInterval(tick, 2000);
@@ -2712,6 +2887,7 @@
   }
 
   async function autoPinTick() {
+    if (extSecurity.isLocked) return;
     const cfg = await loadConfig();
     const af = cfg.autoFixar || {};
     if (!af.enabled) return;
@@ -2804,17 +2980,23 @@
 
   const SALE_DEDUPE_MS = 20000;
   async function handleSale(node) {
+    if (extSecurity.isLocked) return;
     const key = saleKey(node);
     if (!looksLikeSale(key)) return;
     auto.saleEvidenceAt = Date.now();
     const now = Date.now();
-    const last = auto.saleTimes?.get(key) || 0;
-    if (!auto.saleTimes) auto.saleTimes = new Map();
-    if (auto.saleSeen.has(key) && now - last < SALE_DEDUPE_MS) return;
-    if (auto.saleSeen.has(key) && last) return;
+    const last = auto.saleTimes.get(key) || 0;
+    if (last && now - last < SALE_DEDUPE_MS) return;
     auto.saleSeen.add(key);
     auto.saleTimes.set(key, now);
-    if (auto.saleSeen.size > 300) auto.saleSeen = new Set(Array.from(auto.saleSeen).slice(-150));
+    if (auto.saleTimes.size > 300) {
+      for (const [oldKey, at] of auto.saleTimes) {
+        if (now - at > SALE_DEDUPE_MS * 3) {
+          auto.saleTimes.delete(oldKey);
+          auto.saleSeen.delete(oldKey);
+        }
+      }
+    }
 
     activity.log({ type: "sale", text: `🛒 Venda: ${key.slice(0, 80)}`, ts: Date.now() });
     sessionEvent({ kind: "sale", sale: { text: key.slice(0, 120) } });
@@ -2833,12 +3015,18 @@
   function startSaleWatcher() {
     if (auto.saleObserver || demo.isOn()) return;
     let tries = 0;
-    const boot = setInterval(async () => {
+    const boot = (auto.saleBoot = setInterval(async () => {
       const node = await mapNode("sales");
       const found = node ? { node } : null;
       if (found) {
         clearInterval(boot);
-        Array.from(found.node.children).forEach((c) => auto.saleSeen.add(saleKey(c)));
+        auto.saleBoot = null;
+        const initializedAt = Date.now();
+        Array.from(found.node.children).forEach((c) => {
+          const key = saleKey(c);
+          auto.saleSeen.add(key);
+          auto.saleTimes.set(key, initializedAt);
+        });
         const startedAt = Date.now();
         auto.saleEvidenceAt = Array.from(found.node.children).some((c) => looksLikeSale(saleKey(c)))
           ? Date.now()
@@ -2871,8 +3059,11 @@
             chrome.storage.local.set({ "pitchai.sales.state": "undetected" });
           } catch {}
         }, 10000);
-      } else if (++tries > 40) clearInterval(boot);
-    }, 1500);
+      } else if (++tries > 40) {
+        clearInterval(boot);
+        auto.saleBoot = null;
+      }
+    }, 1500));
   }
 
   // ---------- Monitor de violação ----------
@@ -2922,6 +3113,7 @@
 
   // ---------- Encerrar LIVE pelo timer ----------
   async function clickEndLive() {
+    if (extSecurity.isLocked) return false;
     const node = await mapNode("endLive");
     if (!node) return false;
     try {
@@ -2948,6 +3140,7 @@
   }
 
   async function finishLive(reason) {
+    if (extSecurity.isLocked) return;
     if (auto.ended) return;
     auto.ended = true;
     const cfg = await loadConfig();
@@ -3015,7 +3208,43 @@
     }, 1000);
   }
 
+  let automationsStarted = false;
+  function stopAutomations() {
+    automationsStarted = false;
+    stopPitchLoop();
+    stopChatListener();
+    try {
+      auto.catalogObserver?.disconnect();
+      auto.saleObserver?.disconnect();
+      DM()?.stopWatchdog?.();
+    } catch {}
+    auto.catalogObserver = null;
+    auto.saleObserver = null;
+    [
+      "catalogBoot",
+      "catalogTimer",
+      "catalogWatchdog",
+      "pinTimer",
+      "saleBoot",
+      "saleCheck",
+      "violationTimer",
+      "liveTimer",
+      "mapStatusTimer",
+    ].forEach((key) => {
+      try {
+        clearInterval(auto[key]);
+      } catch {}
+      auto[key] = null;
+    });
+    clearTimeout(auto._catDebounce);
+    clearTimeout(net._catDebounce);
+    auto.catalogQueuedDeep = false;
+    scanFx.setLicensed(false);
+  }
+
   function startAutomations() {
+    if (automationsStarted) return;
+    automationsStarted = true;
     // 1º os SETORES, depois os alvos dentro deles
     try {
       RG()
@@ -3067,259 +3296,88 @@
     });
   }
 
-  // ---------- Activity Panel (fila de chat + PiP) ----------
+  // Atividade permanece somente em memoria para diagnostico. A antiga fila
+  // flutuante e o Picture-in-Picture foram removidos para nao cobrir a live.
+  // Quando a revisao estiver ligada, aparece apenas uma aprovacao compacta.
   const activity = (() => {
-    const state = {
-      items: [],
-      nowSpeaking: null,
-      root: null,
-      listEl: null,
-      nowEl: null,
-      pipWin: null,
-      pipRoot: null,
-      filter: "all",
-    };
-    const MAX = 12;
-    const TYPE_LABEL = {
-      catalog: "vitrine",
-      pin: "produto",
-      sale: "venda",
-      violation: "violação",
-      pitch: "pitch",
-      demo: "demonstração",
-    };
-    function statusColor(s) {
-      return (
-        {
-          pending: "#71717a",
-          processing: "#7C3AED",
-          answered: "#00E676",
-          ignored: "#52525b",
-          blocked: "#FF3B3B",
-          pending_review: "#FF6B35",
-          failed: "#FF6B35",
-          info: "#3f3f46",
-        }[s] || "#71717a"
-      );
-    }
-    function statusLabel(s, reason) {
-      const base =
-        {
-          pending: "aguardando",
-          processing: "processando…",
-          answered: "respondido",
-          ignored: "ignorado",
-          blocked: "bloqueado",
-          pending_review: "revisar",
-          failed: "falhou",
-          info: "atividade",
-        }[s] || s;
-      return reason ? `${base} · ${reason}` : base;
-    }
-    function isMessage(it) {
-      return it.status !== "info";
-    }
-    function render() {
-      if (!state.listEl) return;
-      state.listEl.innerHTML = "";
-      const source = state.filter === "msg" ? state.items.filter(isMessage) : state.items;
-      const items = source.slice(-MAX).reverse();
-      if (!items.length) {
-        const p = document.createElement("p");
-        p.className = "pitchai-empty";
-        p.textContent = "Aguardando mensagens…";
-        state.listEl.appendChild(p);
-      } else {
-        items.forEach((it) => {
-          const row = document.createElement("div");
-          row.className = "pitchai-msg";
-          row.dataset.status = it.status;
-          const meta = document.createElement("div");
-          meta.className = "pitchai-msg-meta";
-          const badge = document.createElement("span");
-          badge.className = "pitchai-badge";
-          badge.style.background = statusColor(it.status);
-          badge.textContent = statusLabel(it.status, it.reason);
-          meta.appendChild(badge);
-          const typeLabel =
-            it.status === "info" ? TYPE_LABEL[it.type] : it.type === "pitch" ? "pitch" : null;
-          if (typeLabel) {
-            const b2 = document.createElement("span");
-            b2.className = "pitchai-badge";
-            b2.style.background = "#27272a";
-            b2.textContent = typeLabel;
-            meta.appendChild(b2);
-          }
+    const state = { items: [], nowSpeaking: null, reviewQueue: [], reviewToast: null };
+    const MAX_LOG = 40;
 
-          if (it.author) {
-            const a = document.createElement("span");
-            a.className = "pitchai-author";
-            a.textContent = it.author;
-            meta.appendChild(a);
-          }
-          const t = document.createElement("div");
-          t.className = "pitchai-text";
-          t.textContent = it.text;
-          row.append(meta, t);
-          if (it.reply) {
-            const rp = document.createElement("div");
-            rp.className = "pitchai-reply";
-            rp.textContent = "IA: " + it.reply;
-            row.appendChild(rp);
-          }
-          if (it.status === "pending_review" && it.reply) {
-            const actions = document.createElement("div");
-            actions.className = "pitchai-actions";
-            const ok = document.createElement("button");
-            ok.className = "pitchai-btn primary";
-            ok.textContent = "▶ Falar";
-            ok.onclick = async () => {
-              const cfg = await loadConfig();
-              markStatus(it.id, "answered", null, it.reply);
-              await speakText(it.reply, cfg);
-            };
-            const no = document.createElement("button");
-            no.className = "pitchai-btn";
-            no.textContent = "✕ Pular";
-            no.onclick = () => markStatus(it.id, "ignored", "descartado");
-            actions.append(ok, no);
-            row.appendChild(actions);
-          }
-          state.listEl.appendChild(row);
-        });
-      }
-      if (state.nowEl) {
-        state.nowEl.textContent = state.nowSpeaking
-          ? `🔊 ${state.nowSpeaking.ctx}: ${state.nowSpeaking.text}`
-          : "🔇 silêncio";
-      }
-      // mirror to PiP
-      if (state.pipRoot) state.pipRoot.innerHTML = state.root.innerHTML;
+    function trim() {
+      if (state.items.length > MAX_LOG) state.items.splice(0, state.items.length - MAX_LOG);
     }
     function add(entry) {
       state.items.push(entry);
-      render();
+      trim();
     }
-    // Eventos internos (vitrine, produto fixado, venda, violação) NÃO são
-    // respostas de chat — entram como "atividade", nunca com o selo RESPONDIDO.
     function log(entry) {
-      state.items.push({ id: "p" + Date.now(), status: "info", ...entry });
-      render();
+      add({ id: "p" + Date.now(), status: "info", ...entry });
     }
-    function setFilter(f) {
-      state.filter = f === "msg" ? "msg" : "all";
-      if (state.filterBtn)
-        state.filterBtn.textContent = state.filter === "msg" ? "Só mensagens" : "Tudo";
-      render();
-    }
-    function toggleFilter() {
-      setFilter(state.filter === "msg" ? "all" : "msg");
-    }
-
     function markStatus(id, status, reason, reply) {
       const it = state.items.find((x) => x.id === id);
       if (!it) return;
       it.status = status;
       if (reason !== undefined) it.reason = reason;
       if (reply !== undefined) it.reply = reply;
-      render();
+    }
+    function closeReviewToast(showNext = true) {
+      state.reviewToast?.remove();
+      state.reviewToast = null;
+      if (showNext) queueMicrotask(showNextReview);
+    }
+    function showNextReview() {
+      if (state.reviewToast || !state.reviewQueue.length) return;
+      const { item, cfg } = state.reviewQueue.shift();
+      if (!item || item.status !== "pending_review") return showNextReview();
+
+      const root = document.createElement("section");
+      root.className = "pitchai-review-toast";
+      const label = document.createElement("span");
+      label.className = "pitchai-review-label";
+      label.textContent = "RESPOSTA PRONTA";
+      const question = document.createElement("p");
+      question.className = "pitchai-review-question";
+      question.textContent = item.author ? `${item.author}: ${item.text}` : item.text;
+      const answer = document.createElement("p");
+      answer.className = "pitchai-review-answer";
+      answer.textContent = item.reply;
+      const actions = document.createElement("div");
+      actions.className = "pitchai-review-actions";
+      const skip = document.createElement("button");
+      skip.className = "pitchai-btn";
+      skip.textContent = "Pular";
+      skip.onclick = () => {
+        markStatus(item.id, "ignored", "descartado");
+        closeReviewToast();
+      };
+      const speak = document.createElement("button");
+      speak.className = "pitchai-btn primary";
+      speak.textContent = "▶ Falar agora";
+      speak.onclick = async () => {
+        markStatus(item.id, "answered", null, item.reply);
+        closeReviewToast(false);
+        await speakText(item.reply, cfg);
+        showNextReview();
+      };
+      actions.append(skip, speak);
+      root.append(label, question, answer, actions);
+      document.body.appendChild(root);
+      state.reviewToast = root;
     }
     function addPending(item, reply, cfg) {
       const it = state.items.find((x) => x.id === item.id);
-      if (it) {
-        it.status = "pending_review";
-        it.reply = reply;
-        render();
-      }
+      if (!it) return;
+      it.status = "pending_review";
+      it.reply = reply;
+      state.reviewQueue.push({ item: it, cfg });
+      showNextReview();
     }
-    function setNowSpeaking(v) {
-      state.nowSpeaking = v;
-      render();
+    function setNowSpeaking(value) {
+      state.nowSpeaking = value;
     }
+    function setFilter() {}
 
-    function mount() {
-      const root = document.createElement("div");
-      root.className = "pitchai-activity";
-      root.id = "pitchai-activity";
-      const hd = document.createElement("div");
-      hd.className = "pitchai-activity-hd";
-      const title = document.createElement("span");
-      title.innerHTML = "<b>Fila de chat</b> · IA ao vivo";
-      const filterBtn = document.createElement("button");
-      filterBtn.className = "pitchai-btn";
-      filterBtn.dataset.pitchaiFilter = "1";
-      filterBtn.title = "Alternar entre tudo e só mensagens do chat";
-      filterBtn.textContent = "Tudo";
-      filterBtn.onclick = () => toggleFilter();
-      state.filterBtn = filterBtn;
-      const pip = document.createElement("button");
-      pip.className = "pitchai-btn";
-      pip.textContent = "PiP";
-      pip.title = "Abrir em janela flutuante (Picture-in-Picture)";
-      pip.onclick = openPiP;
-      const closeBtn = document.createElement("button");
-      closeBtn.className = "pitchai-btn";
-      closeBtn.textContent = "–";
-      closeBtn.onclick = () => root.classList.toggle("minimized");
-      hd.append(title, filterBtn, pip, closeBtn);
-
-      const now = document.createElement("div");
-      now.className = "pitchai-now";
-      const list = document.createElement("div");
-      list.className = "pitchai-msg-list";
-      root.append(hd, now, list);
-      document.body.appendChild(root);
-      state.root = root;
-      state.listEl = list;
-      state.nowEl = now;
-      render();
-    }
-
-    async function openPiP() {
-      try {
-        if (!("documentPictureInPicture" in window)) {
-          alert("Este navegador não suporta Document Picture-in-Picture. Use Chrome 116+");
-          return;
-        }
-        const pip = await window.documentPictureInPicture.requestWindow({
-          width: 380,
-          height: 520,
-        });
-        state.pipWin = pip;
-        // copia estilos
-        [...document.styleSheets].forEach((ss) => {
-          try {
-            const link = pip.document.createElement("style");
-            link.textContent = [...ss.cssRules].map((r) => r.cssText).join("\n");
-            pip.document.head.appendChild(link);
-          } catch {}
-        });
-        pip.document.body.style.margin = "0";
-        pip.document.body.style.background = "#0F0F1A";
-        pip.document.body.style.color = "#f9fafb";
-        const clone = state.root.cloneNode(true);
-        clone.style.position = "static";
-        clone.style.width = "100%";
-        clone.style.height = "100vh";
-        clone.style.borderRadius = "0";
-        pip.document.body.appendChild(clone);
-        state.pipRoot = clone;
-        // o mirror é feito via innerHTML (perde listeners) → delegação de clique
-        clone.addEventListener("click", (ev) => {
-          const btn = ev.target && ev.target.closest && ev.target.closest("[data-pitchai-filter]");
-          if (btn) toggleFilter();
-        });
-
-        pip.addEventListener("pagehide", () => {
-          state.pipWin = null;
-          state.pipRoot = null;
-        });
-      } catch (e) {
-        alert("Não foi possível abrir PiP: " + (e?.message || e));
-      }
-    }
-
-    return { mount, add, log, markStatus, addPending, setNowSpeaking, setFilter };
+    return { add, log, markStatus, addPending, setNowSpeaking, setFilter };
   })();
 
   const DEMO_ACK_KEY = "pitchai.demo.ack";
@@ -3626,9 +3684,18 @@
     }
 
     const cfg = await loadConfig();
-    activity.mount();
+    scanFx.mount();
+    const unlocked = await checkExtensionLock(cfg.syncToken);
     bindPushToTalk();
-    startAutomations();
+    if (unlocked) startAutomations();
+    // Revalida periodicamente para bloquear vencimentos e recuperar após
+    // indisponibilidade temporária sem exigir que o usuário recarregue a página.
+    window.setInterval(async () => {
+      const current = await loadConfig();
+      const licensed = await checkExtensionLock(current.syncToken);
+      if (licensed) startAutomations();
+      else stopAutomations();
+    }, 60_000);
 
     const header = el("div", { class: "pitchai-header", id: "pitchai-header" });
     const logo = el("span", { class: "pitchai-logo" }, "Pitch AI ", el("b", {}, "LIVE"));
@@ -3644,6 +3711,7 @@
     });
     master.addEventListener("click", async () => {
       const c = await loadConfig();
+      if (!(await checkExtensionLock(c.syncToken))) return;
       c.protecaoGeral = !c.protecaoGeral;
       saveConfig(c);
       master.classList.toggle("on", c.protecaoGeral);
@@ -3655,6 +3723,12 @@
       "🔄 Produtos",
     );
     scrapeBtn.addEventListener("click", async () => {
+      const current = await loadConfig();
+      if (!(await checkExtensionLock(current.syncToken))) {
+        scrapeBtn.textContent = "Licença necessária";
+        setTimeout(() => (scrapeBtn.textContent = "🔄 Produtos"), 2500);
+        return;
+      }
       scrapeBtn.textContent = "Lendo…";
       try {
         await DM()?.invalidate?.("products");
@@ -3694,8 +3768,9 @@
       if (cmd) runDemoCommand(cmd);
     });
 
-    const chatStatus = el("span", { class: "pitchai-status", id: "pitchai-chat-status" }, "0 msgs");
-    chatState.statusEl = chatStatus;
+    // O contador e a antiga fila flutuante foram removidos da navegacao.
+    // O processamento continua em segundo plano e o estado fica resumido em `health`.
+    chatState.statusEl = null;
 
     const listenBtn = el(
       "button",
@@ -3783,15 +3858,23 @@
       tray.classList.toggle("open", on);
     });
 
-    const openBtn = el("button", { class: "pitchai-btn primary", id: "pitchai-open" }, "Painel ▾");
+    const openBtn = el(
+      "button",
+      {
+        class: "pitchai-btn primary pitchai-panel-trigger",
+        id: "pitchai-open",
+        title: "Abrir os controles completos da extensão",
+      },
+      "Painel ▾",
+    );
     const tabBtn = el(
       "button",
       {
-        class: "pitchai-btn",
+        class: "pitchai-btn pitchai-open-tab",
         id: "pitchai-open-tab",
         title: "Abrir o painel em uma aba separada",
       },
-      "↗",
+      "Nova aba ↗",
     );
     tabBtn.addEventListener("click", () => {
       if (typeof chrome !== "undefined" && chrome?.runtime?.getURL) {
@@ -3801,20 +3884,26 @@
       }
     });
 
-    header.append(
-      logo,
-      ver,
-      health,
+    const brandGroup = el("div", { class: "pitchai-header-brand" }, logo, ver, health);
+    const protectionLabel = el(
+      "div",
+      { class: "pitchai-protection", title: "Ativar ou pausar a proteção geral" },
+      el("span", { class: "pitchai-control-label" }, "Proteção"),
       master,
+    );
+    const controlsGroup = el(
+      "div",
+      { class: "pitchai-header-controls" },
+      protectionLabel,
+      listenBtn,
       scrapeBtn,
       pickBtn,
-      listenBtn,
       reviewBtn,
-      chatStatus,
       demoBtn,
-      openBtn,
-      tabBtn,
     );
+    const actionsGroup = el("div", { class: "pitchai-header-actions" }, openBtn, tabBtn);
+
+    header.append(brandGroup, controlsGroup, actionsGroup);
     document.body.appendChild(header);
 
     if (cfg.respostasIA) {
@@ -3846,9 +3935,10 @@
     }, 4000);
 
     // Comandos vindos do painel (iframe/aba) via chrome.storage
-    chrome.storage.onChanged.addListener((changes) => {
-      const c = changes[STORAGE_KEY]?.newValue;
-      if (c) {
+    chrome.storage.onChanged.addListener(async (changes) => {
+      const storedConfig = changes[STORAGE_KEY]?.newValue;
+      if (storedConfig) {
+        const c = normalizeConfig(await decryptConfigObj(storedConfig));
         document.getElementById("pitchai-master")?.classList.toggle("on", !!c.protecaoGeral);
         const wants = !!c.demo?.enabled;
         if (wants !== demo.isOn()) {

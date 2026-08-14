@@ -1,11 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import {
-  onAuthStateChanged,
-  signInWithEmailAndPassword,
-  signOut as firebaseSignOut,
-} from "firebase/auth";
+import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { onAuthStateChanged, signOut as firebaseSignOut } from "firebase/auth";
 import { getFirebaseAuth } from "@/lib/firebase";
 import { requireAuthBeforeLoad } from "@/lib/auth-guard";
 import {
@@ -13,6 +9,7 @@ import {
   deleteAllRankedProducts,
   deleteRankedProduct,
   fetchCommissions,
+  fetchCommissionsPage,
   fetchCosts,
   fetchPlans,
   fetchRanking,
@@ -20,11 +17,9 @@ import {
   parseRankingCSV,
   setCommissionStatus,
   updateCosts,
-  updatePlan,
   updateRankedProduct,
   type AdminCommission,
   type Costs,
-  type Plan,
   type RankedProduct,
 } from "@/lib/live/admin";
 import { UsuariosTab } from "@/components/live/AdminUsuariosTab";
@@ -38,7 +33,8 @@ export const Route = createFileRoute("/admin")({
   component: AdminPage,
 });
 
-type Tab = "overview" | "ranking" | "indicacoes" | "usuarios" | "usage_firestore" | "planos" | "custos";
+type Tab =
+  "overview" | "ranking" | "indicacoes" | "usuarios" | "usage_firestore" | "planos" | "custos";
 
 function AdminPage() {
   const [status, setStatus] = useState<"loading" | "signed-out" | "not-admin" | "ok">("loading");
@@ -69,83 +65,38 @@ function AdminPage() {
 
   if (status === "loading") {
     return (
-      <div className="min-h-dvh grid place-items-center bg-[#0F0F1A] text-white/60">
+      <div className="marketing-page min-h-dvh grid place-items-center text-white/60">
         Carregando…
       </div>
     );
   }
-  if (status === "signed-out") return <LoginGate />;
+  if (status === "signed-out") return <SessionExpired />;
   if (status === "not-admin") return <NotAdmin email={email} onLogout={logout} />;
   return <Dashboard email={email} onLogout={logout} />;
 }
 
-/* ---------- Gate ---------- */
-function LoginGate() {
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [err, setErr] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
-
-  async function onSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    setBusy(true);
-    setErr(null);
-    try {
-      await signInWithEmailAndPassword(getFirebaseAuth(), email, password);
-    } catch (err: any) {
-      setErr(err?.message ?? "Falha no login");
-    } finally {
-      setBusy(false);
-    }
-  }
-
+function SessionExpired() {
   return (
-    <div className="min-h-dvh grid place-items-center bg-[#0F0F1A] px-4">
-      <form
-        onSubmit={onSubmit}
-        className="w-full max-w-sm rounded-2xl border border-white/10 bg-white/5 p-6 space-y-4 backdrop-blur"
-      >
-        <div>
-          <h1 className="text-xl font-bold text-white">Admin · Pitch AI</h1>
-          <p className="text-sm text-white/60 mt-1">Faça login com uma conta admin.</p>
-        </div>
-        <input
-          type="email"
-          autoFocus
-          required
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
-          placeholder="email"
-          className="w-full rounded-lg bg-black/40 border border-white/10 px-3 py-2 text-white outline-none focus:border-[#7C3AED]"
-        />
-        <input
-          type="password"
-          required
-          value={password}
-          onChange={(e) => setPassword(e.target.value)}
-          placeholder="senha"
-          className="w-full rounded-lg bg-black/40 border border-white/10 px-3 py-2 text-white outline-none focus:border-[#7C3AED]"
-        />
-        {err && <p className="text-sm text-red-400">{err}</p>}
-        <button
-          type="submit"
-          disabled={busy}
-          className="w-full rounded-lg bg-[#7C3AED] hover:bg-[#6D28D9] disabled:opacity-50 text-white font-semibold py-2 transition"
-        >
-          {busy ? "Entrando…" : "Entrar"}
-        </button>
-        <p className="text-xs text-white/40">
-          O acesso admin é concedido pela allowlist de e-mails ou por um documento em{" "}
-          <code>admins/&#123;uid&#125;</code>.
+    <div className="marketing-page min-h-dvh grid place-items-center px-4">
+      <div className="marketing-panel w-full max-w-sm rounded-2xl p-6 text-center space-y-4 backdrop-blur">
+        <h1 className="marketing-title text-2xl">Sessão encerrada</h1>
+        <p className="text-sm text-white/60">
+          Entre novamente para acessar o painel administrativo.
         </p>
-      </form>
+        <a
+          href="/entrar?next=/admin"
+          className="block rounded-lg bg-[#7C3AED] px-4 py-2 font-semibold text-white"
+        >
+          Entrar novamente
+        </a>
+      </div>
     </div>
   );
 }
 
 function NotAdmin({ email, onLogout }: { email: string; onLogout: () => void }) {
   return (
-    <div className="min-h-dvh grid place-items-center bg-[#0F0F1A] px-4 text-white">
+    <div className="marketing-page min-h-dvh grid place-items-center px-4">
       <div className="max-w-sm text-center space-y-4">
         <h1 className="text-xl font-bold">Sem permissão</h1>
         <p className="text-white/60 text-sm">
@@ -166,7 +117,7 @@ function NotAdmin({ email, onLogout }: { email: string; onLogout: () => void }) 
 function Dashboard({ email, onLogout }: { email: string; onLogout: () => void }) {
   const [tab, setTab] = useState<Tab>("overview");
   return (
-    <div className="min-h-dvh bg-[#0F0F1A] text-white">
+    <div className="marketing-page min-h-dvh">
       <header className="border-b border-white/10 bg-black/40 backdrop-blur sticky top-0 z-10">
         <div className="max-w-6xl mx-auto flex items-center justify-between px-4 py-3">
           <span className="text-lg font-bold">
@@ -181,7 +132,15 @@ function Dashboard({ email, onLogout }: { email: string; onLogout: () => void })
         </div>
         <nav className="max-w-6xl mx-auto px-4 flex gap-1 overflow-x-auto">
           {(
-            ["overview", "ranking", "indicacoes", "usuarios", "usage_firestore", "planos", "custos"] as Tab[]
+            [
+              "overview",
+              "ranking",
+              "indicacoes",
+              "usuarios",
+              "usage_firestore",
+              "planos",
+              "custos",
+            ] as Tab[]
           ).map((t) => (
             <button
               key={t}
@@ -204,7 +163,7 @@ function Dashboard({ email, onLogout }: { email: string; onLogout: () => void })
         </nav>
       </header>
       <main className="max-w-6xl mx-auto px-4 py-6">
-        {tab === "overview" && <OverviewTab />}
+        {tab === "overview" && <OverviewTab onNavigate={setTab} />}
         {tab === "ranking" && <RankingTab />}
         {tab === "indicacoes" && <IndicacoesTab />}
         {tab === "usuarios" && <UsuariosTab />}
@@ -217,52 +176,163 @@ function Dashboard({ email, onLogout }: { email: string; onLogout: () => void })
 }
 
 /* ---------- Visão geral ---------- */
-function OverviewTab() {
+function OverviewTab({ onNavigate }: { onNavigate: (tab: Tab) => void }) {
   const plans = useQuery({ queryKey: ["admin", "plans"], queryFn: fetchPlans });
   const costs = useQuery({ queryKey: ["admin", "costs"], queryFn: fetchCosts });
   const commissions = useQuery({ queryKey: ["admin", "commissions"], queryFn: fetchCommissions });
   const ranking = useQuery({ queryKey: ["admin", "ranking"], queryFn: fetchRanking });
-  const loading = plans.isLoading || costs.isLoading || commissions.isLoading || ranking.isLoading;
+  const loading = plans.isLoading && costs.isLoading && commissions.isLoading && ranking.isLoading;
+  const failedSources = [
+    plans.error ? "planos e assinaturas" : null,
+    costs.error ? "custos" : null,
+    commissions.error ? "comissões" : null,
+    ranking.error ? "ranking" : null,
+  ].filter((source): source is string => Boolean(source));
   const planRows = plans.data ?? [];
-  const activePlans = planRows.filter((plan) => plan.active !== false);
-  const monthlyRevenue = activePlans.reduce((sum, plan) => sum + (Number(plan.price_cents ?? 0) / 100), 0);
+  const activePlans = planRows.filter((plan) => plan.assinantes > 0);
+  const monthlyRevenue = planRows.reduce(
+    (sum, plan) => sum + Number(plan.preco_mensal) * plan.assinantes,
+    0,
+  );
   const pendingCommissions = (commissions.data ?? []).filter((item) => item.status === "pendente");
-  const commissionTotal = pendingCommissions.reduce((sum, item) => sum + item.amount_cents, 0) / 100;
-  const costTotal = (costs.data ?? []).reduce((sum, item) => sum + Number(item.amount_cents ?? 0), 0) / 100;
+  const commissionTotal =
+    pendingCommissions.reduce((sum, item) => sum + item.amount_cents, 0) / 100;
+  const costData = costs.data;
+  const costTotal = costData
+    ? ((costData.tokens_in_mes / 1000) * costData.chat_per_1k_in +
+        (costData.tokens_out_mes / 1000) * costData.chat_per_1k_out +
+        costData.minutos_tts_mes * costData.tts_per_min) *
+      costData.usd_brl
+    : 0;
+  const retryAll = () => {
+    void Promise.all([plans.refetch(), costs.refetch(), commissions.refetch(), ranking.refetch()]);
+  };
 
   return (
     <div className="space-y-6">
       <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#A78BFA]">Centro de comando</p>
+          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#A78BFA]">
+            Centro de comando
+          </p>
           <h1 className="mt-1 text-2xl font-semibold tracking-tight">Visão geral do negócio</h1>
-          <p className="mt-1 text-sm text-white/50">Indicadores operacionais para decidir o próximo movimento.</p>
+          <p className="mt-1 text-sm text-white/50">
+            Indicadores operacionais para decidir o próximo movimento.
+          </p>
         </div>
         <p className="text-xs text-white/40">Atualizado sob demanda</p>
       </div>
+      {failedSources.length > 0 && (
+        <div
+          role="alert"
+          className="flex flex-col gap-3 rounded-2xl border border-amber-400/25 bg-amber-500/10 px-4 py-3 text-sm text-amber-100 sm:flex-row sm:items-center sm:justify-between"
+        >
+          <span>
+            Não foi possível atualizar: {failedSources.join(", ")}. Os demais indicadores continuam
+            disponíveis.
+          </span>
+          <button
+            type="button"
+            onClick={retryAll}
+            className="shrink-0 rounded-lg border border-amber-300/25 bg-amber-200/10 px-3 py-1.5 text-xs font-semibold transition hover:bg-amber-200/20"
+          >
+            Tentar novamente
+          </button>
+        </div>
+      )}
       {loading ? (
-        <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-8 text-center text-sm text-white/50">Carregando indicadores reais…</div>
+        <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-8 text-center text-sm text-white/50">
+          Carregando indicadores reais…
+        </div>
       ) : (
         <>
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-            <ExecutiveStat label="Receita configurada" value={brl(monthlyRevenue)} detail={`${activePlans.length} planos ativos`} tone="violet" />
-            <ExecutiveStat label="Custo registrado" value={brl(costTotal)} detail="Custos cadastrados no painel" tone="orange" />
-            <ExecutiveStat label="Comissões pendentes" value={brl(commissionTotal)} detail={`${pendingCommissions.length} pagamentos aguardando`} tone="rose" />
-            <ExecutiveStat label="Produtos ranqueados" value={String((ranking.data ?? []).length)} detail="Catálogo operacional" tone="green" />
+            <ExecutiveStat
+              label="Receita configurada"
+              value={plans.error ? "Indisponível" : brl(monthlyRevenue)}
+              detail={
+                plans.error
+                  ? "Falha ao consultar assinaturas"
+                  : `${activePlans.length} planos ativos`
+              }
+              tone="violet"
+            />
+            <ExecutiveStat
+              label="Custo registrado"
+              value={costs.error ? "Indisponível" : brl(costTotal)}
+              detail={costs.error ? "Falha ao consultar custos" : "Custos cadastrados no painel"}
+              tone="orange"
+            />
+            <ExecutiveStat
+              label="Comissões pendentes"
+              value={commissions.error ? "Indisponível" : brl(commissionTotal)}
+              detail={
+                commissions.error
+                  ? "Falha ao consultar comissões"
+                  : `${pendingCommissions.length} pagamentos aguardando`
+              }
+              tone="rose"
+            />
+            <ExecutiveStat
+              label="Produtos ranqueados"
+              value={ranking.error ? "Indisponível" : String((ranking.data ?? []).length)}
+              detail={ranking.error ? "Falha ao consultar ranking" : "Catálogo operacional"}
+              tone="green"
+            />
           </div>
           <div className="grid gap-4 lg:grid-cols-[1.4fr_1fr]">
             <Card title="Leitura rápida" hint="Sinais para acompanhar nesta sessão.">
               <div className="space-y-3">
-                <Insight label="Planos ativos" value={`${activePlans.length}`} tone="positive" />
-                <Insight label="Comissões a pagar" value={commissionTotal > 0 ? brl(commissionTotal) : "Nenhuma pendência"} tone={commissionTotal > 0 ? "warning" : "positive"} />
-                <Insight label="Cobertura de custos" value={monthlyRevenue > costTotal ? "Receita acima dos custos" : "Revisar margem"} tone={monthlyRevenue > costTotal ? "positive" : "warning"} />
+                <Insight
+                  label="Planos ativos"
+                  value={plans.error ? "Dados indisponíveis" : `${activePlans.length}`}
+                  tone={plans.error ? "warning" : "positive"}
+                />
+                <Insight
+                  label="Comissões a pagar"
+                  value={
+                    commissions.error
+                      ? "Dados indisponíveis"
+                      : commissionTotal > 0
+                        ? brl(commissionTotal)
+                        : "Nenhuma pendência"
+                  }
+                  tone={commissions.error || commissionTotal > 0 ? "warning" : "positive"}
+                />
+                <Insight
+                  label="Cobertura de custos"
+                  value={
+                    plans.error || costs.error
+                      ? "Dados indisponíveis"
+                      : monthlyRevenue > costTotal
+                        ? "Receita acima dos custos"
+                        : "Revisar margem"
+                  }
+                  tone={
+                    !plans.error && !costs.error && monthlyRevenue > costTotal
+                      ? "positive"
+                      : "warning"
+                  }
+                />
               </div>
             </Card>
             <Card title="Atalhos operacionais" hint="Acesse os detalhes sem perder o contexto.">
               <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-1">
-                <QuickLink label="Usuários, custos e cotas" hint="Acompanhar operação" />
-                <QuickLink label="Planos e receita" hint="Revisar preços ativos" />
-                <QuickLink label="Uso IA Real-Time" hint="Ver consumo Firestore" />
+                <QuickLink
+                  label="Usuários, custos e cotas"
+                  hint="Acompanhar operação"
+                  onClick={() => onNavigate("usuarios")}
+                />
+                <QuickLink
+                  label="Planos e receita"
+                  hint="Revisar assinaturas"
+                  onClick={() => onNavigate("planos")}
+                />
+                <QuickLink
+                  label="Uso IA Real-Time"
+                  hint="Ver consumo Firestore"
+                  onClick={() => onNavigate("usage_firestore")}
+                />
               </div>
             </Card>
           </div>
@@ -272,26 +342,105 @@ function OverviewTab() {
   );
 }
 
-function ExecutiveStat({ label, value, detail, tone }: { label: string; value: string; detail: string; tone: "violet" | "orange" | "rose" | "green" }) {
-  const colors = { violet: "text-[#C4B5FD]", orange: "text-[#FDBA74]", rose: "text-[#FDA4AF]", green: "text-[#86EFAC]" };
-  return <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-4"><p className="text-xs text-white/50">{label}</p><p className={`mt-3 text-2xl font-semibold tracking-tight ${colors[tone]}`}>{value}</p><p className="mt-1 text-xs text-white/40">{detail}</p></div>;
+function ExecutiveStat({
+  label,
+  value,
+  detail,
+  tone,
+}: {
+  label: string;
+  value: string;
+  detail: string;
+  tone: "violet" | "orange" | "rose" | "green";
+}) {
+  const colors = {
+    violet: "text-[#C4B5FD]",
+    orange: "text-[#FDBA74]",
+    rose: "text-[#FDA4AF]",
+    green: "text-[#86EFAC]",
+  };
+  return (
+    <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-4">
+      <p className="text-xs text-white/50">{label}</p>
+      <p className={`mt-3 text-2xl font-semibold tracking-tight ${colors[tone]}`}>{value}</p>
+      <p className="mt-1 text-xs text-white/40">{detail}</p>
+    </div>
+  );
 }
 
-function Insight({ label, value, tone }: { label: string; value: string; tone: "positive" | "warning" }) {
-  return <div className="flex items-center justify-between gap-4 border-b border-white/5 pb-3 last:border-0 last:pb-0"><span className="text-sm text-white/60">{label}</span><span className={`text-sm font-medium ${tone === "positive" ? "text-[#86EFAC]" : "text-[#FDBA74]"}`}>{value}</span></div>;
+function Insight({
+  label,
+  value,
+  tone,
+}: {
+  label: string;
+  value: string;
+  tone: "positive" | "warning";
+}) {
+  return (
+    <div className="flex items-center justify-between gap-4 border-b border-white/5 pb-3 last:border-0 last:pb-0">
+      <span className="text-sm text-white/60">{label}</span>
+      <span
+        className={`text-sm font-medium ${tone === "positive" ? "text-[#86EFAC]" : "text-[#FDBA74]"}`}
+      >
+        {value}
+      </span>
+    </div>
+  );
 }
 
-function QuickLink({ label, hint }: { label: string; hint: string }) {
-  return <div className="flex items-center justify-between rounded-xl border border-white/8 bg-black/15 px-3 py-2.5"><span className="text-sm text-white/80">{label}</span><span className="text-[11px] text-white/40">{hint}</span></div>;
+function QuickLink({ label, hint, onClick }: { label: string; hint: string; onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="flex w-full items-center justify-between rounded-xl border border-white/8 bg-black/15 px-3 py-2.5 text-left transition hover:border-[#7C3AED]/50 hover:bg-white/[0.06]"
+    >
+      <span className="text-sm text-white/80">{label}</span>
+      <span className="text-[11px] text-white/40">{hint}</span>
+    </button>
+  );
+}
+
+function readableAdminError(error: unknown): string {
+  const fallback = "Não foi possível carregar os dados. Atualize a página e tente novamente.";
+  const message = error instanceof Error ? error.message : String(error ?? "");
+
+  // O transporte das server functions pode devolver a página HTML de erro da
+  // aplicação. Nunca exibimos esse documento bruto dentro do painel.
+  if (
+    !message.trim() ||
+    /<(?:!doctype|html|head|body)\b/i.test(message) ||
+    /unexpected token\s+['"]?</i.test(message)
+  ) {
+    return fallback;
+  }
+
+  return message;
+}
+
+function ErrorState({ error }: { error: unknown }) {
+  return (
+    <div
+      role="alert"
+      className="rounded-xl border border-red-400/30 bg-red-500/10 p-4 text-sm text-red-200"
+    >
+      {readableAdminError(error)}
+    </div>
+  );
 }
 
 /* ---------- Indicações ---------- */
 function IndicacoesTab() {
   const qc = useQueryClient();
-  const { data: items = [], isLoading } = useQuery({
-    queryKey: ["admin", "commissions"],
-    queryFn: fetchCommissions,
+  const query = useInfiniteQuery({
+    queryKey: ["admin", "commissions", "pages"],
+    queryFn: ({ pageParam }) => fetchCommissionsPage(pageParam),
+    initialPageParam: null as string | null,
+    getNextPageParam: (lastPage) => lastPage.nextCursor ?? undefined,
   });
+  const items = query.data?.pages.flatMap((page) => page.items) ?? [];
+  const { isLoading, error } = query;
   const statusM = useMutation({
     mutationFn: ({ id, status }: { id: string; status: "pendente" | "pago" | "cancelado" }) =>
       setCommissionStatus(id, status),
@@ -315,7 +464,9 @@ function IndicacoesTab() {
         title="Comissões de indicação"
         hint="Marque como pago depois de enviar o PIX ao indicador."
       >
-        {isLoading ? (
+        {error ? (
+          <ErrorState error={error} />
+        ) : isLoading ? (
           <p className="text-white/50 text-sm py-6 text-center">Carregando…</p>
         ) : items.length === 0 ? (
           <p className="text-white/50 text-sm py-6 text-center">
@@ -376,7 +527,18 @@ function IndicacoesTab() {
             </table>
           </div>
         )}
+        {query.hasNextPage && (
+          <button
+            type="button"
+            onClick={() => query.fetchNextPage()}
+            disabled={query.isFetchingNextPage}
+            className="mt-4 rounded-lg border border-white/10 bg-white/5 px-4 py-2 text-sm disabled:opacity-50"
+          >
+            {query.isFetchingNextPage ? "Carregando…" : "Carregar mais comissões"}
+          </button>
+        )}
       </Card>
+      {statusM.error && <ErrorState error={statusM.error} />}
     </div>
   );
 }
@@ -384,7 +546,11 @@ function IndicacoesTab() {
 /* ---------- Ranking ---------- */
 function RankingTab() {
   const qc = useQueryClient();
-  const { data: items = [], isLoading } = useQuery({
+  const {
+    data: items = [],
+    isLoading,
+    error,
+  } = useQuery({
     queryKey: ["admin", "ranking"],
     queryFn: fetchRanking,
   });
@@ -460,12 +626,17 @@ function RankingTab() {
         {importM.error && (
           <p className="text-sm text-red-400">{(importM.error as Error).message}</p>
         )}
+        {(patchM.error || delM.error || resetM.error) && (
+          <ErrorState error={patchM.error || delM.error || resetM.error} />
+        )}
       </Card>
 
       <ProdutoPorLinkCard onDone={invalidate} />
 
       <Card title="Ranking" hint="Marque a estrela para destacar os melhores produtos.">
-        {isLoading ? (
+        {error ? (
+          <ErrorState error={error} />
+        ) : isLoading ? (
           <p className="text-white/50 text-sm py-6 text-center">Carregando…</p>
         ) : items.length === 0 ? (
           <p className="text-white/50 text-sm py-6 text-center">
@@ -525,14 +696,13 @@ function RankingTab() {
 
 /* ---------- Planos ---------- */
 function PlanosTab() {
-  const qc = useQueryClient();
-  const { data: plans = [], isLoading } = useQuery({
+  const {
+    data: plans = [],
+    isLoading,
+    error,
+  } = useQuery({
     queryKey: ["admin", "plans"],
     queryFn: fetchPlans,
-  });
-  const patchM = useMutation({
-    mutationFn: ({ id, patch }: { id: string; patch: Partial<Plan> }) => updatePlan(id, patch),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["admin", "plans"] }),
   });
 
   const mrr = plans.reduce((s, p) => s + Number(p.preco_mensal) * p.assinantes, 0);
@@ -549,53 +719,37 @@ function PlanosTab() {
         <Stat label="ARPU" value={brl(arpu)} />
       </div>
 
-      <Card title="Planos" hint="Ajuste preço mensal e nº de assinantes para simular receita.">
-        {isLoading ? (
+      <Card
+        title="Planos"
+        hint="Preços do catálogo oficial e assinaturas ativas confirmadas pelo backend."
+      >
+        {error ? (
+          <ErrorState error={error} />
+        ) : isLoading ? (
           <p className="text-white/50 text-sm py-4">Carregando…</p>
         ) : (
           <div className="space-y-3">
             {plans.map((p) => (
               <div
                 key={p.id}
-                className="grid grid-cols-1 sm:grid-cols-[1fr_140px_140px_140px] gap-3 items-center bg-black/30 border border-white/10 rounded-lg p-3"
+                className="grid grid-cols-1 sm:grid-cols-[1fr_150px_120px_150px] gap-3 items-center bg-black/30 border border-white/10 rounded-lg p-3"
               >
-                <input
-                  defaultValue={p.nome}
-                  onBlur={(e) => {
-                    if (e.target.value !== p.nome)
-                      patchM.mutate({ id: p.id, patch: { nome: e.target.value } });
-                  }}
-                  className="bg-transparent border-b border-white/10 focus:border-[#7C3AED] outline-none py-1"
-                />
-                <label className="text-xs text-white/60 flex flex-col">
-                  Preço/mês (R$)
-                  <input
-                    type="number"
-                    min={0}
-                    defaultValue={p.preco_mensal}
-                    onBlur={(e) => {
-                      const v = +e.target.value || 0;
-                      if (v !== p.preco_mensal)
-                        patchM.mutate({ id: p.id, patch: { preco_mensal: v } });
-                    }}
-                    className="mt-1 bg-black/40 border border-white/10 rounded px-2 py-1 text-white font-mono"
-                  />
-                </label>
-                <label className="text-xs text-white/60 flex flex-col">
-                  Assinantes
-                  <input
-                    type="number"
-                    min={0}
-                    defaultValue={p.assinantes}
-                    onBlur={(e) => {
-                      const v = +e.target.value || 0;
-                      if (v !== p.assinantes) patchM.mutate({ id: p.id, patch: { assinantes: v } });
-                    }}
-                    className="mt-1 bg-black/40 border border-white/10 rounded px-2 py-1 text-white font-mono"
-                  />
-                </label>
+                <div>
+                  <div className="font-medium">{p.nome}</div>
+                  <div className="text-xs font-mono text-white/40">{p.slug}</div>
+                </div>
+                <div>
+                  <div className="text-xs text-white/40">Cobrança por ciclo</div>
+                  <div className="font-mono">
+                    {brl(p.amount_cents / 100)} / {p.months} {p.months === 1 ? "mês" : "meses"}
+                  </div>
+                </div>
+                <div>
+                  <div className="text-xs text-white/40">Assinantes ativos</div>
+                  <div className="font-mono text-lg">{p.assinantes}</div>
+                </div>
                 <div className="text-right">
-                  <div className="text-xs text-white/40">Receita/mês</div>
+                  <div className="text-xs text-white/40">MRR equivalente</div>
                   <div className="font-mono text-[#00E676]">
                     {brl(Number(p.preco_mensal) * p.assinantes)}
                   </div>

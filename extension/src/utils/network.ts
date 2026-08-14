@@ -1,6 +1,6 @@
 /**
  * Funções utilitárias para requisições HTTP
- * Inclui retry automático, timeout e fallback para modo offline
+ * Inclui retry automático e timeout. Verificação de licença sempre falha fechada.
  */
 
 import { Config } from "../types";
@@ -17,7 +17,7 @@ export function getApiBase(): string {
   if (window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1") {
     return window.location.origin;
   }
-  return "https://pitchai-live.lovable.app";
+  return "https://pitchai-moon-e5ad.vercel.app";
 }
 
 // ============================================================================
@@ -171,7 +171,16 @@ export async function verifyToken(token: string): Promise<{
     return result;
   } catch (error) {
     console.error("[network] Failed to verify token:", error);
-    return null;
+    return {
+      valid: false,
+      locked: true,
+      reason: "verification_unavailable",
+      message: "Não foi possível confirmar a licença. Conecte-se à internet e tente novamente.",
+      remainingChat: 0,
+      remainingTts: 0,
+      chatLimit: 0,
+      ttsLimit: 0,
+    };
   }
 }
 

@@ -26,38 +26,40 @@ export function PitchAiLogo({
   const currentSize = sizeMap[size];
   const [logoFailed, setLogoFailed] = useState(false);
 
-  // `white` e `purple` são as variantes para fundo escuro: a tinta do wordmark
-  // vem da variante, não do tema — páginas como /planos são escuras sempre.
   const textColor =
-    variant === "white" || variant === "purple"
-      ? "text-white"
-      : "text-[#1E0836] dark:text-white";
+    variant === "white" ? "text-white" : variant === "purple" ? "text-[#6D28D9]" : "text-[#1E0836]";
 
   return (
     <div className={`inline-flex items-center ${currentSize.gap} ${className}`}>
       {/* Nova logo oficial do Pitch AI (PNG, emblema 'P' neon sobre fundo escuro) */}
       {logoFailed ? (
         <span
-          className={`${currentSize.icon} flex shrink-0 items-center justify-center rounded-xl bg-[#7c3aed] font-sora text-sm font-extrabold text-white shadow-[0_8px_24px_rgba(124,58,237,0.28)]`}
+          className={`${currentSize.icon} flex shrink-0 items-center justify-center overflow-hidden rounded-[30%] bg-[#7c3aed] font-sora text-sm font-extrabold text-white shadow-[0_8px_24px_rgba(124,58,237,0.28)]`}
           aria-hidden="true"
         >
           P
         </span>
       ) : (
-        <img
-          src="/logo-nav.png"
-          alt="Pitch AI"
-          width={64}
-          height={64}
-          loading="eager"
-          decoding="async"
-          onError={() => setLogoFailed(true)}
-          className={`${currentSize.icon} shrink-0 object-contain transition-transform hover:scale-105`}
-        />
+        <span
+          className={`${currentSize.icon} inline-flex shrink-0 overflow-hidden rounded-[30%] bg-[#090716] shadow-[0_6px_18px_rgba(49,17,94,0.2)] ring-1 ring-[#6D28D9]/15`}
+        >
+          <img
+            src="/logo-nav.png"
+            alt="Pitch AI"
+            width={64}
+            height={64}
+            loading="eager"
+            decoding="async"
+            onError={() => setLogoFailed(true)}
+            className="h-full w-full scale-[1.04] object-cover transition-transform duration-200 hover:scale-[1.09]"
+          />
+        </span>
       )}
 
       {showWordmark && (
-        <span className={`font-sora font-extrabold tracking-tight ${currentSize.text} ${textColor} select-none`}>
+        <span
+          className={`font-sora font-extrabold tracking-tight ${currentSize.text} ${textColor} select-none`}
+        >
           pitchai
         </span>
       )}

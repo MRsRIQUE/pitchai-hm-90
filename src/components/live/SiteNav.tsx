@@ -1,8 +1,7 @@
 import { Link } from "@tanstack/react-router";
 import { PitchAiLogo } from "@/components/live/PitchAiLogo";
-import { ThemeModeSelector } from "@/components/live/ThemeModeSelector";
-import { useTheme } from "@/lib/use-theme";
 import { Sparkles, ArrowUpRight } from "lucide-react";
+import { useTheme } from "@/lib/use-theme";
 
 const LINKS = [
   { to: "/planos", label: "Planos" },
@@ -13,27 +12,19 @@ const LINKS = [
 ] as const;
 
 /** Navegação compartilhada — mantém todas as páginas públicas conectadas com a nova identidade Pitch AI. */
-export function SiteNav({
-  tone = "dark",
-  currentTheme,
-  onThemeChange,
-}: {
-  tone?: "light" | "dark";
-  currentTheme?: string;
-  onThemeChange?: (theme: string) => void;
-}) {
+export function SiteNav() {
   const { isDark } = useTheme();
-  const effTone = isDark ? "dark" : tone;
+  const effTone = isDark ? "dark" : "light";
 
   const wrap =
     effTone === "dark"
       ? "sticky top-0 z-30 border-b border-white/10 bg-[#0A0518]/80 backdrop-blur-md"
-      : "sticky top-0 z-30 border-b border-purple-900/10 bg-white/80 backdrop-blur-md";
+      : "sticky top-0 z-30 border-b border-[#1E0836]/10 bg-white/38 text-[#1E0836] shadow-[0_8px_30px_rgba(30,8,54,0.04)] backdrop-blur-xl supports-[backdrop-filter]:bg-white/30";
 
   const linkClass =
     effTone === "dark"
       ? "text-slate-300 hover:text-white transition-colors duration-200 font-medium"
-      : "text-slate-600 hover:text-slate-900 transition-colors duration-200 font-medium";
+      : "text-[#33283D] hover:text-[#12091A] transition-colors duration-200 font-medium";
 
   return (
     <header className={wrap}>
@@ -53,13 +44,6 @@ export function SiteNav({
 
         {/* Ações / CTA */}
         <div className="flex items-center gap-2.5 text-sm">
-          {/* Botão de Seleção de Modo de Tema */}
-          <ThemeModeSelector
-            currentTheme={currentTheme}
-            onThemeChange={onThemeChange}
-            tone={effTone}
-          />
-
           <Link to="/entrar" className={`${linkClass} hidden sm:inline-block`}>
             Entrar
           </Link>

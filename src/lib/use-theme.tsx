@@ -50,10 +50,22 @@ const ThemeContext = createContext<ThemeContextValue | null>(null);
  * do primeiro paint, então não há flash de cor.
  */
 export function ThemeProvider({ children }: { children: ReactNode }) {
-  const [theme, setTheme] = useState<ThemeMode>("dark");
+  const [theme, setTheme] = useState<ThemeMode>(() => {
+    if (typeof document !== "undefined" && document.documentElement.classList.contains("light")) {
+      return "light";
+    }
+    return readStored() ?? "dark";
+  });
 
   useEffect(() => {
     setTheme(readStored() ?? getSystemTheme());
+    const syncAcrossTabs = (event: StorageEvent) => {
+      if (event.key === STORAGE_KEY && (event.newValue === "dark" || event.newValue === "light")) {
+        setTheme(event.newValue);
+      }
+    };
+    window.addEventListener("storage", syncAcrossTabs);
+    return () => window.removeEventListener("storage", syncAcrossTabs);
   }, []);
 
   useEffect(() => {

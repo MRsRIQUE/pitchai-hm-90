@@ -14,12 +14,13 @@ import { reportLovableError } from "../lib/lovable-error-reporting";
 import { ThemeProvider } from "@/lib/use-theme";
 import { Toaster } from "@/components/ui/sonner";
 import { ReferralCapture } from "@/components/ReferralCapture";
+import { ThemeModeSelector } from "@/components/live/ThemeModeSelector";
 
 function NotFoundComponent() {
   return (
-    <div className="flex min-h-screen items-center justify-center bg-background px-4">
-      <div className="max-w-md text-center">
-        <h1 className="text-7xl font-bold text-foreground">404</h1>
+    <div className="marketing-page flex min-h-screen items-center justify-center px-4">
+      <div className="marketing-panel max-w-md rounded-3xl p-8 text-center">
+        <h1 className="marketing-title text-7xl text-foreground">404</h1>
         <p className="mt-4 text-sm text-muted-foreground">Página não encontrada.</p>
         <Link
           to="/"
@@ -38,9 +39,9 @@ function ErrorComponent({ error, reset }: { error: Error; reset: () => void }) {
     reportLovableError(error, { boundary: "tanstack_root_error_component" });
   }, [error]);
   return (
-    <div className="flex min-h-screen items-center justify-center bg-background px-4">
-      <div className="max-w-md text-center">
-        <h1 className="text-xl font-semibold text-foreground">Algo deu errado</h1>
+    <div className="marketing-page flex min-h-screen items-center justify-center px-4">
+      <div className="marketing-panel max-w-md rounded-3xl p-8 text-center">
+        <h1 className="marketing-title text-3xl text-foreground">Algo deu errado</h1>
         <button
           onClick={() => {
             router.invalidate();
@@ -123,6 +124,9 @@ function RootComponent() {
       <ThemeProvider>
         <Outlet />
         <ReferralCapture />
+        <div className="fixed bottom-5 right-5 z-[100] rounded-full bg-background/55 p-1 shadow-lg backdrop-blur-xl">
+          <ThemeModeSelector />
+        </div>
         <Toaster position="top-center" richColors />
       </ThemeProvider>
     </QueryClientProvider>

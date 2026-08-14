@@ -2,7 +2,13 @@ import { useState, useEffect, useCallback } from "react";
 import { onAuthStateChanged } from "firebase/auth";
 import { doc, getDoc, onSnapshot } from "firebase/firestore";
 import { getFirebaseAuth, getFirebaseDb } from "@/lib/firebase";
-import { hasPaidAccess, PRICE_TO_PLAN, PlanTier } from "@/lib/live/plans";
+import {
+  hasActiveCompedAccess,
+  hasPaidAccess,
+  PRICE_TO_PLAN,
+  PlanTier,
+  type CompedAccessRecord,
+} from "@/lib/live/plans";
 
 export interface UserSubscriptionData {
   plan: string | null;
@@ -41,6 +47,7 @@ export interface UseUserSubscriptionResult {
 export function useUserSubscription(): UseUserSubscriptionResult {
   const [userId, setUserId] = useState<string | null>(null);
   const [subscription, setSubscription] = useState<UserSubscriptionData | null>(null);
+  const [compedAccess, setCompedAccess] = useState<CompedAccessRecord | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<Error | null>(null);
 
@@ -52,7 +59,10 @@ export function useUserSubscription(): UseUserSubscriptionResult {
       // Path correto: users/{uid}/subscription/current (subdoc com ID "current").
       // Antes era doc(db,"users",uid,"subscription") que aponta para collection
       // (sem docID) — getDoc sempre retornava null.
-      const snap = await getDoc(doc(db, "users", uid, "subscription", "current"));
+      const [snap, compedSnap] = await Promise.all([
+        getDoc(doc(db, "users", uid, "subscription", "current")),
+        getDoc(doc(db, "comped_access", uid)),
+      ]);
       if (snap.exists()) {
         const d = snap.data() as Record<string, unknown>;
         setSubscription({
@@ -66,6 +76,7 @@ export function useUserSubscription(): UseUserSubscriptionResult {
       } else {
         setSubscription(null);
       }
+      setCompedAccess(compedSnap.exists() ? (compedSnap.data() as CompedAccessRecord) : null);
     } catch (err: any) {
       console.error("[useUserSubscription] Exceção ao consultar Firestore:", err);
       setError(err instanceof Error ? err : new Error(String(err)));
@@ -84,6 +95,7 @@ export function useUserSubscription(): UseUserSubscriptionResult {
         fetchSubscription(uid);
       } else {
         setSubscription(null);
+        setCompedAccess(null);
         setLoading(false);
       }
     });
@@ -97,7 +109,7 @@ export function useUserSubscription(): UseUserSubscriptionResult {
     const db = getFirebaseDb();
     // Path correto: users/{uid}/subscription/current
     const subRef = doc(db, "users", userId, "subscription", "current");
-    const unsub = onSnapshot(
+    const unsubSubscription = onSnapshot(
       subRef,
       (snap) => {
         if (!snap.exists()) {
@@ -118,6 +130,12 @@ export function useUserSubscription(): UseUserSubscriptionResult {
         console.warn("[useUserSubscription] onSnapshot:", err);
       },
     );
+    const compedRef = doc(db, "comped_access", userId);
+    const unsubComped = onSnapshot(
+      compedRef,
+      (snap) => setCompedAccess(snap.exists() ? (snap.data() as CompedAccessRecord) : null),
+      (err) => console.warn("[useUserSubscription] cortesia onSnapshot:", err),
+    );
 
     // Polling e re-sync quando a janela ganha foco
     const onFocus = () => {
@@ -126,7 +144,8 @@ export function useUserSubscription(): UseUserSubscriptionResult {
     window.addEventListener("focus", onFocus);
 
     return () => {
-      unsub();
+      unsubSubscription();
+      unsubComped();
       window.removeEventListener("focus", onFocus);
     };
   }, [userId, fetchSubscription]);
@@ -140,13 +159,15 @@ export function useUserSubscription(): UseUserSubscriptionResult {
   }, [userId, fetchSubscription]);
 
   // Regras de negócio calculadas em tempo real
-  const isPaidActive = hasPaidAccess(subscription);
+  const paidSubscriptionActive = hasPaidAccess(subscription);
+  const compedActive = hasActiveCompedAccess(compedAccess);
+  const isPaidActive = paidSubscriptionActive || compedActive;
 
-  const isComped = !!(
-    subscription?.granted_until && new Date(subscription.granted_until) > new Date()
-  );
+  const isComped = !paidSubscriptionActive && compedActive;
 
-  const rawPlan = subscription?.plan || "free";
+  const rawPlan = isComped
+    ? compedAccess?.plan || "pitchai_trimestral"
+    : subscription?.plan || "free";
   const planTier: PlanTier = isPaidActive ? PRICE_TO_PLAN[rawPlan] || "pro" : "free";
 
   // Liberação de Áudio/Voz da IA:

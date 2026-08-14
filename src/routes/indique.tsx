@@ -194,8 +194,8 @@ function IndiquePage() {
 
 function Shell({ children }: { children: React.ReactNode }) {
   return (
-    <div className="min-h-dvh bg-[#0F0F1A] text-white">
-      <SiteNav tone="dark" />
+    <div className="marketing-page min-h-dvh">
+      <SiteNav />
       <main className="mx-auto max-w-4xl space-y-6 px-4 py-6">{children}</main>
     </div>
   );
@@ -203,7 +203,7 @@ function Shell({ children }: { children: React.ReactNode }) {
 
 function Stat({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-xl border border-white/10 bg-white/[0.03] px-4 py-3">
+    <div className="marketing-panel rounded-xl px-4 py-3">
       <div className="text-xs text-white/50">{label}</div>
       <div className="font-mono text-xl font-bold">{value}</div>
     </div>

@@ -13,12 +13,17 @@ import {
   HelpCircle,
   Zap,
 } from "lucide-react";
-import { PITCHAI_PLANS, checkoutUrlWithEmail, formatBRL } from "@/lib/live/plans";
+import { PITCHAI_PLANS, formatBRL, type PitchaiPlan } from "@/lib/live/plans";
 import { getFirebaseAuth } from "@/lib/firebase";
 
 interface PaymentGuardProps {
   userEmail?: string;
   onActivated?: () => void;
+}
+
+/** Anexa o e-mail do usuário logado ao link de checkout da PerfectPay para pré-popular o campo. */
+function checkoutUrlWithEmail(plan: PitchaiPlan): string {
+  return `/comprar?plan=${encodeURIComponent(plan.priceId)}`;
 }
 
 export function PaymentGuardOverlay({ userEmail, onActivated }: PaymentGuardProps) {
@@ -187,7 +192,7 @@ export function PaymentGuardOverlay({ userEmail, onActivated }: PaymentGuardProp
 
                 <div className="mt-6">
                   <a
-                    href={checkoutUrlWithEmail(plan, userEmail)}
+                    href={checkoutUrlWithEmail(plan)}
                     target="_blank"
                     rel="noopener noreferrer"
                     className={`w-full py-3 px-4 rounded-xl font-extrabold text-xs text-center flex items-center justify-center gap-2 transition-all shadow-md ${

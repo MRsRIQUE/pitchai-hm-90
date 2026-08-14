@@ -6,7 +6,7 @@
  * anterior — todos os bytes não-ASCII foram substituídos por U+FFFD).
  * Sempre regenere com: npm run build:extension
  */
-import { createWriteStream, existsSync, readFileSync, statSync } from "node:fs";
+import { existsSync, readFileSync, statSync } from "node:fs";
 import { execFileSync } from "node:child_process";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -53,18 +53,51 @@ if (!iconHead.equals(PNG_MAGIC)) {
   process.exit(1);
 }
 
-// Empacota com o utilitário zip do sistema (modo binário garantido)
+const psQuote = (value) => `'${String(value).replaceAll("'", "''")}'`;
+
+// Empacota em modo binário. Linux/macOS usam zip; Windows possui fallback
+// nativo para que `npm run build:extension` funcione também no ambiente local.
 try {
   execFileSync("zip", ["-X", "-q", "-j", "-FS", outZip, ...FILES.map((f) => path.join(extDir, f))], {
     cwd: extDir,
   });
 } catch (err) {
-  console.error("[pack-extension] Falha ao executar 'zip':", err.message);
+  if (process.platform !== "win32") {
+    console.error("[pack-extension] Falha ao executar 'zip':", err.message);
+    process.exit(1);
+  }
+  const literalPaths = FILES.map((f) => psQuote(path.join(extDir, f))).join(",");
+  const command = `Compress-Archive -LiteralPath @(${literalPaths}) -DestinationPath ${psQuote(outZip)} -CompressionLevel Optimal -Force`;
+  execFileSync("powershell.exe", ["-NoProfile", "-NonInteractive", "-Command", command], {
+    cwd: extDir,
+    stdio: "pipe",
+  });
+}
+
+const forbiddenBackends = ["pitchai.ai.studio", "pitchai-live.lovable.app"];
+const forbiddenMatches = FILES.filter((file) => {
+  if (!/\.(?:html|js|json)$/.test(file)) return false;
+  const source = readFileSync(path.join(extDir, file), "utf8");
+  return forbiddenBackends.some((backend) => source.includes(backend));
+});
+if (forbiddenMatches.length) {
+  console.error(
+    "[pack-extension] Referencia a backend legado encontrada:",
+    forbiddenMatches.join(", "),
+  );
   process.exit(1);
 }
 
 // Verificação de integridade
-execFileSync("unzip", ["-t", "-q", outZip]);
+try {
+  execFileSync("unzip", ["-t", "-q", outZip]);
+} catch (err) {
+  if (process.platform !== "win32") throw err;
+  const verify = `Add-Type -AssemblyName System.IO.Compression.FileSystem; $z=[IO.Compression.ZipFile]::OpenRead(${psQuote(outZip)}); try { if ($z.Entries.Count -ne ${FILES.length}) { throw 'Quantidade de arquivos inválida' } } finally { $z.Dispose() }`;
+  execFileSync("powershell.exe", ["-NoProfile", "-NonInteractive", "-Command", verify], {
+    stdio: "pipe",
+  });
+}
 const size = statSync(outZip).size;
 console.log(
   `[pack-extension] OK — ${path.relative(rootDir, outZip)} (${(size / 1024).toFixed(1)} KB, v${manifest.version}, ${FILES.length} arquivos)`,

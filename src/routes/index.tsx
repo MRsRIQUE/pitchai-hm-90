@@ -580,9 +580,11 @@ function Landing() {
                     <span className="per">{per}</span>
                   </div>
                   <div className="plan-note">{note}</div>
+                  {/* /comprar cuida do resto: manda para o cadastro quem ainda
+                      não tem conta e abre o checkout de quem já tem */}
                   <Link
-                    to="/entrar"
-                    search={{ mode: "signup", plan: p.priceId }}
+                    to="/comprar"
+                    search={{ plan: p.priceId }}
                     className={`btn ${p.highlight ? "btn-dark" : "btn-outline"}`}
                   >
                     Assinar {p.name}

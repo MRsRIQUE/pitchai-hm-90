@@ -9,7 +9,7 @@ import { useTheme, type ThemeMode } from "@/lib/use-theme";
 export function ThemeModeSelector({
   currentTheme,
   onThemeChange,
-  tone = "dark",
+  tone,
 }: {
   currentTheme?: string;
   onThemeChange?: (theme: string) => void;
@@ -26,7 +26,7 @@ export function ThemeModeSelector({
     }
   };
 
-  const isDarkTone = tone === "dark";
+  const isDarkTone = tone ? tone === "dark" : isDark;
   const Icon = dark ? Sun : Moon;
 
   return (
