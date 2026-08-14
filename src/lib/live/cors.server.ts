@@ -18,7 +18,8 @@ export function corsHeaders(request: Request, methods = "POST, OPTIONS") {
     // porque nesse caso não existe risco de CSRF via navegador.
     "Access-Control-Allow-Origin": allowed ? origin : origin ? "null" : "*",
     "Access-Control-Allow-Methods": methods,
-    "Access-Control-Allow-Headers": "Content-Type, Authorization",
+    "Access-Control-Allow-Headers":
+      "Content-Type, Authorization, X-PitchAI-Signature, X-PitchAI-Timestamp, X-PitchAI-Nonce, X-PitchAI-Token",
     Vary: "Origin",
   };
 }

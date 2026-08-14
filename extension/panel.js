@@ -7,7 +7,7 @@
     if (window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1") {
       return window.location.origin;
     }
-    return "https://pitchai.ai.studio";
+    return "https://pitchai-moon-e5ad.vercel.app";
   }
   const API_BASE = resolveApiBase();
 
@@ -75,14 +75,15 @@
     return salt;
   }
 
-  async function getStorageKey() {
+  async function getStorageKey(seed) {
     try {
       const enc = new TextEncoder();
-      const origin = window.location ? window.location.origin : "pitchai";
+      const extensionId = chrome.runtime?.id || "pitchai";
+      const keySeed = seed || `pitchai-extension:${extensionId}`;
       const salt = await getOrCreateSalt();
       const keyMaterial = await crypto.subtle.importKey(
         "raw",
-        enc.encode(origin),
+        enc.encode(keySeed),
         { name: "PBKDF2" },
         false,
         ["deriveKey"],
@@ -123,17 +124,29 @@
 
   async function decryptConfigObj(data) {
     if (!data || typeof data !== "object" || !data.__enc || !data.__iv) return data;
-    try {
-      const cryptoKey = await getStorageKey();
-      if (!cryptoKey) return data;
-      const iv = new Uint8Array(data.__iv.match(/.{1,2}/g).map((b) => parseInt(b, 16)));
-      const encBuf = new Uint8Array(data.__enc.match(/.{1,2}/g).map((b) => parseInt(b, 16)));
-      const decBuf = await crypto.subtle.decrypt({ name: "AES-GCM", iv }, cryptoKey, encBuf);
-      const decStr = new TextDecoder().decode(decBuf);
-      return JSON.parse(decStr);
-    } catch {
-      return data;
+    const extensionId = chrome.runtime?.id || "pitchai";
+    const seeds = [
+      `pitchai-extension:${extensionId}`,
+      window.location?.origin,
+      `chrome-extension://${extensionId}`,
+      "https://shop.tiktok.com",
+    ].filter((seed, index, all) => seed && all.indexOf(seed) === index);
+    for (let index = 0; index < seeds.length; index += 1) {
+      try {
+        const cryptoKey = await getStorageKey(seeds[index]);
+        if (!cryptoKey) continue;
+        const iv = new Uint8Array(data.__iv.match(/.{1,2}/g).map((b) => parseInt(b, 16)));
+        const encBuf = new Uint8Array(data.__enc.match(/.{1,2}/g).map((b) => parseInt(b, 16)));
+        const decBuf = await crypto.subtle.decrypt({ name: "AES-GCM", iv }, cryptoKey, encBuf);
+        const decoded = JSON.parse(new TextDecoder().decode(decBuf));
+        if (index > 0) {
+          const migrated = await encryptConfigObj(decoded);
+          chrome.storage.local.set({ [KEY]: migrated });
+        }
+        return decoded;
+      } catch {}
     }
+    return {};
   }
   const VOICES = [
     ["nova", "Nova · Feminina jovem"],
@@ -1008,10 +1021,12 @@
     }
     tokenInput.value = cfg.syncToken || "";
     renderCreds();
+    let verifyTimer;
     tokenInput.addEventListener("input", () => {
       cfg.syncToken = tokenInput.value.trim();
       save(cfg);
-      renderCreds();
+      clearTimeout(verifyTimer);
+      verifyTimer = setTimeout(renderCreds, 450);
     });
     function setStatus(msg, kind) {
       statusEl.textContent = msg;
@@ -1063,12 +1078,14 @@
       }
     });
 
-    chrome.storage.onChanged.addListener((changes) => {
+    chrome.storage.onChanged.addListener(async (changes) => {
       if (changes[KEY]?.newValue) {
-        cfg = { ...DEFAULTS, ...changes[KEY].newValue };
+        const decrypted = await decryptConfigObj(changes[KEY].newValue);
+        cfg = normalizeConfig(decrypted);
         render();
         if (document.activeElement !== tokenInput) tokenInput.value = cfg.syncToken || "";
-        renderCreds();
+        clearTimeout(verifyTimer);
+        verifyTimer = setTimeout(renderCreds, 450);
       }
     });
 

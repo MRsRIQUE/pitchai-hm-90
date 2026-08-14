@@ -42,10 +42,11 @@ async function getOrCreateSalt(): Promise<Uint8Array> {
 /**
  * Obtém a chave de criptografia baseada no origin da página + salt persistido.
  */
-async function getStorageKey(): Promise<CryptoKey | null> {
+async function getStorageKey(seed?: string): Promise<CryptoKey | null> {
   try {
     const enc = new TextEncoder();
-    const origin = window.location ? window.location.origin : "pitchai";
+    const extensionId = chrome.runtime?.id || "pitchai";
+    const keySeed = seed || `pitchai-extension:${extensionId}`;
     const salt = await getOrCreateSalt();
     // Cópia backed por ArrayBuffer (não SharedArrayBuffer), exigida pelo Web Crypto.
     const saltBytes = Uint8Array.from(salt);
@@ -53,7 +54,7 @@ async function getStorageKey(): Promise<CryptoKey | null> {
     // Importa a key material (origin + salt de instalação como material).
     const keyMaterial = await crypto.subtle.importKey(
       "raw",
-      enc.encode(origin),
+      enc.encode(keySeed),
       { name: "PBKDF2" },
       false,
       ["deriveKey"],
@@ -123,28 +124,38 @@ export async function decryptConfigObj(data: unknown): Promise<unknown> {
     return data;
   }
 
-  try {
-    const cryptoKey = await getStorageKey();
+  const extensionId = chrome.runtime?.id || "pitchai";
+  const seeds = [
+    `pitchai-extension:${extensionId}`,
+    window.location?.origin,
+    `chrome-extension://${extensionId}`,
+    "https://shop.tiktok.com",
+  ].filter((seed, index, all): seed is string => Boolean(seed) && all.indexOf(seed) === index);
 
-    if (!cryptoKey) {
-      return data;
+  for (let index = 0; index < seeds.length; index += 1) {
+    try {
+      const cryptoKey = await getStorageKey(seeds[index]);
+      if (!cryptoKey) continue;
+      const iv = new Uint8Array(
+        (obj.__iv as string).match(/.{1,2}/g)?.map((b) => parseInt(b, 16)) || [],
+      );
+      const encBuf = new Uint8Array(
+        (obj.__enc as string).match(/.{1,2}/g)?.map((b) => parseInt(b, 16)) || [],
+      );
+      const decBuf = await crypto.subtle.decrypt({ name: "AES-GCM", iv }, cryptoKey, encBuf);
+      const decoded = JSON.parse(new TextDecoder().decode(decBuf));
+      if (index > 0) {
+        const migrated = await encryptConfigObj(decoded);
+        chrome.storage.local.set({ "pitchai.config.v1": migrated });
+      }
+      return decoded;
+    } catch {
+      // Tenta o proximo seed legado.
     }
-
-    const iv = new Uint8Array(
-      (obj.__iv as string).match(/.{1,2}/g)?.map((b) => parseInt(b, 16)) || [],
-    );
-    const encBuf = new Uint8Array(
-      (obj.__enc as string).match(/.{1,2}/g)?.map((b) => parseInt(b, 16)) || [],
-    );
-
-    const decBuf = await crypto.subtle.decrypt({ name: "AES-GCM", iv }, cryptoKey, encBuf);
-
-    const decStr = new TextDecoder().decode(decBuf);
-    return JSON.parse(decStr);
-  } catch (error) {
-    console.error("[crypto] Failed to decrypt:", error);
-    return data;
   }
+
+  console.error("[crypto] Failed to decrypt config with current or legacy keys");
+  return {};
 }
 
 /**

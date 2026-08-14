@@ -17,7 +17,7 @@ export function getApiBase(): string {
   if (window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1") {
     return window.location.origin;
   }
-  return "https://pitchai-live.lovable.app";
+  return "https://pitchai-moon-e5ad.vercel.app";
 }
 
 // ============================================================================

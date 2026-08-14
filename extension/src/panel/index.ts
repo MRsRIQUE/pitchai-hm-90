@@ -26,7 +26,7 @@ function resolveApiBase(): string {
   if (window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1") {
     return window.location.origin;
   }
-  return "https://pitchai-live.lovable.app";
+  return "https://pitchai-moon-e5ad.vercel.app";
 }
 
 const API_BASE = resolveApiBase();
@@ -82,13 +82,16 @@ async function signRequest(token: string, endpoint: string): Promise<Record<stri
 
 const CRYPTO_SALT = "pitchai_ext_v2_salt";
 
+function stableStorageSeed(): string {
+  return `${CRYPTO_SALT}:extension:${chrome.runtime?.id || "pitchai"}`;
+}
+
 async function getStorageKey(): Promise<CryptoKey | null> {
   try {
     const enc = new TextEncoder();
-    const origin = window.location ? window.location.origin : "pitchai";
     const keyMaterial = await crypto.subtle.importKey(
       "raw",
-      enc.encode(CRYPTO_SALT + origin),
+      enc.encode(stableStorageSeed()),
       { name: "PBKDF2" },
       false,
       ["deriveKey"],
@@ -1117,7 +1120,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   // Abrir web
   const webBtn = document.getElementById("pnl-web");
   webBtn?.addEventListener("click", () => {
-    window.open("https://pitchai-live.lovable.app/app", "_blank");
+    window.open("https://pitchai-moon-e5ad.vercel.app/app", "_blank");
   });
   
   // Sync token
@@ -1177,14 +1180,15 @@ document.addEventListener("DOMContentLoaded", async () => {
     }
   }
   
+  let verifyTimer: ReturnType<typeof setTimeout> | undefined;
   if (tokenInput) {
     tokenInput.value = cfg.syncToken || "";
     renderCreds();
-    
     tokenInput.addEventListener("input", () => {
       cfg.syncToken = tokenInput.value.trim();
       save(cfg);
-      renderCreds();
+      if (verifyTimer) clearTimeout(verifyTimer);
+      verifyTimer = setTimeout(renderCreds, 450);
     });
   }
   
@@ -1248,14 +1252,15 @@ document.addEventListener("DOMContentLoaded", async () => {
   
   // Listener para mudanças na configuração
   try {
-    (chrome.storage as { onChanged?: { addListener?: (listener: (changes: Record<string, { newValue?: unknown }>) => void) => void } }).onChanged?.addListener?.((changes) => {
+    (chrome.storage as { onChanged?: { addListener?: (listener: (changes: Record<string, { newValue?: unknown }>) => void) => void } }).onChanged?.addListener?.(async (changes) => {
       if (changes[KEY]?.newValue) {
-        cfg = { ...DEFAULT_CONFIG, ...((changes[KEY].newValue as Partial<Config>) || {}) };
+        cfg = parseConfig(await decryptConfigObj(changes[KEY].newValue));
         render();
         if (document.activeElement !== tokenInput) {
           if (tokenInput) tokenInput.value = cfg.syncToken || "";
         }
-        renderCreds();
+        if (verifyTimer) clearTimeout(verifyTimer);
+        verifyTimer = setTimeout(renderCreds, 450);
       }
     });
   } catch {

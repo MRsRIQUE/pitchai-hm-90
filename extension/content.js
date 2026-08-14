@@ -7,15 +7,13 @@
   try {
     window.pitchAiExtensionInstalled = true;
     window.dispatchEvent(
-      new CustomEvent("pitchai-extension-detected", { detail: { version: "0.15.0" } }),
+      new CustomEvent("pitchai-extension-detected", { detail: { version: "0.15.1" } }),
     );
 
     // Allowlist de origins aceitos pelo content script — evita que iframes/scripts
     // maliciosos injetem sync tokens fake ou captured network payloads.
     const ALLOWED_ORIGINS = [
       "https://shop.tiktok.com",
-      "https://pitchai.ai.studio",
-      "https://pitchai-live.lovable.app",
       location.origin,
     ];
     function isAllowedOrigin(origin) {
@@ -267,7 +265,7 @@
     if (window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1") {
       return window.location.origin;
     }
-    return "https://pitchai.ai.studio";
+    return "https://pitchai-moon-e5ad.vercel.app";
   }
   const API_BASE = resolveApiBase();
 
@@ -337,14 +335,15 @@
     return salt;
   }
 
-  async function getStorageKey() {
+  async function getStorageKey(seed) {
     try {
       const enc = new TextEncoder();
-      const origin = window.location ? window.location.origin : "pitchai";
+      const extensionId = chrome.runtime?.id || "pitchai";
+      const keySeed = seed || `pitchai-extension:${extensionId}`;
       const salt = await getOrCreateSalt();
       const keyMaterial = await crypto.subtle.importKey(
         "raw",
-        enc.encode(origin),
+        enc.encode(keySeed),
         { name: "PBKDF2" },
         false,
         ["deriveKey"],
@@ -385,17 +384,29 @@
 
   async function decryptConfigObj(data) {
     if (!data || typeof data !== "object" || !data.__enc || !data.__iv) return data;
-    try {
-      const cryptoKey = await getStorageKey();
-      if (!cryptoKey) return data;
-      const iv = new Uint8Array(data.__iv.match(/.{1,2}/g).map((b) => parseInt(b, 16)));
-      const encBuf = new Uint8Array(data.__enc.match(/.{1,2}/g).map((b) => parseInt(b, 16)));
-      const decBuf = await crypto.subtle.decrypt({ name: "AES-GCM", iv }, cryptoKey, encBuf);
-      const decStr = new TextDecoder().decode(decBuf);
-      return JSON.parse(decStr);
-    } catch {
-      return data;
+    const extensionId = chrome.runtime?.id || "pitchai";
+    const seeds = [
+      `pitchai-extension:${extensionId}`,
+      window.location?.origin,
+      `chrome-extension://${extensionId}`,
+      "https://shop.tiktok.com",
+    ].filter((seed, index, all) => seed && all.indexOf(seed) === index);
+    for (let index = 0; index < seeds.length; index += 1) {
+      try {
+        const cryptoKey = await getStorageKey(seeds[index]);
+        if (!cryptoKey) continue;
+        const iv = new Uint8Array(data.__iv.match(/.{1,2}/g).map((b) => parseInt(b, 16)));
+        const encBuf = new Uint8Array(data.__enc.match(/.{1,2}/g).map((b) => parseInt(b, 16)));
+        const decBuf = await crypto.subtle.decrypt({ name: "AES-GCM", iv }, cryptoKey, encBuf);
+        const decoded = JSON.parse(new TextDecoder().decode(decBuf));
+        if (index > 0) {
+          const migrated = await encryptConfigObj(decoded);
+          chrome.storage.local.set({ [STORAGE_KEY]: migrated });
+        }
+        return decoded;
+      } catch {}
     }
+    return {};
   }
 
   // Trava de segurança da extensão e verificação de cota de tokens
@@ -3285,259 +3296,88 @@
     });
   }
 
-  // ---------- Activity Panel (fila de chat + PiP) ----------
+  // Atividade permanece somente em memoria para diagnostico. A antiga fila
+  // flutuante e o Picture-in-Picture foram removidos para nao cobrir a live.
+  // Quando a revisao estiver ligada, aparece apenas uma aprovacao compacta.
   const activity = (() => {
-    const state = {
-      items: [],
-      nowSpeaking: null,
-      root: null,
-      listEl: null,
-      nowEl: null,
-      pipWin: null,
-      pipRoot: null,
-      filter: "all",
-    };
-    const MAX = 12;
-    const TYPE_LABEL = {
-      catalog: "vitrine",
-      pin: "produto",
-      sale: "venda",
-      violation: "violação",
-      pitch: "pitch",
-      demo: "demonstração",
-    };
-    function statusColor(s) {
-      return (
-        {
-          pending: "#71717a",
-          processing: "#7C3AED",
-          answered: "#00E676",
-          ignored: "#52525b",
-          blocked: "#FF3B3B",
-          pending_review: "#FF6B35",
-          failed: "#FF6B35",
-          info: "#3f3f46",
-        }[s] || "#71717a"
-      );
-    }
-    function statusLabel(s, reason) {
-      const base =
-        {
-          pending: "aguardando",
-          processing: "processando…",
-          answered: "respondido",
-          ignored: "ignorado",
-          blocked: "bloqueado",
-          pending_review: "revisar",
-          failed: "falhou",
-          info: "atividade",
-        }[s] || s;
-      return reason ? `${base} · ${reason}` : base;
-    }
-    function isMessage(it) {
-      return it.status !== "info";
-    }
-    function render() {
-      if (!state.listEl) return;
-      state.listEl.innerHTML = "";
-      const source = state.filter === "msg" ? state.items.filter(isMessage) : state.items;
-      const items = source.slice(-MAX).reverse();
-      if (!items.length) {
-        const p = document.createElement("p");
-        p.className = "pitchai-empty";
-        p.textContent = "Aguardando mensagens…";
-        state.listEl.appendChild(p);
-      } else {
-        items.forEach((it) => {
-          const row = document.createElement("div");
-          row.className = "pitchai-msg";
-          row.dataset.status = it.status;
-          const meta = document.createElement("div");
-          meta.className = "pitchai-msg-meta";
-          const badge = document.createElement("span");
-          badge.className = "pitchai-badge";
-          badge.style.background = statusColor(it.status);
-          badge.textContent = statusLabel(it.status, it.reason);
-          meta.appendChild(badge);
-          const typeLabel =
-            it.status === "info" ? TYPE_LABEL[it.type] : it.type === "pitch" ? "pitch" : null;
-          if (typeLabel) {
-            const b2 = document.createElement("span");
-            b2.className = "pitchai-badge";
-            b2.style.background = "#27272a";
-            b2.textContent = typeLabel;
-            meta.appendChild(b2);
-          }
+    const state = { items: [], nowSpeaking: null, reviewQueue: [], reviewToast: null };
+    const MAX_LOG = 40;
 
-          if (it.author) {
-            const a = document.createElement("span");
-            a.className = "pitchai-author";
-            a.textContent = it.author;
-            meta.appendChild(a);
-          }
-          const t = document.createElement("div");
-          t.className = "pitchai-text";
-          t.textContent = it.text;
-          row.append(meta, t);
-          if (it.reply) {
-            const rp = document.createElement("div");
-            rp.className = "pitchai-reply";
-            rp.textContent = "IA: " + it.reply;
-            row.appendChild(rp);
-          }
-          if (it.status === "pending_review" && it.reply) {
-            const actions = document.createElement("div");
-            actions.className = "pitchai-actions";
-            const ok = document.createElement("button");
-            ok.className = "pitchai-btn primary";
-            ok.textContent = "▶ Falar";
-            ok.onclick = async () => {
-              const cfg = await loadConfig();
-              markStatus(it.id, "answered", null, it.reply);
-              await speakText(it.reply, cfg);
-            };
-            const no = document.createElement("button");
-            no.className = "pitchai-btn";
-            no.textContent = "✕ Pular";
-            no.onclick = () => markStatus(it.id, "ignored", "descartado");
-            actions.append(ok, no);
-            row.appendChild(actions);
-          }
-          state.listEl.appendChild(row);
-        });
-      }
-      if (state.nowEl) {
-        state.nowEl.textContent = state.nowSpeaking
-          ? `🔊 ${state.nowSpeaking.ctx}: ${state.nowSpeaking.text}`
-          : "🔇 silêncio";
-      }
-      // mirror to PiP
-      if (state.pipRoot) state.pipRoot.innerHTML = state.root.innerHTML;
+    function trim() {
+      if (state.items.length > MAX_LOG) state.items.splice(0, state.items.length - MAX_LOG);
     }
     function add(entry) {
       state.items.push(entry);
-      render();
+      trim();
     }
-    // Eventos internos (vitrine, produto fixado, venda, violação) NÃO são
-    // respostas de chat — entram como "atividade", nunca com o selo RESPONDIDO.
     function log(entry) {
-      state.items.push({ id: "p" + Date.now(), status: "info", ...entry });
-      render();
+      add({ id: "p" + Date.now(), status: "info", ...entry });
     }
-    function setFilter(f) {
-      state.filter = f === "msg" ? "msg" : "all";
-      if (state.filterBtn)
-        state.filterBtn.textContent = state.filter === "msg" ? "Só mensagens" : "Tudo";
-      render();
-    }
-    function toggleFilter() {
-      setFilter(state.filter === "msg" ? "all" : "msg");
-    }
-
     function markStatus(id, status, reason, reply) {
       const it = state.items.find((x) => x.id === id);
       if (!it) return;
       it.status = status;
       if (reason !== undefined) it.reason = reason;
       if (reply !== undefined) it.reply = reply;
-      render();
+    }
+    function closeReviewToast(showNext = true) {
+      state.reviewToast?.remove();
+      state.reviewToast = null;
+      if (showNext) queueMicrotask(showNextReview);
+    }
+    function showNextReview() {
+      if (state.reviewToast || !state.reviewQueue.length) return;
+      const { item, cfg } = state.reviewQueue.shift();
+      if (!item || item.status !== "pending_review") return showNextReview();
+
+      const root = document.createElement("section");
+      root.className = "pitchai-review-toast";
+      const label = document.createElement("span");
+      label.className = "pitchai-review-label";
+      label.textContent = "RESPOSTA PRONTA";
+      const question = document.createElement("p");
+      question.className = "pitchai-review-question";
+      question.textContent = item.author ? `${item.author}: ${item.text}` : item.text;
+      const answer = document.createElement("p");
+      answer.className = "pitchai-review-answer";
+      answer.textContent = item.reply;
+      const actions = document.createElement("div");
+      actions.className = "pitchai-review-actions";
+      const skip = document.createElement("button");
+      skip.className = "pitchai-btn";
+      skip.textContent = "Pular";
+      skip.onclick = () => {
+        markStatus(item.id, "ignored", "descartado");
+        closeReviewToast();
+      };
+      const speak = document.createElement("button");
+      speak.className = "pitchai-btn primary";
+      speak.textContent = "▶ Falar agora";
+      speak.onclick = async () => {
+        markStatus(item.id, "answered", null, item.reply);
+        closeReviewToast(false);
+        await speakText(item.reply, cfg);
+        showNextReview();
+      };
+      actions.append(skip, speak);
+      root.append(label, question, answer, actions);
+      document.body.appendChild(root);
+      state.reviewToast = root;
     }
     function addPending(item, reply, cfg) {
       const it = state.items.find((x) => x.id === item.id);
-      if (it) {
-        it.status = "pending_review";
-        it.reply = reply;
-        render();
-      }
+      if (!it) return;
+      it.status = "pending_review";
+      it.reply = reply;
+      state.reviewQueue.push({ item: it, cfg });
+      showNextReview();
     }
-    function setNowSpeaking(v) {
-      state.nowSpeaking = v;
-      render();
+    function setNowSpeaking(value) {
+      state.nowSpeaking = value;
     }
+    function setFilter() {}
 
-    function mount() {
-      const root = document.createElement("div");
-      root.className = "pitchai-activity";
-      root.id = "pitchai-activity";
-      const hd = document.createElement("div");
-      hd.className = "pitchai-activity-hd";
-      const title = document.createElement("span");
-      title.innerHTML = "<b>Fila de chat</b> · IA ao vivo";
-      const filterBtn = document.createElement("button");
-      filterBtn.className = "pitchai-btn";
-      filterBtn.dataset.pitchaiFilter = "1";
-      filterBtn.title = "Alternar entre tudo e só mensagens do chat";
-      filterBtn.textContent = "Tudo";
-      filterBtn.onclick = () => toggleFilter();
-      state.filterBtn = filterBtn;
-      const pip = document.createElement("button");
-      pip.className = "pitchai-btn";
-      pip.textContent = "PiP";
-      pip.title = "Abrir em janela flutuante (Picture-in-Picture)";
-      pip.onclick = openPiP;
-      const closeBtn = document.createElement("button");
-      closeBtn.className = "pitchai-btn";
-      closeBtn.textContent = "–";
-      closeBtn.onclick = () => root.classList.toggle("minimized");
-      hd.append(title, filterBtn, pip, closeBtn);
-
-      const now = document.createElement("div");
-      now.className = "pitchai-now";
-      const list = document.createElement("div");
-      list.className = "pitchai-msg-list";
-      root.append(hd, now, list);
-      document.body.appendChild(root);
-      state.root = root;
-      state.listEl = list;
-      state.nowEl = now;
-      render();
-    }
-
-    async function openPiP() {
-      try {
-        if (!("documentPictureInPicture" in window)) {
-          alert("Este navegador não suporta Document Picture-in-Picture. Use Chrome 116+");
-          return;
-        }
-        const pip = await window.documentPictureInPicture.requestWindow({
-          width: 380,
-          height: 520,
-        });
-        state.pipWin = pip;
-        // copia estilos
-        [...document.styleSheets].forEach((ss) => {
-          try {
-            const link = pip.document.createElement("style");
-            link.textContent = [...ss.cssRules].map((r) => r.cssText).join("\n");
-            pip.document.head.appendChild(link);
-          } catch {}
-        });
-        pip.document.body.style.margin = "0";
-        pip.document.body.style.background = "#0F0F1A";
-        pip.document.body.style.color = "#f9fafb";
-        const clone = state.root.cloneNode(true);
-        clone.style.position = "static";
-        clone.style.width = "100%";
-        clone.style.height = "100vh";
-        clone.style.borderRadius = "0";
-        pip.document.body.appendChild(clone);
-        state.pipRoot = clone;
-        // o mirror é feito via innerHTML (perde listeners) → delegação de clique
-        clone.addEventListener("click", (ev) => {
-          const btn = ev.target && ev.target.closest && ev.target.closest("[data-pitchai-filter]");
-          if (btn) toggleFilter();
-        });
-
-        pip.addEventListener("pagehide", () => {
-          state.pipWin = null;
-          state.pipRoot = null;
-        });
-      } catch (e) {
-        alert("Não foi possível abrir PiP: " + (e?.message || e));
-      }
-    }
-
-    return { mount, add, log, markStatus, addPending, setNowSpeaking, setFilter };
+    return { add, log, markStatus, addPending, setNowSpeaking, setFilter };
   })();
 
   const DEMO_ACK_KEY = "pitchai.demo.ack";
@@ -3846,7 +3686,6 @@
     const cfg = await loadConfig();
     scanFx.mount();
     const unlocked = await checkExtensionLock(cfg.syncToken);
-    activity.mount();
     bindPushToTalk();
     if (unlocked) startAutomations();
     // Revalida periodicamente para bloquear vencimentos e recuperar após
@@ -3929,8 +3768,9 @@
       if (cmd) runDemoCommand(cmd);
     });
 
-    const chatStatus = el("span", { class: "pitchai-status", id: "pitchai-chat-status" }, "0 msgs");
-    chatState.statusEl = chatStatus;
+    // O contador e a antiga fila flutuante foram removidos da navegacao.
+    // O processamento continua em segundo plano e o estado fica resumido em `health`.
+    chatState.statusEl = null;
 
     const listenBtn = el(
       "button",
@@ -4018,15 +3858,23 @@
       tray.classList.toggle("open", on);
     });
 
-    const openBtn = el("button", { class: "pitchai-btn primary", id: "pitchai-open" }, "Painel ▾");
+    const openBtn = el(
+      "button",
+      {
+        class: "pitchai-btn primary pitchai-panel-trigger",
+        id: "pitchai-open",
+        title: "Abrir os controles completos da extensão",
+      },
+      "Painel ▾",
+    );
     const tabBtn = el(
       "button",
       {
-        class: "pitchai-btn",
+        class: "pitchai-btn pitchai-open-tab",
         id: "pitchai-open-tab",
         title: "Abrir o painel em uma aba separada",
       },
-      "↗",
+      "Nova aba ↗",
     );
     tabBtn.addEventListener("click", () => {
       if (typeof chrome !== "undefined" && chrome?.runtime?.getURL) {
@@ -4036,20 +3884,26 @@
       }
     });
 
-    header.append(
-      logo,
-      ver,
-      health,
+    const brandGroup = el("div", { class: "pitchai-header-brand" }, logo, ver, health);
+    const protectionLabel = el(
+      "div",
+      { class: "pitchai-protection", title: "Ativar ou pausar a proteção geral" },
+      el("span", { class: "pitchai-control-label" }, "Proteção"),
       master,
+    );
+    const controlsGroup = el(
+      "div",
+      { class: "pitchai-header-controls" },
+      protectionLabel,
+      listenBtn,
       scrapeBtn,
       pickBtn,
-      listenBtn,
       reviewBtn,
-      chatStatus,
       demoBtn,
-      openBtn,
-      tabBtn,
     );
+    const actionsGroup = el("div", { class: "pitchai-header-actions" }, openBtn, tabBtn);
+
+    header.append(brandGroup, controlsGroup, actionsGroup);
     document.body.appendChild(header);
 
     if (cfg.respostasIA) {
@@ -4081,9 +3935,10 @@
     }, 4000);
 
     // Comandos vindos do painel (iframe/aba) via chrome.storage
-    chrome.storage.onChanged.addListener((changes) => {
-      const c = changes[STORAGE_KEY]?.newValue;
-      if (c) {
+    chrome.storage.onChanged.addListener(async (changes) => {
+      const storedConfig = changes[STORAGE_KEY]?.newValue;
+      if (storedConfig) {
+        const c = normalizeConfig(await decryptConfigObj(storedConfig));
         document.getElementById("pitchai-master")?.classList.toggle("on", !!c.protecaoGeral);
         const wants = !!c.demo?.enabled;
         if (wants !== demo.isOn()) {

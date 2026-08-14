@@ -74,6 +74,20 @@ try {
   });
 }
 
+const forbiddenBackends = ["pitchai.ai.studio", "pitchai-live.lovable.app"];
+const forbiddenMatches = FILES.filter((file) => {
+  if (!/\.(?:html|js|json)$/.test(file)) return false;
+  const source = readFileSync(path.join(extDir, file), "utf8");
+  return forbiddenBackends.some((backend) => source.includes(backend));
+});
+if (forbiddenMatches.length) {
+  console.error(
+    "[pack-extension] Referencia a backend legado encontrada:",
+    forbiddenMatches.join(", "),
+  );
+  process.exit(1);
+}
+
 // Verificação de integridade
 try {
   execFileSync("unzip", ["-t", "-q", outZip]);
