@@ -87,10 +87,7 @@
     const id = src.product_id ?? src.productId ?? src.sku_id ?? src.goods_id ?? src.id ?? null;
     const price = priceOf(src) || priceOf(o);
     // basta um id de produto: preço e imagem podem chegar depois pelo DOM
-    const hasProductShape =
-      id != null &&
-      String(id).length >= 5 &&
-      !!(
+    const productEvidence = !!(
         price ||
         src.cover != null ||
         src.image != null ||
@@ -100,6 +97,14 @@
         src.stock != null ||
         base
       );
+    const validId = id != null && String(id).length >= 5;
+    // Algumas rotas entregam o id apenas numa segunda resposta. Ainda aceitamos
+    // nome + preço + evidência de catálogo e consolidamos pelo nome no content script.
+    const strongIdlessShape =
+      !validId &&
+      !!price &&
+      !!(src.cover || src.image || src.images || src.sku_list || src.stock != null);
+    const hasProductShape = productEvidence && (validId || strongIdlessShape);
     if (!hasProductShape) return null;
     const description =
       str(src.desc) || str(src.description) || str(src.sell_point) || str(src.brief) || "";
@@ -143,9 +148,9 @@
   }
 
   function collect(node, out, depth) {
-    if (!node || depth > 8) return;
+    if (!node || depth > 12) return;
     if (Array.isArray(node)) {
-      for (let i = 0; i < node.length && i < 400; i++) collect(node[i], out, depth + 1);
+      for (let i = 0; i < node.length && i < 2000; i++) collect(node[i], out, depth + 1);
       return;
     }
     if (typeof node !== "object") return;
@@ -167,8 +172,9 @@
     }
   }
 
-  const seenProducts = new Set();
-  const seenMessages = new Set();
+  const seenProducts = new Map();
+  const seenMessages = new Map();
+  const MESSAGE_DEDUPE_MS = 45000;
 
   function handleJson(data) {
     const out = { products: [], messages: [] };
@@ -181,20 +187,29 @@
     const products = [];
     for (const p of out.products) {
       const key = `${p.pid}|${p.name.toLowerCase()}`;
-      if (seenProducts.has(key)) continue;
-      seenProducts.add(key);
+      const fingerprint = JSON.stringify([p.price, p.description, p.stock, p.image]);
+      if (seenProducts.get(key) === fingerprint) continue;
+      seenProducts.set(key, fingerprint);
       products.push(p);
     }
-    if (seenProducts.size > 800) seenProducts.clear();
+    if (seenProducts.size > 1600) {
+      for (const key of Array.from(seenProducts.keys()).slice(0, 800)) seenProducts.delete(key);
+    }
 
     const messages = [];
+    const now = Date.now();
     for (const m of out.messages) {
       const key = `${m.author}|${m.text}`.toLowerCase();
-      if (seenMessages.has(key)) continue;
-      seenMessages.add(key);
+      const last = seenMessages.get(key) || 0;
+      if (now - last < MESSAGE_DEDUPE_MS) continue;
+      seenMessages.set(key, now);
       messages.push(m);
     }
-    if (seenMessages.size > 1200) seenMessages.clear();
+    if (seenMessages.size > 1600) {
+      for (const [key, at] of seenMessages) {
+        if (now - at > MESSAGE_DEDUPE_MS * 2) seenMessages.delete(key);
+      }
+    }
 
     post("products", products);
     post("messages", messages);
@@ -212,6 +227,18 @@
       return;
     }
     handleJson(data);
+  }
+
+  async function handleBinary(value, url) {
+    try {
+      let buffer = null;
+      if (value instanceof Blob) buffer = await value.arrayBuffer();
+      else if (value instanceof ArrayBuffer) buffer = value;
+      else if (ArrayBuffer.isView(value))
+        buffer = value.buffer.slice(value.byteOffset, value.byteOffset + value.byteLength);
+      if (!buffer || buffer.byteLength > MAX_BODY) return;
+      handleText(new TextDecoder().decode(buffer), url);
+    } catch {}
   }
 
   // ---- fetch ----
@@ -268,6 +295,7 @@
       try {
         ws.addEventListener("message", (ev) => {
           if (typeof ev.data === "string") handleText(ev.data, String(url || ""));
+          else handleBinary(ev.data, String(url || ""));
         });
       } catch {}
       return ws;

@@ -1001,9 +1001,9 @@
           setDot("warn");
         }
       } catch {
-        credsEl.textContent = "Conectada (sem internet no momento)";
-        credsEl.style.color = "#22c55e";
-        setDot("ok");
+        credsEl.textContent = "Licença não confirmada · conecte-se à internet para liberar";
+        credsEl.style.color = "#ef4444";
+        setDot("warn");
       }
     }
     tokenInput.value = cfg.syncToken || "";

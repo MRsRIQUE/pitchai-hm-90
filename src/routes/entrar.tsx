@@ -1,5 +1,5 @@
 import { createFileRoute, Link, useNavigate, useSearch } from "@tanstack/react-router";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { Eye, EyeOff, Loader2, Lock, Mail } from "lucide-react";
 import {
@@ -10,10 +10,9 @@ import {
   sendPasswordResetEmail,
   type User,
 } from "firebase/auth";
-import { doc, setDoc } from "firebase/firestore";
-import { getFirebaseAuth, getFirebaseDb, googleProvider } from "@/lib/firebase";
+import { getFirebaseAuth, googleProvider } from "@/lib/firebase";
 
-type Search = { next?: string };
+type Search = { next?: string; mode?: "login" | "signup" };
 
 export const Route = createFileRoute("/entrar")({
   head: () => ({
@@ -35,6 +34,7 @@ export const Route = createFileRoute("/entrar")({
   }),
   validateSearch: (s: Record<string, unknown>): Search => ({
     next: typeof s.next === "string" ? s.next : undefined,
+    mode: s.mode === "signup" ? "signup" : s.mode === "login" ? "login" : undefined,
   }),
   component: EntrarPage,
 });
@@ -58,19 +58,23 @@ function translateAuthError(err: unknown): string {
     "auth/invalid-login-credentials": "E-mail ou senha incorretos.",
     "auth/weak-password": "Senha muito curta. Use pelo menos 8 caracteres.",
     "auth/too-many-requests": "Muitas tentativas. Aguarde um pouco e tente de novo.",
-    "auth/network-request-failed": "Sem conexão com a internet. Verifique sua rede e tente novamente.",
+    "auth/network-request-failed":
+      "Sem conexão com a internet. Verifique sua rede e tente novamente.",
     "auth/popup-closed-by-user": "Janela do Google fechada antes de concluir o login.",
     "auth/cancelled-popup-request": "Login com Google cancelado.",
-    "auth/popup-blocked": "O navegador bloqueou a janela do Google. Permita pop-ups e tente novamente.",
+    "auth/popup-blocked":
+      "O navegador bloqueou a janela do Google. Permita pop-ups e tente novamente.",
   };
   if (map[code]) return map[code];
+  if (!code && err instanceof Error && err.message) return err.message;
   return "Não foi possível continuar. Tente novamente em alguns instantes.";
 }
 
 function EntrarPage() {
-  const { next } = useSearch({ from: "/entrar" });
+  const { next, mode: requestedMode } = useSearch({ from: "/entrar" });
   const navigate = useNavigate();
-  const [mode, setMode] = useState<"login" | "signup" | "forgot">("login");
+  const [mode, setMode] = useState<"login" | "signup" | "forgot">(requestedMode || "login");
+  const authActionInProgress = useRef(false);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
@@ -119,7 +123,7 @@ function EntrarPage() {
     // hydrated). Evitamos a chamada concorrente `currentUser?.getIdToken().then(...)`
     // que causava double-navigate quando o usuário já estava logado.
     const unsubFb = onAuthStateChanged(fbAuth, (user) => {
-      if (user) {
+      if (user && !authActionInProgress.current) {
         navigate({ to: dest });
       }
     });
@@ -135,17 +139,18 @@ function EntrarPage() {
     if (!validateForm()) return;
 
     setBusy(true);
+    authActionInProgress.current = true;
     const fbAuth = getFirebaseAuth();
     try {
       if (mode === "login") {
         const { user } = await signInWithEmailAndPassword(fbAuth, email, password);
-        await ensureUserDoc(user.uid, user.email ?? email);
+        await ensureUserDoc(user);
         await activateIfPending(user);
         toast.success("Login efetuado com sucesso!");
         navigate({ to: dest });
       } else if (mode === "signup") {
         const { user } = await createUserWithEmailAndPassword(fbAuth, email, password);
-        await ensureUserDoc(user.uid, user.email ?? email);
+        await ensureUserDoc(user);
         await activateIfPending(user);
         toast.success("Conta criada! Redirecionando...");
         navigate({ to: dest });
@@ -161,37 +166,39 @@ function EntrarPage() {
     } catch (err) {
       toast.error(translateAuthError(err));
     } finally {
+      authActionInProgress.current = false;
       setBusy(false);
     }
   }
 
   async function google() {
     setBusy(true);
+    authActionInProgress.current = true;
     try {
       const fbAuth = getFirebaseAuth();
       const { user } = await signInWithPopup(fbAuth, googleProvider);
-      await ensureUserDoc(user.uid, user.email ?? "");
+      await ensureUserDoc(user);
       await activateIfPending(user);
       toast.success("Autenticado com Google com sucesso!");
       navigate({ to: dest });
     } catch (err) {
       toast.error(translateAuthError(err));
     } finally {
+      authActionInProgress.current = false;
       setBusy(false);
     }
   }
 
-  /** Cria o doc público users/{uid} com e-mail para que webhooks de pagamento localizem o usuário. */
-  async function ensureUserDoc(uid: string, userEmail: string) {
-    try {
-      const db = getFirebaseDb();
-      await setDoc(
-        doc(db, "users", uid),
-        { email: userEmail.trim().toLowerCase(), updated_at: new Date().toISOString() },
-        { merge: true },
-      );
-    } catch (err) {
-      console.warn("[entrar] Falha ao indexar usuário por e-mail:", err);
+  /** O cadastro só termina depois que o backend confirma o índice users/{uid}. */
+  async function ensureUserDoc(user: User) {
+    const idToken = await user.getIdToken();
+    const response = await fetch("/api/account/ensure", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${idToken}` },
+    });
+    const payload = await response.json().catch(() => null);
+    if (!response.ok) {
+      throw new Error(payload?.error || "Não foi possível concluir seu cadastro.");
     }
   }
 
@@ -253,42 +260,47 @@ function EntrarPage() {
         </div>
 
         <div className="marketing-panel rounded-2xl p-6 backdrop-blur-2xl">
-          {mode !== "forgot" && <>
-          <button
-            onClick={google}
-            type="button"
-            disabled={busy}
-            className="flex w-full items-center justify-center gap-2 rounded-lg bg-white px-4 py-2.5 text-sm font-semibold text-black transition hover:opacity-90 disabled:opacity-50"
-          >
-            <svg viewBox="0 0 48 48" className="h-4 w-4" aria-hidden>
-              <path
-                fill="#FFC107"
-                d="M43.6 20.5H42V20H24v8h11.3c-1.6 4.6-6 8-11.3 8-6.6 0-12-5.4-12-12s5.4-12 12-12c3.1 0 5.9 1.2 8 3.1l5.7-5.7C34.5 6 29.5 4 24 4 12.9 4 4 12.9 4 24s8.9 20 20 20 20-8.9 20-20c0-1.3-.1-2.7-.4-3.5z"
-              />
-              <path
-                fill="#FF3D00"
-                d="M6.3 14.7l6.6 4.8C14.6 16 18.9 13 24 13c3.1 0 5.9 1.2 8 3.1l5.7-5.7C34.5 6 29.5 4 24 4c-7.7 0-14.3 4.3-17.7 10.7z"
-              />
-              <path
-                fill="#4CAF50"
-                d="M24 44c5.4 0 10.3-1.8 14-5.7l-6.5-5.4c-2 1.4-4.6 2.1-7.5 2.1-5.3 0-9.7-3.4-11.3-8l-6.6 5.1C9.5 39.6 16.2 44 24 44z"
-              />
-              <path
-                fill="#1976D2"
-                d="M43.6 20.5H42V20H24v8h11.3c-.8 2.2-2.2 4.1-4.1 5.4l6.5 5.4C41.5 36 44 30.5 44 24c0-1.3-.1-2.7-.4-3.5z"
-              />
-            </svg>
-            Continuar com Google
-          </button>
+          {mode !== "forgot" && (
+            <>
+              <button
+                onClick={google}
+                type="button"
+                disabled={busy}
+                className="flex w-full items-center justify-center gap-2 rounded-lg bg-white px-4 py-2.5 text-sm font-semibold text-black transition hover:opacity-90 disabled:opacity-50"
+              >
+                <svg viewBox="0 0 48 48" className="h-4 w-4" aria-hidden>
+                  <path
+                    fill="#FFC107"
+                    d="M43.6 20.5H42V20H24v8h11.3c-1.6 4.6-6 8-11.3 8-6.6 0-12-5.4-12-12s5.4-12 12-12c3.1 0 5.9 1.2 8 3.1l5.7-5.7C34.5 6 29.5 4 24 4 12.9 4 4 12.9 4 24s8.9 20 20 20 20-8.9 20-20c0-1.3-.1-2.7-.4-3.5z"
+                  />
+                  <path
+                    fill="#FF3D00"
+                    d="M6.3 14.7l6.6 4.8C14.6 16 18.9 13 24 13c3.1 0 5.9 1.2 8 3.1l5.7-5.7C34.5 6 29.5 4 24 4c-7.7 0-14.3 4.3-17.7 10.7z"
+                  />
+                  <path
+                    fill="#4CAF50"
+                    d="M24 44c5.4 0 10.3-1.8 14-5.7l-6.5-5.4c-2 1.4-4.6 2.1-7.5 2.1-5.3 0-9.7-3.4-11.3-8l-6.6 5.1C9.5 39.6 16.2 44 24 44z"
+                  />
+                  <path
+                    fill="#1976D2"
+                    d="M43.6 20.5H42V20H24v8h11.3c-.8 2.2-2.2 4.1-4.1 5.4l6.5 5.4C41.5 36 44 30.5 44 24c0-1.3-.1-2.7-.4-3.5z"
+                  />
+                </svg>
+                Continuar com Google
+              </button>
 
-          <div className="my-5 flex items-center gap-3 text-xs text-white/30">
-            <span className="h-px flex-1 bg-white/10" /> ou <span className="h-px flex-1 bg-white/10" />
-          </div>
-          </>}
+              <div className="my-5 flex items-center gap-3 text-xs text-white/30">
+                <span className="h-px flex-1 bg-white/10" /> ou{" "}
+                <span className="h-px flex-1 bg-white/10" />
+              </div>
+            </>
+          )}
 
           <form onSubmit={submit} className="space-y-3">
             <div>
-              <label htmlFor="account-email" className="sr-only">E-mail</label>
+              <label htmlFor="account-email" className="sr-only">
+                E-mail
+              </label>
               <div className="relative">
                 <Mail className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-white/35" />
                 <input
@@ -308,7 +320,11 @@ function EntrarPage() {
                   className={`w-full rounded-lg border bg-white/5 px-3 py-2.5 pl-9 text-sm outline-none transition focus:border-[#8b5cf6] focus:ring-1 focus:ring-[#8b5cf6]/40 ${emailError ? "border-[#f87171]" : "border-white/10"}`}
                 />
               </div>
-              {emailError && <p id="account-email-error" className="mt-1 text-xs text-[#fca5a5]">{emailError}</p>}
+              {emailError && (
+                <p id="account-email-error" className="mt-1 text-xs text-[#fca5a5]">
+                  {emailError}
+                </p>
+              )}
             </div>
 
             {mode !== "forgot" && (
@@ -323,12 +339,23 @@ function EntrarPage() {
                   placeholder="Senha (mín. 8 caracteres)"
                   value={password}
                   aria-invalid={Boolean(passwordError)}
-                  aria-describedby={passwordError ? "account-password-error" : "account-password-hint"}
+                  aria-describedby={
+                    passwordError ? "account-password-error" : "account-password-hint"
+                  }
                   onChange={(e) => {
                     setPassword(e.target.value);
-                    if (passwordError) setPasswordError(e.target.value.length >= 8 ? null : "Use pelo menos 8 caracteres na senha.");
+                    if (passwordError)
+                      setPasswordError(
+                        e.target.value.length >= 8 ? null : "Use pelo menos 8 caracteres na senha.",
+                      );
                   }}
-                  onBlur={() => setPasswordError(mode !== "forgot" && password.length < 8 ? "Use pelo menos 8 caracteres na senha." : null)}
+                  onBlur={() =>
+                    setPasswordError(
+                      mode !== "forgot" && password.length < 8
+                        ? "Use pelo menos 8 caracteres na senha."
+                        : null,
+                    )
+                  }
                   className={`w-full rounded-lg border bg-white/5 px-3 py-2.5 pl-9 pr-10 text-sm outline-none transition focus:border-[#8b5cf6] focus:ring-1 focus:ring-[#8b5cf6]/40 ${passwordError ? "border-[#f87171]" : "border-white/10"}`}
                 />
                 <button
@@ -345,7 +372,11 @@ function EntrarPage() {
                     Use pelo menos 8 caracteres.
                   </p>
                 )}
-                {passwordError && <p id="account-password-error" className="mt-1 text-xs text-[#fca5a5]">{passwordError}</p>}
+                {passwordError && (
+                  <p id="account-password-error" className="mt-1 text-xs text-[#fca5a5]">
+                    {passwordError}
+                  </p>
+                )}
               </div>
             )}
 
@@ -364,9 +395,18 @@ function EntrarPage() {
                   aria-describedby={confirmError ? "account-confirm-error" : undefined}
                   onChange={(e) => {
                     setConfirmPassword(e.target.value);
-                    if (confirmError) setConfirmError(e.target.value === password ? null : "As senhas não coincidem.");
+                    if (confirmError)
+                      setConfirmError(
+                        e.target.value === password ? null : "As senhas não coincidem.",
+                      );
                   }}
-                  onBlur={() => setConfirmError(confirmPassword && confirmPassword !== password ? "As senhas não coincidem." : null)}
+                  onBlur={() =>
+                    setConfirmError(
+                      confirmPassword && confirmPassword !== password
+                        ? "As senhas não coincidem."
+                        : null,
+                    )
+                  }
                   className={`w-full rounded-lg border bg-white/5 px-3 py-2.5 pl-9 pr-10 text-sm outline-none transition focus:border-[#8b5cf6] focus:ring-1 focus:ring-[#8b5cf6]/40 ${confirmError ? "border-[#f87171]" : "border-white/10"}`}
                 />
                 <button
@@ -382,7 +422,11 @@ function EntrarPage() {
                     <Eye className="h-4 w-4" />
                   )}
                 </button>
-                {confirmError && <p id="account-confirm-error" className="mt-1 text-xs text-[#fca5a5]">{confirmError}</p>}
+                {confirmError && (
+                  <p id="account-confirm-error" className="mt-1 text-xs text-[#fca5a5]">
+                    {confirmError}
+                  </p>
+                )}
               </div>
             )}
 
@@ -400,8 +444,12 @@ function EntrarPage() {
         </div>
 
         <div className="flex items-center justify-center gap-3 text-center text-xs text-white/45">
-          <span className="rounded-full border border-white/10 bg-white/[0.03] px-3 py-1.5">Seus dados protegidos</span>
-          <span className="rounded-full border border-white/10 bg-white/[0.03] px-3 py-1.5">Cancele quando quiser</span>
+          <span className="rounded-full border border-white/10 bg-white/[0.03] px-3 py-1.5">
+            Seus dados protegidos
+          </span>
+          <span className="rounded-full border border-white/10 bg-white/[0.03] px-3 py-1.5">
+            Cancele quando quiser
+          </span>
         </div>
 
         <div className="space-y-2 text-center text-sm text-white/50">

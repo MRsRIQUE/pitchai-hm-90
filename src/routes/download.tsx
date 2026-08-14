@@ -66,7 +66,7 @@ function DownloadPage() {
 
   return (
     <div className="marketing-page min-h-screen pb-16">
-      <SiteNav tone="light" />
+      <SiteNav />
 
       <main className="mx-auto max-w-4xl px-4 py-10 sm:px-6 space-y-8">
         {/* Banner de Verificação do Status da Extensão */}

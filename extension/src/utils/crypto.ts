@@ -47,6 +47,8 @@ async function getStorageKey(): Promise<CryptoKey | null> {
     const enc = new TextEncoder();
     const origin = window.location ? window.location.origin : "pitchai";
     const salt = await getOrCreateSalt();
+    // Cópia backed por ArrayBuffer (não SharedArrayBuffer), exigida pelo Web Crypto.
+    const saltBytes = Uint8Array.from(salt);
 
     // Importa a key material (origin + salt de instalação como material).
     const keyMaterial = await crypto.subtle.importKey(
@@ -61,7 +63,7 @@ async function getStorageKey(): Promise<CryptoKey | null> {
     return await crypto.subtle.deriveKey(
       {
         name: "PBKDF2",
-        salt,
+        salt: saltBytes,
         iterations: PBKDF2_ITERATIONS,
         hash: "SHA-256",
       },

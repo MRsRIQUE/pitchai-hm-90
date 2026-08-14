@@ -22,15 +22,8 @@ interface PaymentGuardProps {
 }
 
 /** Anexa o e-mail do usuário logado ao link de checkout da PerfectPay para pré-popular o campo. */
-function checkoutUrlWithEmail(plan: PitchaiPlan, email?: string): string {
-  if (!email) return plan.checkoutUrl;
-  try {
-    const url = new URL(plan.checkoutUrl);
-    url.searchParams.set("email", email);
-    return url.toString();
-  } catch {
-    return plan.checkoutUrl;
-  }
+function checkoutUrlWithEmail(plan: PitchaiPlan): string {
+  return `/comprar?plan=${encodeURIComponent(plan.priceId)}`;
 }
 
 export function PaymentGuardOverlay({ userEmail, onActivated }: PaymentGuardProps) {
@@ -199,7 +192,7 @@ export function PaymentGuardOverlay({ userEmail, onActivated }: PaymentGuardProp
 
                 <div className="mt-6">
                   <a
-                    href={checkoutUrlWithEmail(plan, userEmail)}
+                    href={checkoutUrlWithEmail(plan)}
                     target="_blank"
                     rel="noopener noreferrer"
                     className={`w-full py-3 px-4 rounded-xl font-extrabold text-xs text-center flex items-center justify-center gap-2 transition-all shadow-md ${
@@ -231,8 +224,8 @@ export function PaymentGuardOverlay({ userEmail, onActivated }: PaymentGuardProp
             <span>Verificar Meu Pagamento</span>
           </h3>
           <p className="mt-1 text-xs text-slate-300">
-            Digite o mesmo e-mail que você usou na hora do pagamento. Verificamos automaticamente
-            — sem precisar de código ou chave de licença.
+            Digite o mesmo e-mail que você usou na hora do pagamento. Verificamos automaticamente —
+            sem precisar de código ou chave de licença.
           </p>
 
           <form onSubmit={handleActivate} className="mt-4 space-y-3">

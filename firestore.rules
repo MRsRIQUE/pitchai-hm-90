@@ -45,23 +45,44 @@ service cloud.firestore {
       return isSignedIn() && request.auth.uid == uid;
     }
 
+    // Defesa adicional no acesso direto pelo SDK: somente registros de
+    // assinatura confirmada/cortesia podem criar tokens e operar a ferramenta.
+    // A validade exata das datas continua sendo conferida pelo backend.
+    function hasAccessRecord(uid) {
+      return (
+        exists(/databases/$(database)/documents/users/$(uid)/subscription/current)
+        && get(/databases/$(database)/documents/users/$(uid)/subscription/current).data.plan != 'free'
+        && get(/databases/$(database)/documents/users/$(uid)/subscription/current).data.status == 'active'
+      ) || (
+        exists(/databases/$(database)/documents/comped_access/$(uid))
+        && get(/databases/$(database)/documents/comped_access/$(uid)).data.status == 'comped'
+      );
+    }
+
     // ------------------------------------------------------------------
     // Tokens de sincronização — o próprio token é a credencial da extensão
     // ------------------------------------------------------------------
 
     match /sync_tokens/{token} {
       allow get: if true;
-      allow create, update, delete: if isServer()
-        || (isSignedIn() && request.resource.data.uid == request.auth.uid);
+      allow create, update: if isPrivileged()
+        || (isSignedIn()
+          && request.resource.data.uid == request.auth.uid
+          && hasAccessRecord(request.auth.uid));
+      allow delete: if isPrivileged()
+        || (isSignedIn() && resource.data.uid == request.auth.uid);
     }
 
     // Config pública por token (consumida pela extensão via REST).
     // O dono só pode escrever no próprio token; leitura é aberta por design.
     match /live_configs_by_token/{token} {
       allow get: if true;
-      allow write: if isServer()
+      allow create, update: if isPrivileged()
         || (isSignedIn()
-          && get(/databases/$(database)/documents/sync_tokens/$(token)).data.uid == request.auth.uid);
+          && get(/databases/$(database)/documents/sync_tokens/$(token)).data.uid == request.auth.uid
+          && hasAccessRecord(request.auth.uid));
+      allow delete: if isPrivileged()
+        || (isSignedIn() && resource.data.uid == request.auth.uid);
     }
 
     // ------------------------------------------------------------------
@@ -78,7 +99,7 @@ service cloud.firestore {
       }
 
       match /sessions/{sessionId} {
-        allow read, write: if isOwnerOf(uid) || isServer();
+        allow read, write: if (isOwnerOf(uid) && hasAccessRecord(uid)) || isServer();
       }
 
       // Código de indicação do usuário — escrito pelo servidor.
@@ -117,7 +138,17 @@ service cloud.firestore {
 
     // Acessos de cortesia concedidos por admin — somente o servidor.
     match /comped_access/{userId} {
-      allow read, write: if isPrivileged();
+      allow read: if isOwnerOf(userId) || isPrivileged();
+      allow write: if isPrivileged();
+    }
+
+    // Criado pelo backend antes do redirecionamento ao provedor de pagamento.
+    match /checkout_intents/{intentId} {
+      allow read, write: if isServer();
+    }
+
+    match /payment_events/{eventId} {
+      allow read, write: if isServer();
     }
 
     // Código de indicação — público (é a chave de busca do convite).

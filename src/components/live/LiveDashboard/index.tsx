@@ -71,12 +71,12 @@ import { AiAutomationsDashboard } from "../AiAutomationsDashboard";
 import {
   HelpCircle as HelpIcon,
   History as HistoryIcon,
-  Lock as LockIcon,
   ShieldCheck as ShieldIcon,
 } from "lucide-react";
 import { QuickStartModal } from "../QuickStartModal";
 import { useUserSubscription } from "@/hooks/useUserSubscription";
 import { PaymentGuardOverlay } from "../PaymentGuardModal";
+import { getFirebaseAuth } from "@/lib/firebase";
 import { useLiveStore } from "@/stores/useLiveStore";
 import { useShallow } from "zustand/react/shallow";
 import { ProductsSection } from "./ProductsSection";
@@ -112,6 +112,36 @@ const THEME_OPTIONS: { id: ThemeStyle; name: string; tag: string; icon: any; col
 ];
 
 export function LiveDashboard() {
+  const { isPaidActive, loading, refetch } = useUserSubscription();
+
+  if (loading) {
+    return (
+      <main className="marketing-page grid min-h-screen place-items-center px-4">
+        <div className="flex items-center gap-3 text-sm text-muted-foreground">
+          <Loader2 className="h-5 w-5 animate-spin text-primary" />
+          Verificando sua licença...
+        </div>
+      </main>
+    );
+  }
+
+  if (!isPaidActive) {
+    return (
+      <main className="marketing-page min-h-screen px-4 py-8 sm:px-6">
+        <div className="mx-auto max-w-6xl">
+          <PaymentGuardOverlay
+            userEmail={getFirebaseAuth().currentUser?.email ?? undefined}
+            onActivated={refetch}
+          />
+        </div>
+      </main>
+    );
+  }
+
+  return <LiveDashboardContent />;
+}
+
+function LiveDashboardContent() {
   // Usando a store global
   const { config, loading, errors, updateConfig, setLoading, setError } = useLiveStore(
     useShallow((state) => ({
@@ -123,15 +153,6 @@ export function LiveDashboard() {
       setError: state.actions.setError,
     })),
   );
-
-  // Hook de assinatura
-  const {
-    subscription: sub,
-    isPaidActive,
-    loading: checkingSub,
-    allowAudio,
-    refetch: refetchSubscription,
-  } = useUserSubscription();
 
   // Sync token da extensão (users/{uid}.syncToken)
   const syncToken = useSyncToken();
@@ -510,17 +531,10 @@ export function LiveDashboard() {
               <div className="flex items-center gap-2">
                 <span className="font-display text-lg font-bold tracking-tight">Pitch AI</span>
                 <span className="font-mono text-[10px] text-muted-foreground">v{APP_VERSION}</span>
-                {isPaidActive ? (
-                  <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/15 border border-emerald-500/30 px-2.5 py-0.5 text-[11px] font-bold text-emerald-400">
-                    <ShieldIcon className="h-3 w-3" />
-                    <span>Licença Ativa</span>
-                  </span>
-                ) : (
-                  <span className="inline-flex items-center gap-1 rounded-full bg-amber-500/15 border border-amber-500/30 px-2.5 py-0.5 text-[11px] font-bold text-amber-400">
-                    <LockIcon className="h-3 w-3" />
-                    <span>Acesso Bloqueado</span>
-                  </span>
-                )}
+                <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/15 border border-emerald-500/30 px-2.5 py-0.5 text-[11px] font-bold text-emerald-400">
+                  <ShieldIcon className="h-3 w-3" />
+                  <span>Licença Ativa</span>
+                </span>
               </div>
             </div>
           </div>
@@ -579,13 +593,6 @@ export function LiveDashboard() {
       <div className="mx-auto grid max-w-6xl gap-4 px-4 py-6 sm:px-6 lg:grid-cols-[1fr_320px]">
         {/* Main column */}
         <div className="space-y-4">
-          {!checkingSub && !isPaidActive && (
-            <PaymentGuardOverlay
-              userEmail={sub?.user_id ?? undefined}
-              onActivated={refetchSubscription}
-            />
-          )}
-
           {!config.onboardingDone && (
             <SetupWizard
               cfg={config}

@@ -33,7 +33,7 @@ function QuentesPage() {
 
   return (
     <div className="marketing-page min-h-dvh">
-      <SiteNav tone="light" />
+      <SiteNav />
 
       <main className="mx-auto max-w-5xl px-4 py-6">
         <h1 className="marketing-title text-4xl sm:text-5xl">Produtos quentes 🔥</h1>

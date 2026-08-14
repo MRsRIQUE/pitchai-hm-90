@@ -350,6 +350,8 @@ export type SubscriptionData = {
   stripe_customer_id?: string;
   stripe_subscription_id?: string;
   cancel_at_period_end?: boolean;
+  provider?: string;
+  provider_sale_code?: string | null;
 };
 
 export type UsageEvent = {
@@ -478,6 +480,9 @@ export interface PendingPaymentData {
   consumed?: boolean;
   consumedBy?: string | null;
   consumedAt?: string | null;
+  plan?: string | null;
+  months?: number | null;
+  saleCode?: string | null;
 }
 
 export async function setPendingPayment(

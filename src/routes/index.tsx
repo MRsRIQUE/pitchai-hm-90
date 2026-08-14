@@ -93,7 +93,10 @@ const FEATURES = [
   },
 ];
 
-const PHONE_VIDEOS = Array.from({ length: 10 }, (_, index) => `/videos/demo-${String(index + 1).padStart(2, "0")}.mp4`);
+const PHONE_VIDEOS = Array.from(
+  { length: 10 },
+  (_, index) => `/videos/demo-${String(index + 1).padStart(2, "0")}.mp4`,
+);
 
 const METRICS = [
   { value: "<2s", label: "Resposta no chat", sub: "Ninguém desiste da compra esperando" },
@@ -308,7 +311,7 @@ function Landing() {
     <div className="landing">
       <GridField />
       <div className="landing-progress" aria-hidden="true" />
-      <SiteNav tone="light" />
+      <SiteNav />
 
       {/* ============ HERO ============ */}
       <header className="hero">
@@ -391,9 +394,14 @@ function Landing() {
                       aria-label={`Demonstração ${phoneVideoIndex + 1} da live no TikTok Shop`}
                     />
                   ) : null}
-                  <div className={`stage-fallback${phoneVideoFailed || reduceMotion ? " is-visible" : ""}`} aria-hidden="true">
+                  <div
+                    className={`stage-fallback${phoneVideoFailed || reduceMotion ? " is-visible" : ""}`}
+                    aria-hidden="true"
+                  >
                     <img src="/logo-nav.png" alt="" />
-                    <span>{phoneVideoFailed ? "Demonstração disponível em breve" : "Pitch AI ao vivo"}</span>
+                    <span>
+                      {phoneVideoFailed ? "Demonstração disponível em breve" : "Pitch AI ao vivo"}
+                    </span>
                   </div>
                 </div>
                 <div className="screen-bottom">
@@ -538,7 +546,7 @@ function Landing() {
                   </div>
                   <div className="plan-note">{note}</div>
                   <a
-                    href={p.checkoutUrl}
+                    href={`/comprar?plan=${encodeURIComponent(p.priceId)}`}
                     target="_blank"
                     rel="noreferrer"
                     className={`btn ${p.highlight ? "btn-dark" : "btn-outline"}`}

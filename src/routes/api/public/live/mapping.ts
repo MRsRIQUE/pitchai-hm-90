@@ -2,11 +2,8 @@ import { createFileRoute } from "@tanstack/react-router";
 import { z } from "zod";
 import { corsHeaders } from "@/lib/live/cors.server";
 import { throttle } from "@/lib/live/rate-limit.server";
-import {
-  getSyncTokenOwner,
-  getLiveConfigByToken,
-  setLiveConfigByToken,
-} from "@/lib/firebase.server";
+import { getLiveConfigByToken, setLiveConfigByToken } from "@/lib/firebase.server";
+import { authorizeSyncToken } from "@/lib/live/api-auth.server";
 
 const PayloadSchema = z.object({
   version: z.literal(1),
@@ -52,8 +49,15 @@ export const Route = createFileRoute("/api/public/live/mapping")({
             { status: 429, headers: { ...CORS, "Retry-After": String(gate.retryAfter) } },
           );
 
-        const uid = await getSyncTokenOwner(body.token);
-        if (!uid) return j(401, { error: "invalid_token" });
+        const access = await authorizeSyncToken(body.token);
+        if (!access.ok || !access.userId) {
+          return j(access.status ?? 403, {
+            error: access.status === 401 ? "invalid_token" : "payment_required",
+            message: access.message,
+            locked: true,
+          });
+        }
+        const uid = access.userId;
 
         const remote = await getLiveConfigByToken(body.token);
 

@@ -1,6 +1,6 @@
 import { createServerFn } from "@tanstack/react-start";
 import { requireFirebaseAuth, type FirebaseAuthContext } from "@/lib/firebase-auth";
-import { getUserByEmail, isAdmin, fsQuery, fsSet, setSubscription } from "@/lib/firebase.server";
+import { getUserByEmail, isAdmin, fsQuery, fsSet } from "@/lib/firebase.server";
 
 export type CompedAccess = {
   userId: string;
@@ -63,17 +63,6 @@ export const grantCompedAccess = createServerFn({ method: "POST" })
       const uid = user.id;
       const until = new Date(Date.now() + data.days * 86400000).toISOString();
       const now = new Date().toISOString();
-      await setSubscription(
-        uid,
-        {
-          plan: "pro",
-          status: "comped",
-          granted_until: until,
-          current_period_end: until,
-          updated_at: now,
-        },
-        firestore,
-      );
       await fsSet(
         `comped_access/${uid}`,
         {
@@ -83,6 +72,8 @@ export const grantCompedAccess = createServerFn({ method: "POST" })
           grantedUntil: until,
           note: data.note || null,
           grantedBy: context.userId,
+          grantedAt: now,
+          updatedAt: now,
         },
         firestore,
       );
@@ -109,26 +100,14 @@ export const revokeCompedAccess = createServerFn({ method: "POST" })
     await assertAdmin(context);
     try {
       const firestore = adminFirestoreOptions(context);
-      await setSubscription(
-        data.userId,
-        {
-          plan: "free",
-          status: "free",
-          granted_until: null,
-          current_period_end: null,
-          updated_at: new Date().toISOString(),
-        },
-        firestore,
-      );
       await fsSet(
         `comped_access/${data.userId}`,
         {
-          email: "",
-          plan: "free",
-          status: "free",
-          grantedUntil: null,
+          status: "revoked",
+          grantedUntil: new Date(0).toISOString(),
           note: "revoked",
           grantedBy: context.userId,
+          updatedAt: new Date().toISOString(),
         },
         firestore,
       );

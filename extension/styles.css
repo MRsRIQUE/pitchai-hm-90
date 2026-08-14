@@ -1,4 +1,147 @@
 /* Pitch AI injected UI */
+
+/* ---- Scanner ambiente: malha roxa + cortina de leitura ---- */
+#pitchai-scan-overlay {
+  position: fixed !important;
+  inset: 0 !important;
+  z-index: 2147483638 !important;
+  pointer-events: none !important;
+  overflow: hidden !important;
+  opacity: 0 !important;
+  visibility: hidden !important;
+  transition: opacity 0.5s ease, visibility 0.5s ease !important;
+  isolation: isolate !important;
+  contain: strict !important;
+}
+
+#pitchai-scan-overlay.is-active {
+  opacity: 0.32 !important;
+  visibility: visible !important;
+}
+
+#pitchai-scan-overlay.is-scanning {
+  opacity: 0.72 !important;
+}
+
+#pitchai-scan-overlay .pitchai-scan-mesh {
+  position: absolute !important;
+  inset: -18% !important;
+  background:
+    radial-gradient(circle at 22% 18%, rgba(192, 132, 252, 0.28), transparent 28%),
+    radial-gradient(circle at 78% 65%, rgba(124, 58, 237, 0.26), transparent 34%),
+    linear-gradient(rgba(168, 85, 247, 0.12) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(139, 92, 246, 0.12) 1px, transparent 1px) !important;
+  background-size: auto, auto, 42px 42px, 42px 42px !important;
+  mask-image: radial-gradient(ellipse at center, #000 15%, transparent 76%) !important;
+  animation: pitchai-mesh-drift 11s ease-in-out infinite alternate !important;
+  transform: perspective(700px) rotateX(54deg) scale(1.35) !important;
+  transform-origin: center 72% !important;
+}
+
+#pitchai-scan-overlay::before {
+  content: "" !important;
+  position: absolute !important;
+  inset: 0 !important;
+  background:
+    repeating-linear-gradient(
+      118deg,
+      transparent 0 28px,
+      rgba(216, 180, 254, 0.08) 29px,
+      transparent 31px 58px
+    ),
+    radial-gradient(circle at 50% 50%, transparent 50%, rgba(76, 29, 149, 0.14)) !important;
+  mix-blend-mode: screen !important;
+  animation: pitchai-mesh-flow 8s linear infinite !important;
+}
+
+#pitchai-scan-overlay::after {
+  content: "" !important;
+  position: absolute !important;
+  left: -6% !important;
+  right: -6% !important;
+  top: -44vh !important;
+  height: 42vh !important;
+  background: linear-gradient(
+    180deg,
+    transparent 0%,
+    rgba(126, 34, 206, 0.04) 22%,
+    rgba(147, 51, 234, 0.16) 67%,
+    rgba(216, 180, 254, 0.55) 94%,
+    rgba(233, 213, 255, 0.92) 100%
+  ) !important;
+  border-bottom: 1px solid rgba(233, 213, 255, 0.95) !important;
+  box-shadow:
+    0 12px 42px rgba(168, 85, 247, 0.48),
+    0 2px 12px rgba(233, 213, 255, 0.8) !important;
+  filter: saturate(1.2) !important;
+  animation: pitchai-scan-curtain 4.8s cubic-bezier(0.42, 0, 0.58, 1) infinite !important;
+}
+
+#pitchai-scan-overlay .pitchai-scan-label {
+  position: absolute !important;
+  left: 22px !important;
+  bottom: 22px !important;
+  display: flex !important;
+  align-items: center !important;
+  gap: 8px !important;
+  padding: 7px 11px !important;
+  border: 1px solid rgba(216, 180, 254, 0.34) !important;
+  border-radius: 999px !important;
+  background: rgba(30, 10, 55, 0.64) !important;
+  color: #f3e8ff !important;
+  box-shadow: 0 8px 28px rgba(76, 29, 149, 0.3) !important;
+  backdrop-filter: blur(12px) saturate(1.4) !important;
+  font: 700 10px/1.2 ui-monospace, SFMono-Regular, Consolas, monospace !important;
+  letter-spacing: 0.14em !important;
+  text-transform: uppercase !important;
+  opacity: 0.72 !important;
+}
+
+#pitchai-scan-overlay .pitchai-scan-label::before {
+  content: "" !important;
+  width: 6px !important;
+  height: 6px !important;
+  border-radius: 999px !important;
+  background: #d8b4fe !important;
+  box-shadow: 0 0 0 4px rgba(192, 132, 252, 0.15), 0 0 12px #c084fc !important;
+  animation: pitchai-scanner-dot 1.25s ease-in-out infinite !important;
+}
+
+#pitchai-scan-overlay.is-scanning .pitchai-scan-label {
+  opacity: 1 !important;
+  border-color: rgba(233, 213, 255, 0.65) !important;
+}
+
+@keyframes pitchai-scan-curtain {
+  0% { transform: translateY(0); opacity: 0; }
+  8% { opacity: 1; }
+  88% { opacity: 1; }
+  100% { transform: translateY(145vh); opacity: 0; }
+}
+
+@keyframes pitchai-mesh-drift {
+  from { transform: perspective(700px) rotateX(54deg) translate3d(-1.5%, -1%, 0) scale(1.35); }
+  to { transform: perspective(700px) rotateX(50deg) translate3d(1.5%, 2%, 0) scale(1.42); }
+}
+
+@keyframes pitchai-mesh-flow {
+  to { background-position: 120px -80px, center; }
+}
+
+@keyframes pitchai-scanner-dot {
+  50% { opacity: 0.45; transform: scale(0.72); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  #pitchai-scan-overlay::before,
+  #pitchai-scan-overlay::after,
+  #pitchai-scan-overlay .pitchai-scan-mesh,
+  #pitchai-scan-overlay .pitchai-scan-label::before {
+    animation: none !important;
+  }
+  #pitchai-scan-overlay::after { top: 42% !important; opacity: 0.45 !important; }
+}
+
 .pitchai-header {
   position: fixed !important;
   top: 12px !important;

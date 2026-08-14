@@ -38,7 +38,7 @@ function notifyExtensionInstalled(): void {
   try {
     window.pitchAiExtensionInstalled = true;
     window.dispatchEvent(
-      new CustomEvent("pitchai-extension-detected", { detail: { version: "0.14.5" } }),
+      new CustomEvent("pitchai-extension-detected", { detail: { version: "0.15.0" } }),
     );
 
     window.addEventListener("message", (event) => {
@@ -195,7 +195,7 @@ function forceInjectPitchAiTestUI(options?: {
     header.className = "pitchai-header";
     header.innerHTML = `
     <span class="pitchai-logo">pitch<b>ai</b></span>
-    <span class="pitchai-ver">v0.14.5 [TEST]</span>
+    <span class="pitchai-ver">v0.15.0 [TEST]</span>
     <span class="pitchai-status ok"><span class="pitchai-dot on"></span> Teste Ativo</span>
     <button class="pitchai-btn primary" id="pitchai-test-toggle-btn">Painel ▴</button>
     <button class="pitchai-btn" id="pitchai-test-tab-btn" title="Abrir painel">↗ Aba</button>

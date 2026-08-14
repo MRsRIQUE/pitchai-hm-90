@@ -1,12 +1,7 @@
 import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useServerFn } from "@tanstack/react-start";
-import {
-  grantCompedAccess,
-  listCompedAccess,
-  revokeCompedAccess,
-  type CompedAccess,
-} from "@/lib/live/comped.functions";
+import type { CompedAccess } from "@/lib/live/comped.functions";
+import { getFirebaseAuth } from "@/lib/firebase";
 import {
   calculateUserCost,
   DEFAULT_PLAN_QUOTAS,
@@ -54,13 +49,26 @@ function readableServerError(error: unknown, fallback: string): string {
   return message || fallback;
 }
 
+async function courtesyRequest<T>(method: "GET" | "POST" | "DELETE", body?: unknown): Promise<T> {
+  const user = getFirebaseAuth().currentUser;
+  if (!user) throw new Error("Sua sessão terminou. Entre novamente.");
+  const token = await user.getIdToken();
+  const response = await fetch("/api/admin/courtesy", {
+    method,
+    headers: {
+      Authorization: `Bearer ${token}`,
+      ...(body ? { "Content-Type": "application/json" } : {}),
+    },
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  const payload = await response.json().catch(() => null);
+  if (!response.ok) throw new Error(payload?.error || `Falha no servidor (${response.status}).`);
+  return payload as T;
+}
+
 /** Gestão avançada de usuários, cotas e verificação de custos de IA. */
 export function UsuariosTab() {
   const qc = useQueryClient();
-  const list = useServerFn(listCompedAccess);
-  const grant = useServerFn(grantCompedAccess);
-  const revoke = useServerFn(revokeCompedAccess);
-
   const [activeSubTab, setActiveSubTab] = useState<SubTab>("custos");
 
   // Dados de preços da API do provedor
@@ -102,13 +110,17 @@ export function UsuariosTab() {
   const [note, setNote] = useState("");
   const [msg, setMsg] = useState<{ kind: "ok" | "err"; text: string } | null>(null);
 
-  const { data: compedItems = [], isLoading: compedLoading } = useQuery({
+  const {
+    data: compedItems = [],
+    isLoading: compedLoading,
+    error: compedError,
+  } = useQuery({
     queryKey: ["admin", "comped"],
-    queryFn: () => list({ data: undefined as never }),
+    queryFn: async () => (await courtesyRequest<{ items: CompedAccess[] }>("GET")).items,
   });
 
   const grantM = useMutation({
-    mutationFn: () => grant({ data: { email, days, note } }),
+    mutationFn: () => courtesyRequest<{ ok: true }>("POST", { email, days, note }),
     onSuccess: (res: any) => {
       if (res?.error) return setMsg({ kind: "err", text: res.error });
       setMsg({ kind: "ok", text: `Acesso liberado com sucesso para ${email}` });
@@ -116,12 +128,15 @@ export function UsuariosTab() {
       setNote("");
       qc.invalidateQueries({ queryKey: ["admin", "comped"] });
     },
-    onError: (e: unknown) => setMsg({ kind: "err", text: readableServerError(e, "Falha ao liberar") }),
+    onError: (e: unknown) =>
+      setMsg({ kind: "err", text: readableServerError(e, "Falha ao liberar") }),
   });
 
   const revokeM = useMutation({
-    mutationFn: (userId: string) => revoke({ data: { userId } }),
+    mutationFn: (userId: string) => courtesyRequest<{ ok: true }>("DELETE", { userId }),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["admin", "comped"] }),
+    onError: (e: unknown) =>
+      setMsg({ kind: "err", text: readableServerError(e, "Falha ao revogar") }),
   });
 
   // Cotas State — carrega do servidor, fallback para defaults
@@ -975,6 +990,11 @@ export function UsuariosTab() {
 
           <section className="rounded-2xl border border-white/10 bg-white/5 p-5 space-y-4">
             <h2 className="font-semibold text-sm">Acessos Ativos por Cortesia</h2>
+            {compedError && (
+              <p className="text-xs text-red-400">
+                {readableServerError(compedError, "Falha ao carregar as cortesias.")}
+              </p>
+            )}
             {compedLoading ? (
               <p className="text-xs text-white/50">Carregando acessos…</p>
             ) : compedItems.length === 0 ? (

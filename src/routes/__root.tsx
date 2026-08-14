@@ -14,6 +14,7 @@ import { reportLovableError } from "../lib/lovable-error-reporting";
 import { ThemeProvider } from "@/lib/use-theme";
 import { Toaster } from "@/components/ui/sonner";
 import { ReferralCapture } from "@/components/ReferralCapture";
+import { ThemeModeSelector } from "@/components/live/ThemeModeSelector";
 
 function NotFoundComponent() {
   return (
@@ -123,6 +124,9 @@ function RootComponent() {
       <ThemeProvider>
         <Outlet />
         <ReferralCapture />
+        <div className="fixed bottom-5 right-5 z-[100] rounded-full bg-background/55 p-1 shadow-lg backdrop-blur-xl">
+          <ThemeModeSelector />
+        </div>
         <Toaster position="top-center" richColors />
       </ThemeProvider>
     </QueryClientProvider>

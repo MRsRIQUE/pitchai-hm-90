@@ -38,7 +38,7 @@ function PlanosPage() {
 
   return (
     <div className="marketing-page min-h-screen">
-      <SiteNav tone="light" />
+      <SiteNav />
       <div className="mx-auto max-w-5xl px-4 py-12">
         <header className="text-center mb-10">
           <h1 className="marketing-title text-4xl mb-3 sm:text-5xl">
@@ -155,7 +155,7 @@ function PlanosPage() {
 
               <div className="mt-8">
                 <a
-                  href={p.checkoutUrl}
+                  href={`/comprar?plan=${encodeURIComponent(p.priceId)}`}
                   target="_blank"
                   rel="noopener noreferrer"
                   className={`w-full py-3.5 px-4 rounded-xl font-bold text-sm text-center flex items-center justify-center gap-2 transition-all shadow-md ${

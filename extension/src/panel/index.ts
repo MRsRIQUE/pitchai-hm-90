@@ -1172,8 +1172,8 @@ document.addEventListener("DOMContentLoaded", async () => {
         credsEl.style.color = "#FF3B3B";
       }
     } catch {
-      credsEl.textContent = "✓ IA conectada (modo offline)";
-      credsEl.style.color = "#00E676";
+      credsEl.textContent = "🔒 Licença não confirmada — conecte-se à internet para liberar";
+      credsEl.style.color = "#FF3B3B";
     }
   }
   

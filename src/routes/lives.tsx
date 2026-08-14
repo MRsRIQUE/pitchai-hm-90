@@ -107,7 +107,7 @@ function LivesPage() {
 
   return (
     <main className="marketing-page min-h-screen bg-background">
-      <SiteNav tone="light" />
+      <SiteNav />
       <header className="border-b border-border bg-background/80">
         <div className="mx-auto flex max-w-6xl items-center justify-between gap-3 px-4 py-3">
           <Link

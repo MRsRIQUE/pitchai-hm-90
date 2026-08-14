@@ -5,6 +5,7 @@ import {
   setSubscription,
   verifyFirebaseIdToken,
 } from "@/lib/firebase.server";
+import { PITCHAI_PLANS } from "@/lib/live/plans";
 
 /**
  * Ativa a assinatura Pro de um usuário após compra em plataforma externa
@@ -36,11 +37,20 @@ export const Route = createFileRoute("/api/public/payments/activate")({
           }
 
           let callerUid: string;
-          let callerEmail: string | null;
+          let callerEmail: string;
           try {
             const verified = await verifyFirebaseIdToken(token);
+            if (!verified.email) {
+              return Response.json(
+                {
+                  success: false,
+                  message: "Sua conta precisa ter um e-mail para ativar o pagamento.",
+                },
+                { status: 403 },
+              );
+            }
             callerUid = verified.uid;
-            callerEmail = verified.email ?? null;
+            callerEmail = verified.email.toLowerCase().trim();
           } catch {
             return Response.json(
               { success: false, message: "Sessão inválida. Faça login novamente." },
@@ -49,7 +59,7 @@ export const Route = createFileRoute("/api/public/payments/activate")({
           }
 
           const body = await request.json().catch(() => ({}));
-          const email = (body.email || callerEmail || "").toString().toLowerCase().trim();
+          const email = (body.email || callerEmail).toString().toLowerCase().trim();
 
           if (!email) {
             return Response.json(
@@ -59,7 +69,7 @@ export const Route = createFileRoute("/api/public/payments/activate")({
           }
 
           // O email do payload deve corresponder ao do caller autenticado.
-          if (callerEmail && callerEmail.toLowerCase() !== email) {
+          if (callerEmail !== email) {
             return Response.json(
               {
                 success: false,
@@ -84,17 +94,22 @@ export const Route = createFileRoute("/api/public/payments/activate")({
             );
           }
 
+          const pendingPlan = PITCHAI_PLANS.find((plan) => plan.priceId === pending.data?.plan);
+          const planId = pendingPlan?.priceId || "pitchai_anual";
+          const months = pendingPlan?.months || Number(pending.data?.months) || 12;
           const periodEnd = new Date();
-          periodEnd.setFullYear(periodEnd.getFullYear() + 1);
+          periodEnd.setUTCMonth(periodEnd.getUTCMonth() + months);
 
           try {
             await setSubscription(
               callerUid,
               {
-                plan: "pitchai_pro",
+                plan: planId,
                 status: "active",
                 current_period_end: periodEnd.toISOString(),
                 granted_until: periodEnd.toISOString(),
+                provider: "perfectpay",
+                provider_sale_code: (pending.data?.saleCode as string | null) || null,
                 updated_at: new Date().toISOString(),
               },
               { mode: "server" },
@@ -112,7 +127,7 @@ export const Route = createFileRoute("/api/public/payments/activate")({
             success: true,
             message: "Assinatura ativada com sucesso! Bem-vindo ao Pitch AI.",
             userId: callerUid,
-            plan: "pitchai_pro",
+            plan: planId,
           });
         } catch (err) {
           console.error("[payments-activate] Exception:", err);

@@ -1,28 +1,11 @@
-/* Identidade visual compartilhada com a landing page.
-   A classe fica opt-in para não alterar componentes internos da extensão. */
+/* Tema compartilhado por landing, login, painel e páginas públicas. */
 .marketing-page {
-  --background: #fbfbfa;
-  --foreground: #0c0c0d;
-  --card: rgba(255, 255, 255, 0.9);
-  --card-foreground: #0c0c0d;
-  --elevated: #f4f4f2;
-  --popover: #ffffff;
-  --popover-foreground: #0c0c0d;
-  --muted: #f1f1ef;
-  --muted-foreground: #66666f;
-  --subtle-foreground: #85858e;
-  --border: rgba(12, 12, 13, 0.1);
-  --input: rgba(12, 12, 13, 0.12);
-  --primary: #6d28d9;
-  --primary-hover: #5b21b6;
-  --primary-glow: rgba(109, 40, 217, 0.16);
-  --success: #0f7b4f;
   position: relative;
   isolation: isolate;
   min-height: 100dvh;
   overflow-x: clip;
-  background: #fbfbfa !important;
-  color: #0c0c0d !important;
+  background: var(--background) !important;
+  color: var(--foreground) !important;
   font-family:
     "Inter",
     -apple-system,
@@ -30,6 +13,9 @@
     "Segoe UI",
     sans-serif;
   -webkit-font-smoothing: antialiased;
+  transition:
+    background-color 180ms ease,
+    color 180ms ease;
 }
 
 .marketing-page::before {
@@ -39,15 +25,13 @@
   z-index: -2;
   pointer-events: none;
   background-image:
-    linear-gradient(rgba(12, 12, 13, 0.045) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(12, 12, 13, 0.045) 1px, transparent 1px);
+    linear-gradient(color-mix(in srgb, var(--foreground) 4.5%, transparent) 1px, transparent 1px),
+    linear-gradient(
+      90deg,
+      color-mix(in srgb, var(--foreground) 4.5%, transparent) 1px,
+      transparent 1px
+    );
   background-size: 56px 56px;
-  -webkit-mask-image: linear-gradient(
-    to bottom,
-    #000 0%,
-    rgba(0, 0, 0, 0.82) 45%,
-    transparent 100%
-  );
   mask-image: linear-gradient(to bottom, #000 0%, rgba(0, 0, 0, 0.82) 45%, transparent 100%);
 }
 
@@ -58,95 +42,99 @@
   z-index: -1;
   pointer-events: none;
   background:
-    radial-gradient(55% 42% at 78% 8%, rgba(109, 40, 217, 0.09), transparent 72%),
-    radial-gradient(42% 34% at 12% 62%, rgba(109, 40, 217, 0.045), transparent 76%);
+    radial-gradient(
+      55% 42% at 78% 8%,
+      color-mix(in srgb, var(--primary) 15%, transparent),
+      transparent 72%
+    ),
+    radial-gradient(
+      42% 34% at 12% 62%,
+      color-mix(in srgb, var(--primary) 8%, transparent),
+      transparent 76%
+    );
 }
 
 .marketing-page h1,
 .marketing-page h2,
 .marketing-page h3,
 .marketing-page h4 {
-  color: #0c0c0d;
+  color: var(--foreground);
   letter-spacing: -0.025em;
 }
 
-.marketing-page .marketing-serif {
-  font-family: "Instrument Serif", Georgia, serif;
-  font-weight: 400;
-}
-
-/* Converte as superfícies escuras legadas sem reescrever a estrutura das telas. */
-.marketing-page [class*="bg-white/"],
-.marketing-page [class*="bg-white["],
-.marketing-page [class*="bg-black/"],
-.marketing-page [class*="from-[#1A0B36]"],
-.marketing-page [class*="from-[#171326]"],
-.marketing-page [class*="bg-[#171326]"] {
-  border-color: rgba(12, 12, 13, 0.1) !important;
-  background-color: rgba(255, 255, 255, 0.88) !important;
-  background-image: none !important;
-  box-shadow: 0 18px 48px -34px rgba(12, 12, 13, 0.3);
-}
-
-.marketing-page [class*="border-white/"] {
-  border-color: rgba(12, 12, 13, 0.1) !important;
-}
-
-.marketing-page [class~="text-white"],
-.marketing-page [class*="text-white/"] {
-  color: #3d3d42 !important;
-}
-
-.marketing-page :is(h1, h2, h3, h4)[class~="text-white"],
-.marketing-page :is(h1, h2, h3, h4)[class*="text-white/"] {
-  color: #0c0c0d !important;
-}
-
-.marketing-page input,
-.marketing-page textarea,
-.marketing-page select {
-  border-color: rgba(12, 12, 13, 0.12) !important;
-  background: rgba(255, 255, 255, 0.92) !important;
-  color: #0c0c0d !important;
-  box-shadow: inset 0 1px 1px rgba(12, 12, 13, 0.025);
-}
-
-.marketing-page input::placeholder,
-.marketing-page textarea::placeholder {
-  color: #8a8a92;
-}
-
-/* Ações roxas continuam com contraste branco após a conversão de texto. */
-.marketing-page :is(a, button)[class*="bg-[#7C3AED]"],
-.marketing-page :is(a, button)[class*="from-[#8b5cf6]"],
-.marketing-page :is(a, button)[class*="bg-primary"],
-.marketing-page :is(a, button)[class*="bg-primary/"] {
-  color: #ffffff !important;
-}
-
-.marketing-page [class*="text-[#00E676]"] {
-  color: #0f7b4f !important;
-}
-
-.marketing-page [class*="text-purple-200"],
-.marketing-page [class*="text-purple-300"],
-.marketing-page [class*="text-purple-400"] {
-  color: #5b21b6 !important;
-}
-
-.marketing-page .marketing-panel {
-  border: 1px solid rgba(12, 12, 13, 0.1);
-  background: rgba(255, 255, 255, 0.9);
-  box-shadow: 0 20px 60px -42px rgba(12, 12, 13, 0.36);
-}
-
+.marketing-page .marketing-serif,
 .marketing-page .marketing-title {
   font-family: "Instrument Serif", Georgia, serif;
   font-weight: 400;
   letter-spacing: -0.02em;
 }
 
+.marketing-page .marketing-panel {
+  border: 1px solid var(--border);
+  background: color-mix(in srgb, var(--card) 88%, transparent);
+  box-shadow: 0 20px 60px -42px color-mix(in srgb, var(--foreground) 36%, transparent);
+}
+
+/* As telas antigas foram desenhadas em dark. No modo claro, convertemos suas
+   classes de superfície sem alterar o HTML de cada página. */
+html.light .marketing-page [class*="bg-white/"],
+html.light .marketing-page [class*="bg-white["],
+html.light .marketing-page [class*="bg-black/"],
+html.light .marketing-page [class*="from-[#1A0B36]"],
+html.light .marketing-page [class*="from-[#171326]"],
+html.light .marketing-page [class*="bg-[#171326]"] {
+  border-color: rgba(12, 12, 13, 0.1) !important;
+  background-color: rgba(255, 255, 255, 0.82) !important;
+  background-image: none !important;
+  box-shadow: 0 18px 48px -34px rgba(12, 12, 13, 0.3);
+}
+
+html.light .marketing-page [class*="border-white/"] {
+  border-color: rgba(12, 12, 13, 0.1) !important;
+}
+
+html.light .marketing-page [class~="text-white"],
+html.light .marketing-page [class*="text-white/"] {
+  color: #3d3d42 !important;
+}
+
+html.light .marketing-page :is(h1, h2, h3, h4)[class~="text-white"],
+html.light .marketing-page :is(h1, h2, h3, h4)[class*="text-white/"] {
+  color: #0c0c0d !important;
+}
+
+html.light .marketing-page input,
+html.light .marketing-page textarea,
+html.light .marketing-page select {
+  border-color: rgba(12, 12, 13, 0.12) !important;
+  background: rgba(255, 255, 255, 0.9) !important;
+  color: #0c0c0d !important;
+}
+
+html.light .marketing-page input::placeholder,
+html.light .marketing-page textarea::placeholder {
+  color: #777780;
+}
+
+html.light .marketing-page :is(a, button)[class*="bg-[#7C3AED]"],
+html.light .marketing-page :is(a, button)[class*="from-[#8b5cf6]"],
+html.light .marketing-page :is(a, button)[class*="bg-primary"] {
+  color: #fff !important;
+}
+
+html.light .marketing-page [class*="text-[#00E676]"] {
+  color: #0f7b4f !important;
+}
+html.light .marketing-page [class*="text-purple-200"],
+html.light .marketing-page [class*="text-purple-300"],
+html.light .marketing-page [class*="text-purple-400"] {
+  color: #5b21b6 !important;
+}
+
 @media (prefers-reduced-motion: reduce) {
+  .marketing-page {
+    transition: none;
+  }
   .marketing-page::before,
   .marketing-page::after {
     display: none;
