@@ -63,6 +63,165 @@
   font-weight: 400;
   letter-spacing: -0.01em;
 }
+.landing .nowrap {
+  white-space: nowrap;
+}
+
+/* ============================================================
+   NAV FLUTUANTE — pílula de vidro destacada do topo
+   ============================================================ */
+.landing .lp-nav {
+  position: sticky;
+  top: 0;
+  z-index: 50;
+  padding: 14px 16px 6px;
+}
+.landing .lp-nav-pill {
+  width: fit-content;
+  max-width: 100%;
+  margin: 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  padding: 6px 6px 6px 14px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.85);
+  background-color: rgba(252, 252, 253, 0.76);
+  background-image: linear-gradient(160deg, rgba(255, 255, 255, 0.66), rgba(255, 255, 255, 0.38));
+  backdrop-filter: blur(28px) saturate(200%);
+  -webkit-backdrop-filter: blur(28px) saturate(200%);
+  box-shadow:
+    inset 0 1px 0 0 rgba(255, 255, 255, 0.96),
+    inset 1px 0 0 0 rgba(255, 255, 255, 0.5),
+    var(--shadow-sm);
+  transition:
+    box-shadow 0.3s ease,
+    background-color 0.3s ease;
+}
+.landing .lp-nav-pill.is-scrolled {
+  box-shadow:
+    inset 0 1px 0 0 rgba(255, 255, 255, 0.96),
+    inset 1px 0 0 0 rgba(255, 255, 255, 0.5),
+    var(--shadow-md);
+}
+.landing .lp-nav-brand {
+  display: inline-flex;
+  align-items: center;
+  margin-right: 8px;
+  flex: none;
+}
+/* a logo herda o tamanho do app; aqui ela encolhe para caber na pílula */
+.landing .lp-nav-brand img,
+.landing .lp-nav-brand > div > span:first-child {
+  width: 24px;
+  height: 24px;
+}
+.landing .lp-nav-brand span:last-child {
+  font-size: 16px;
+  letter-spacing: -0.03em;
+}
+.landing .lp-nav-links {
+  display: flex;
+  align-items: center;
+  gap: 1px;
+}
+.landing .lp-nav-link {
+  border-radius: 999px;
+  padding: 7px 13px;
+  font-size: 13.5px;
+  font-weight: 500;
+  color: var(--ink-3);
+  white-space: nowrap;
+  transition:
+    background 0.18s ease,
+    color 0.18s ease;
+}
+.landing .lp-nav-link:hover {
+  background: rgba(255, 255, 255, 0.7);
+  color: var(--ink);
+}
+.landing .lp-nav-signin {
+  margin-left: 2px;
+}
+.landing .lp-nav-cta {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 34px;
+  padding: 0 18px;
+  margin-left: 4px;
+  border-radius: 999px;
+  background: var(--ink);
+  color: #fff;
+  font-size: 13.5px;
+  font-weight: 560;
+  white-space: nowrap;
+  transition:
+    background 0.18s ease,
+    transform 0.12s ease;
+}
+.landing .lp-nav-cta:hover {
+  background: #26262b;
+}
+.landing .lp-nav-cta:active {
+  transform: translateY(0.5px);
+}
+.landing .lp-nav-burger {
+  display: none;
+  width: 34px;
+  height: 34px;
+  margin-left: 2px;
+  border-radius: 999px;
+  place-items: center;
+  color: var(--ink-2);
+}
+.landing .lp-nav-burger:hover {
+  background: rgba(255, 255, 255, 0.7);
+}
+.landing .lp-nav-sheet {
+  width: fit-content;
+  min-width: 240px;
+  margin: 8px auto 0;
+  display: grid;
+  gap: 2px;
+  padding: 8px;
+  border-radius: 20px;
+  border: 1px solid rgba(255, 255, 255, 0.85);
+  /* o painel cobre conteúdo: opacidade alta o bastante para não depender
+     do backdrop-filter, que nem todo navegador aplica em overlay */
+  background-color: rgba(252, 252, 253, 0.97);
+  background-image: linear-gradient(160deg, rgba(255, 255, 255, 0.7), rgba(255, 255, 255, 0.45));
+  backdrop-filter: blur(28px) saturate(200%);
+  -webkit-backdrop-filter: blur(28px) saturate(200%);
+  box-shadow: var(--shadow-md);
+}
+.landing .lp-nav-sheet a {
+  border-radius: 12px;
+  padding: 10px 16px;
+  font-size: 15px;
+  color: var(--ink-2);
+}
+.landing .lp-nav-sheet a:hover {
+  background: rgba(255, 255, 255, 0.75);
+  color: var(--ink);
+}
+
+@media (max-width: 900px) {
+  .landing .lp-nav-links {
+    display: none;
+  }
+  .landing .lp-nav-burger {
+    display: grid;
+  }
+}
+@media (max-width: 560px) {
+  .landing .lp-nav-signin {
+    display: none;
+  }
+  .landing .lp-nav-brand span:last-child {
+    display: none;
+  }
+}
 
 /* ============================================================
    GRID FIELD — quadriculado deformável pelo mouse (canvas)
@@ -172,7 +331,8 @@
    HERO
    ============================================================ */
 .landing .hero {
-  padding: 88px 0 0;
+  /* o respiro de baixo separa a faixa de números do marquee seguinte */
+  padding: 72px 0 84px;
   position: relative;
   overflow: hidden;
 }
@@ -685,7 +845,108 @@
 }
 .landing .step {
   background: var(--surface);
-  padding: 32px 28px 34px;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  outline: none;
+}
+.landing .step-body {
+  padding: 32px 28px 26px;
+}
+
+/* palco do aparelho: ele nasce cortado pela base do card e sobe no hover */
+.landing .step-stage {
+  position: relative;
+  /* alto o bastante para o aparelho aparecer quase inteiro no hover */
+  height: 296px;
+  margin-top: auto;
+}
+.landing .step-phone {
+  position: absolute;
+  left: 50%;
+  top: 8px;
+  /* a tela é desenhada em 240px e reduzida por escala: encolher só a
+     largura deformaria as tipografias internas, que são fixas em px */
+  width: 240px;
+  pointer-events: none;
+  opacity: 0.88;
+  transform: translateX(-50%) translateY(26px) scale(0.7);
+  transform-origin: top center;
+  transition:
+    transform 0.5s cubic-bezier(0.2, 0.7, 0.3, 1),
+    opacity 0.35s ease;
+}
+.landing .step:hover .step-phone,
+.landing .step:focus-visible .step-phone {
+  transform: translateX(-50%) translateY(-12px) scale(0.7);
+  opacity: 1;
+}
+.landing .step-phone-shell {
+  border-radius: 26px;
+  padding: 7px;
+  border: 1px solid var(--line);
+  background-image: linear-gradient(160deg, rgba(255, 255, 255, 0.92), rgba(255, 255, 255, 0.66));
+  backdrop-filter: blur(18px) saturate(180%);
+  -webkit-backdrop-filter: blur(18px) saturate(180%);
+  box-shadow:
+    inset 0 1px 0 0 rgba(255, 255, 255, 0.95),
+    0 -10px 34px -14px rgba(12, 12, 13, 0.34);
+}
+.landing .step-phone-screen {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border-radius: 20px;
+  background: #141418;
+  aspect-ratio: 9 / 16.2;
+}
+
+/* indicador ao vivo e barras de narração dentro do aparelho */
+@keyframes lp-blink {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.25;
+  }
+}
+.lp-blink {
+  animation: lp-blink 1.4s ease-in-out infinite;
+}
+@keyframes lp-bar {
+  0%,
+  100% {
+    transform: scaleY(0.45);
+  }
+  50% {
+    transform: scaleY(1);
+  }
+}
+.lp-bar {
+  transform-origin: center;
+  animation: lp-bar 0.9s ease-in-out infinite;
+}
+
+/* sem hover (touch) o aparelho já fica na posição levantada */
+@media (hover: none) {
+  .landing .step-phone {
+    transform: translateX(-50%) translateY(-12px) scale(0.7);
+    opacity: 1;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .landing .step-phone {
+    transition: none;
+    transform: translateX(-50%) translateY(-12px) scale(0.7);
+    opacity: 1;
+  }
+  .lp-blink,
+  .lp-bar {
+    animation: none;
+  }
 }
 .landing .step-n {
   width: 28px;
@@ -724,18 +985,34 @@
 }
 
 /* ============================================================
-   RECURSOS — card grid
+   RECURSOS — bento
+
+   Grade de 12 colunas: chat (7) e voz (5) na primeira faixa, os
+   quatro cards de ícone (3 cada) embaixo. Seis cards do mesmo
+   tamanho diriam que as seis funções pesam igual — não pesam.
    ============================================================ */
 .landing .feat {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(12, minmax(0, 1fr));
   gap: 16px;
+}
+.landing .feat > .card {
+  grid-column: span 3;
+}
+.landing .feat > .card-wide {
+  grid-column: span 7;
+}
+.landing .feat > .card-tall {
+  grid-column: span 5;
 }
 .landing .card {
   background: var(--surface);
   border: 1px solid var(--line);
   border-radius: var(--r-lg);
   padding: 26px 24px 28px;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
   transition:
     border-color 0.18s ease,
     box-shadow 0.18s ease,
@@ -792,14 +1069,201 @@
   color: var(--accent-ink);
 }
 
+/* células grandes: título maior e demo ocupando o resto da altura */
+.landing .card-wide h3,
+.landing .card-tall h3 {
+  font-size: 19px;
+  letter-spacing: -0.024em;
+}
+.landing .card-wide > p,
+.landing .card-tall > p {
+  max-width: 42em;
+}
+
+/* ---------- demos vivas ---------- */
+.landing .demo {
+  margin-top: 24px;
+  flex: 1;
+  display: grid;
+  align-content: end;
+  gap: 10px;
+  min-width: 0;
+}
+/* altura reservada: sem ela, a mensagem que entra empurra a linha do bento */
+.landing .demo-chat {
+  min-height: 272px;
+}
+.landing .demo-msg {
+  border: 1px solid var(--line-2);
+  background: var(--surface);
+  border-radius: 14px;
+  padding: 11px 14px;
+  animation: landing-msg-in 0.45s cubic-bezier(0.2, 0.7, 0.3, 1) both;
+}
+@keyframes landing-msg-in {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+.landing .demo-q {
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--ink-3);
+}
+.landing .demo-q b {
+  font-weight: 600;
+  color: var(--ink-2);
+}
+.landing .demo-a {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid var(--line-2);
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--ink);
+  min-height: 21px;
+}
+.landing .demo-ia {
+  flex: none;
+  margin-top: 1px;
+  border-radius: 5px;
+  background: var(--accent);
+  color: #fff;
+  font-size: 9px;
+  font-weight: 700;
+  padding: 2px 5px;
+  letter-spacing: 0.02em;
+}
+.landing .demo-a-text {
+  min-width: 0;
+}
+.landing .demo-time {
+  margin-left: auto;
+  flex: none;
+  white-space: nowrap;
+  font-size: 11px;
+  color: var(--ok);
+}
+/* três pontinhos enquanto a IA formula a resposta */
+.landing .demo-typing {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 0;
+}
+.landing .demo-typing i {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--ink-3);
+  animation: landing-typing 1.2s ease-in-out infinite;
+}
+.landing .demo-typing i:nth-child(2) {
+  animation-delay: 0.16s;
+}
+.landing .demo-typing i:nth-child(3) {
+  animation-delay: 0.32s;
+}
+@keyframes landing-typing {
+  0%,
+  60%,
+  100% {
+    opacity: 0.28;
+    transform: translateY(0);
+  }
+  30% {
+    opacity: 1;
+    transform: translateY(-3px);
+  }
+}
+
+/* a célula da voz é mais baixa que a do chat: centraliza a sobra */
+.landing .demo-voice {
+  gap: 14px;
+  align-content: center;
+}
+.landing .demo-wave {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  border: 1px solid var(--line-2);
+  background: var(--surface);
+  border-radius: 14px;
+  padding: 12px 14px;
+}
+.landing .demo-ia-lg {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  margin-top: 0;
+  border-radius: 50%;
+  font-size: 11px;
+}
+.landing .demo-bars {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  flex: 1;
+}
+.landing .demo-bars .lp-bar {
+  width: 3px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--accent) 70%, transparent);
+}
+.landing .demo-line {
+  font-size: 13.5px;
+  line-height: 1.5;
+  color: var(--ink-2);
+  font-style: italic;
+  animation: landing-msg-in 0.4s ease both;
+}
+.landing .demo-voices {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+}
+.landing .demo-voice-chip {
+  border: 1px solid var(--line);
+  background: var(--surface);
+  border-radius: 999px;
+  padding: 5px 12px;
+  font-size: 12.5px;
+  font-weight: 500;
+  color: var(--ink-2);
+  transition:
+    background 0.25s ease,
+    color 0.25s ease,
+    border-color 0.25s ease;
+}
+.landing .demo-voice-chip.is-active {
+  background: var(--ink);
+  border-color: var(--ink);
+  color: #fff;
+}
+.landing .demo-voice-more {
+  color: var(--ink-3);
+}
+
 /* ============================================================
    PLANOS — card grid
    ============================================================ */
 .landing .plans {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 14px;
-  align-items: start;
+  /* três planos, três colunas — a grade de 4 deixava a fileira encostada à esquerda */
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 20px;
+  align-items: stretch;
+  max-width: 1020px;
+  margin: 0 auto;
 }
 .landing .plan {
   background: var(--surface);
@@ -811,9 +1275,22 @@
   min-height: 100%;
 }
 .landing .plan.pop {
-  border-color: var(--ink);
-  box-shadow: var(--shadow-md);
   position: relative;
+  z-index: 2;
+  border-color: var(--accent);
+  background: var(--surface);
+  padding: 32px 26px 30px;
+  transform: scale(1.045);
+  box-shadow:
+    0 0 0 1px var(--accent),
+    0 28px 64px -24px rgba(109, 40, 217, 0.5),
+    0 2px 10px rgba(12, 12, 13, 0.06);
+}
+.landing .plan.pop .plan-name {
+  font-size: 16px;
+}
+.landing .plan.pop .plan-price .val {
+  font-size: 40px;
 }
 .landing .plan-badge {
   position: absolute;
@@ -1443,10 +1920,32 @@ html {
   border-color: rgba(12, 12, 13, 0.18);
 }
 .landing .plan.pop:hover {
-  border-color: var(--ink);
+  border-color: var(--accent);
+  /* preserva a escala do plano em destaque ao levantar */
+  transform: scale(1.045) translateY(-5px);
+  box-shadow:
+    0 0 0 1px var(--accent),
+    0 36px 72px -24px rgba(109, 40, 217, 0.6),
+    0 2px 10px rgba(12, 12, 13, 0.06);
 }
 .landing .plan-badge {
   animation: landing-float 5.5s ease-in-out infinite;
+}
+/* o selo do plano em destaque fica centralizado no topo do card */
+.landing .plan.pop .plan-badge {
+  left: 50%;
+  background: var(--accent);
+  box-shadow: 0 6px 18px -6px rgba(109, 40, 217, 0.7);
+  animation: landing-float-center 5.5s ease-in-out infinite;
+}
+@keyframes landing-float-center {
+  0%,
+  100% {
+    transform: translate(-50%, 0);
+  }
+  50% {
+    transform: translate(-50%, -7px);
+  }
 }
 
 /* stats — números com gradiente */
@@ -1643,11 +2142,24 @@ html {
   .landing .steps {
     grid-template-columns: 1fr;
   }
-  .landing .feat {
-    grid-template-columns: repeat(2, 1fr);
+  /* bento vira duas colunas; as células com demo passam a ocupar a linha toda */
+  .landing .feat > .card {
+    grid-column: span 6;
   }
+  .landing .feat > .card-wide,
+  .landing .feat > .card-tall {
+    grid-column: span 12;
+  }
+  /* três planos em duas colunas deixavam o último sozinho e fora de eixo */
   .landing .plans {
-    grid-template-columns: repeat(2, 1fr);
+    grid-template-columns: minmax(0, 460px);
+    justify-content: center;
+  }
+  .landing .plan.pop {
+    transform: none;
+  }
+  .landing .plan.pop:hover {
+    transform: translateY(-5px);
   }
   .landing .split {
     grid-template-columns: 1fr;
@@ -1659,7 +2171,7 @@ html {
     padding: 72px 0;
   }
   .landing .hero {
-    padding: 56px 0 0;
+    padding: 44px 0 64px;
   }
   .landing .hero-grid {
     gap: 32px;
@@ -1681,11 +2193,22 @@ html {
     width: 48px;
     height: 48px;
   }
-  .landing .feat {
-    grid-template-columns: 1fr;
+  .landing .feat > .card,
+  .landing .feat > .card-wide,
+  .landing .feat > .card-tall {
+    grid-column: span 12;
   }
   .landing .plans {
     grid-template-columns: 1fr;
+  }
+  .landing .step-body {
+    padding: 28px 22px 22px;
+  }
+  .landing .step-stage {
+    height: 268px;
+  }
+  .landing .step-phone {
+    transform: translateX(-50%) translateY(-12px) scale(0.66);
   }
   .landing .cta-band {
     padding: 44px 24px;
@@ -1742,10 +2265,9 @@ html.dark .landing .btn-dark:hover {
   background: #f2f2f5;
 }
 
-/* Contraste intencional para superfícies glass claras e cards brancos. */
-.landing .chip,
-.landing .chip .chip-k,
-.landing .chip .chip-v,
+/* Contraste intencional para os cards brancos de dentro do aparelho.
+   Os chips flutuantes ficam de fora: no dark eles viram vidro escuro
+   e precisam de texto claro (ver override adiante). */
 .landing .chat,
 .landing .chat-q,
 .landing .chat-q b,
@@ -1770,10 +2292,86 @@ html.dark .landing .card.hi .card-ic {
 }
 
 /* glass — superfícies translúcidas */
-html.dark .landing .badge,
-html.dark .landing .chip {
+html.dark .landing .badge {
   background: rgba(255, 255, 255, 0.06);
   border-color: rgba(255, 255, 255, 0.14);
+}
+
+/* chips flutuantes do hero: vidro escuro com texto claro.
+   Antes herdavam tinta preta e sumiam contra o próprio fundo. */
+html.dark .landing .chip {
+  border-color: rgba(255, 255, 255, 0.16);
+  background-image: linear-gradient(160deg, rgba(255, 255, 255, 0.13), rgba(255, 255, 255, 0.06));
+  background-color: rgba(20, 18, 32, 0.72);
+  backdrop-filter: blur(20px) saturate(180%);
+  -webkit-backdrop-filter: blur(20px) saturate(180%);
+  box-shadow:
+    inset 0 1px 0 0 rgba(255, 255, 255, 0.2),
+    0 18px 40px -18px rgba(0, 0, 0, 0.8);
+  color: var(--ink);
+}
+html.dark .landing .chip .chip-v {
+  color: var(--ink);
+}
+html.dark .landing .chip .chip-k {
+  color: rgba(255, 255, 255, 0.66);
+}
+
+/* nav flutuante em vidro escuro */
+html.dark .landing .lp-nav-pill,
+html.dark .landing .lp-nav-sheet {
+  border-color: rgba(255, 255, 255, 0.14);
+  background-image: linear-gradient(160deg, rgba(255, 255, 255, 0.12), rgba(255, 255, 255, 0.05));
+  background-color: rgba(16, 14, 26, 0.82);
+  box-shadow:
+    inset 0 1px 0 0 rgba(255, 255, 255, 0.18),
+    var(--shadow-md);
+}
+html.dark .landing .lp-nav-sheet {
+  background-color: rgba(16, 14, 26, 0.97);
+}
+html.dark .landing .lp-nav-pill.is-scrolled {
+  box-shadow:
+    inset 0 1px 0 0 rgba(255, 255, 255, 0.18),
+    var(--shadow-lg);
+}
+html.dark .landing .lp-nav-link:hover,
+html.dark .landing .lp-nav-burger:hover,
+html.dark .landing .lp-nav-sheet a:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: var(--ink);
+}
+html.dark .landing .lp-nav-cta {
+  background: #ffffff;
+  color: #0c0c0d;
+}
+html.dark .landing .lp-nav-cta:hover {
+  background: #f2f2f5;
+}
+
+/* demos vivas dos recursos: vidro dentro do card de vidro */
+html.dark .landing .demo-msg,
+html.dark .landing .demo-wave {
+  background: rgba(255, 255, 255, 0.06);
+  border-color: rgba(255, 255, 255, 0.12);
+}
+html.dark .landing .demo-voice-chip {
+  background: rgba(255, 255, 255, 0.06);
+  border-color: rgba(255, 255, 255, 0.14);
+}
+html.dark .landing .demo-voice-chip.is-active {
+  background: #ffffff;
+  border-color: #ffffff;
+  color: #0c0c0d;
+}
+
+/* moldura do aparelho dos passos */
+html.dark .landing .step-phone-shell {
+  border-color: rgba(255, 255, 255, 0.14);
+  background-image: linear-gradient(160deg, rgba(255, 255, 255, 0.13), rgba(255, 255, 255, 0.05));
+  box-shadow:
+    inset 0 1px 0 0 rgba(255, 255, 255, 0.2),
+    0 -10px 34px -14px rgba(0, 0, 0, 0.8);
 }
 html.dark .landing .stats {
   background: rgba(255, 255, 255, 0.045);
