@@ -32,6 +32,7 @@ import {
   signOut as firebaseSignOut,
 } from "firebase/auth";
 import { getFirebaseAuth, googleProvider } from "@/lib/firebase";
+import { ensureAccountProfile } from "@/lib/account-profile";
 import { ensureMyLiveConfig, pushMyLiveConfig, regenerateSyncToken } from "@/lib/live/sync";
 import { loadConfig } from "@/lib/live/config";
 import { toast } from "sonner";
@@ -110,6 +111,14 @@ export function SyncTokenCard() {
       setUserEmail(activeEmail);
       setUserPhoto(activePhoto);
 
+      // Repara também contas Google criadas antes de existir o índice
+      // users/{uid}, para que apareçam na busca de cortesia do admin.
+      try {
+        await ensureAccountProfile(fbUser);
+      } catch (error) {
+        console.error("[SyncTokenCard] Falha ao indexar perfil da conta:", error);
+      }
+
       try {
         const row = await ensureMyLiveConfig();
         const t = row?.sync_token ?? "";
@@ -148,7 +157,8 @@ export function SyncTokenCard() {
     setAuthing(true);
     try {
       const fbAuth = getFirebaseAuth();
-      await signInWithEmailAndPassword(fbAuth, email, password);
+      const { user } = await signInWithEmailAndPassword(fbAuth, email, password);
+      await ensureAccountProfile(user);
       toast.success("Login realizado com sucesso!");
       bootstrap();
     } catch (err: any) {
@@ -178,7 +188,8 @@ export function SyncTokenCard() {
     setAuthing(true);
     try {
       const fbAuth = getFirebaseAuth();
-      await createUserWithEmailAndPassword(fbAuth, email, password);
+      const { user } = await createUserWithEmailAndPassword(fbAuth, email, password);
+      await ensureAccountProfile(user);
       toast.success("Conta criada com sucesso!");
       bootstrap();
     } catch (err: any) {
@@ -193,7 +204,8 @@ export function SyncTokenCard() {
     setAuthing(true);
     try {
       const fbAuth = getFirebaseAuth();
-      await signInWithPopup(fbAuth, googleProvider);
+      const { user } = await signInWithPopup(fbAuth, googleProvider);
+      await ensureAccountProfile(user);
       toast.success("Autenticado com Google!");
       bootstrap();
     } catch (err: any) {

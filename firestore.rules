@@ -102,10 +102,15 @@ service cloud.firestore {
         allow read, write: if (isOwnerOf(uid) && hasAccessRecord(uid)) || isServer();
       }
 
-      // Código de indicação do usuário — escrito pelo servidor.
+      // Código de indicação do usuário — o dono cria; o código é imutável.
       match /referral/{refId} {
         allow read: if isOwnerOf(uid) || isServer();
-        allow write: if isServer();
+        allow create: if isOwnerOf(uid)
+          && request.resource.data.code is string
+          && get(/databases/$(database)/documents/referral_codes/$(request.resource.data.code)).data.uid == uid;
+        allow update: if isOwnerOf(uid)
+          && request.resource.data.code == resource.data.code;
+        allow delete: if isServer();
       }
 
       // Vínculos indicador -> indicado — escritos pelo servidor.
@@ -126,14 +131,25 @@ service cloud.firestore {
     // ------------------------------------------------------------------
 
     match /referral_claims/{claimId} {
-      allow read: if isServer() || isSignedIn();
-      allow create: if isServer() || isSignedIn();
+      allow read: if isPrivileged()
+        || (isSignedIn()
+          && (resource.data.referrerUid == request.auth.uid
+            || resource.data.refereeUid == request.auth.uid));
+      allow create: if isServer()
+        || (isSignedIn()
+          && claimId == request.auth.uid
+          && request.resource.data.refereeUid == request.auth.uid
+          && request.resource.data.referrerUid != request.auth.uid
+          && get(/databases/$(database)/documents/referral_codes/$(request.resource.data.code)).data.uid
+            == request.resource.data.referrerUid);
       allow update, delete: if isServer();
     }
 
-    // Comissões de indicação — somente o servidor acessa.
+    // Comissões de indicação — o indicador lê as próprias; servidor administra.
     match /referral_commissions/{commissionId} {
-      allow read, write: if isPrivileged();
+      allow read: if isPrivileged()
+        || (isSignedIn() && resource.data.referrerUid == request.auth.uid);
+      allow write: if isPrivileged();
     }
 
     // Acessos de cortesia concedidos por admin — somente o servidor.
@@ -154,7 +170,9 @@ service cloud.firestore {
     // Código de indicação — público (é a chave de busca do convite).
     match /referral_codes/{code} {
       allow get: if true;
-      allow create, update, delete: if isServer();
+      allow create: if isServer()
+        || (isSignedIn() && request.resource.data.uid == request.auth.uid);
+      allow update, delete: if isServer();
     }
 
     // ------------------------------------------------------------------

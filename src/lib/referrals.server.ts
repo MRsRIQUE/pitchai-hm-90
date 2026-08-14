@@ -1,12 +1,19 @@
-import { fsGet, fsSet, fsCreate } from "@/lib/firebase.server";
+import { fsGet, fsSet, fsCreate, type FirestoreAuthMode } from "@/lib/firebase.server";
 
 export const REFERRAL_RATE = 0.6;
 export const REFERRAL_STORAGE_KEY = "pitchai:ref";
 
 /** Código curto e estável derivado do id do usuário. */
 export function codeFromUserId(userId: string): string {
-  const hex = userId.replace(/-/g, "").slice(0, 12);
-  return parseInt(hex, 16).toString(36).toUpperCase().padStart(8, "0").slice(-8);
+  // Firebase UIDs não são hexadecimais. O parseInt anterior gerava "NAN"
+  // para grande parte das contas Google e fazia usuários colidirem no mesmo
+  // código. FNV-1a aceita o UID alfanumérico completo e permanece estável.
+  let hash = 0x811c9dc5;
+  for (let index = 0; index < userId.length; index++) {
+    hash ^= userId.charCodeAt(index);
+    hash = Math.imul(hash, 0x01000193);
+  }
+  return (hash >>> 0).toString(36).toUpperCase().padStart(8, "0").slice(-8);
 }
 
 export function normalizeCode(raw: string): string {
@@ -21,23 +28,36 @@ export function normalizeCode(raw: string): string {
  * Garante que o usuário tenha um código de indicação no Firestore.
  * Armazenado em referral_codes/{code} (público) e users/{uid}/referral.
  */
-export async function ensureReferralCode(userId: string): Promise<string> {
-  const userDoc = await fsGet(`users/${userId}/referral/main`, { mode: "server" });
+type ReferralAuth = { mode: FirestoreAuthMode; userToken: string };
+
+export async function ensureReferralCode(userId: string, userToken: string): Promise<string> {
+  const auth: ReferralAuth = { mode: "server", userToken };
+  const userDoc = await fsGet(`users/${userId}/referral/main`, auth);
   const existing = userDoc?.data?.code as string | undefined;
   if (existing) return existing;
 
   let code = codeFromUserId(userId);
+  let codeAlreadyOwned = false;
+  let codeAvailable = false;
   for (let attempt = 0; attempt < 8; attempt++) {
     const clash = await fsGet(`referral_codes/${code}`, { mode: "public" });
-    if (!clash) break;
-    code = normalizeCode(code.slice(0, 6) + Math.random().toString(36).slice(2, 4));
+    if (!clash) {
+      codeAvailable = true;
+      break;
+    }
+    if (clash.data.uid === userId) {
+      codeAlreadyOwned = true;
+      break;
+    }
+    code = codeFromUserId(`${userId}:${attempt + 1}`);
   }
-  await fsSet(`referral_codes/${code}`, { uid: userId }, { mode: "server" });
-  await fsSet(
-    `users/${userId}/referral/main`,
-    { code, createdAt: new Date().toISOString() },
-    { mode: "server" },
-  );
+  if (!codeAvailable && !codeAlreadyOwned) {
+    throw new Error("Não foi possível reservar um código de indicação único.");
+  }
+  if (!codeAlreadyOwned) {
+    await fsSet(`referral_codes/${code}`, { uid: userId }, auth);
+  }
+  await fsSet(`users/${userId}/referral/main`, { code, createdAt: new Date().toISOString() }, auth);
   return code;
 }
 
@@ -52,12 +72,8 @@ export async function createReferralLink(
   referrerUid: string,
   refereeUid: string,
   code: string,
+  userToken: string,
 ): Promise<void> {
-  await fsSet(
-    `users/${referrerUid}/referrals/${refereeUid}`,
-    { referredAt: new Date().toISOString(), code },
-    { mode: "server" },
-  );
   await fsCreate(
     "referral_claims",
     {
@@ -68,6 +84,6 @@ export async function createReferralLink(
       createdAt: new Date().toISOString(),
     },
     refereeUid,
-    { mode: "server" },
+    { mode: "server", userToken },
   );
 }

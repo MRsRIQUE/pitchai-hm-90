@@ -11,6 +11,7 @@ import {
   type User,
 } from "firebase/auth";
 import { getFirebaseAuth, googleProvider } from "@/lib/firebase";
+import { ensureAccountProfile } from "@/lib/account-profile";
 
 type Search = { next?: string; mode?: "login" | "signup" };
 
@@ -144,13 +145,13 @@ function EntrarPage() {
     try {
       if (mode === "login") {
         const { user } = await signInWithEmailAndPassword(fbAuth, email, password);
-        await ensureUserDoc(user);
+        await ensureAccountProfile(user);
         await activateIfPending(user);
         toast.success("Login efetuado com sucesso!");
         navigate({ to: dest });
       } else if (mode === "signup") {
         const { user } = await createUserWithEmailAndPassword(fbAuth, email, password);
-        await ensureUserDoc(user);
+        await ensureAccountProfile(user);
         await activateIfPending(user);
         toast.success("Conta criada! Redirecionando...");
         navigate({ to: dest });
@@ -177,7 +178,7 @@ function EntrarPage() {
     try {
       const fbAuth = getFirebaseAuth();
       const { user } = await signInWithPopup(fbAuth, googleProvider);
-      await ensureUserDoc(user);
+      await ensureAccountProfile(user);
       await activateIfPending(user);
       toast.success("Autenticado com Google com sucesso!");
       navigate({ to: dest });
@@ -186,19 +187,6 @@ function EntrarPage() {
     } finally {
       authActionInProgress.current = false;
       setBusy(false);
-    }
-  }
-
-  /** O cadastro só termina depois que o backend confirma o índice users/{uid}. */
-  async function ensureUserDoc(user: User) {
-    const idToken = await user.getIdToken();
-    const response = await fetch("/api/account/ensure", {
-      method: "POST",
-      headers: { Authorization: `Bearer ${idToken}` },
-    });
-    const payload = await response.json().catch(() => null);
-    if (!response.ok) {
-      throw new Error(payload?.error || "Não foi possível concluir seu cadastro.");
     }
   }
 
