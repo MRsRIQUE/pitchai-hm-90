@@ -26,8 +26,10 @@ export function PitchAiLogo({
   const currentSize = sizeMap[size];
   const [logoFailed, setLogoFailed] = useState(false);
 
+  // `white` e `purple` são as variantes para fundo escuro: a tinta do wordmark
+  // vem da variante, não do tema — páginas como /planos são escuras sempre.
   const textColor =
-    variant === "white"
+    variant === "white" || variant === "purple"
       ? "text-white"
       : "text-[#1E0836] dark:text-white";
 

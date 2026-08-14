@@ -13,24 +13,12 @@ import {
   HelpCircle,
   Zap,
 } from "lucide-react";
-import { PITCHAI_PLANS, formatBRL, type PitchaiPlan } from "@/lib/live/plans";
+import { PITCHAI_PLANS, checkoutUrlWithEmail, formatBRL } from "@/lib/live/plans";
 import { getFirebaseAuth } from "@/lib/firebase";
 
 interface PaymentGuardProps {
   userEmail?: string;
   onActivated?: () => void;
-}
-
-/** Anexa o e-mail do usuário logado ao link de checkout da PerfectPay para pré-popular o campo. */
-function checkoutUrlWithEmail(plan: PitchaiPlan, email?: string): string {
-  if (!email) return plan.checkoutUrl;
-  try {
-    const url = new URL(plan.checkoutUrl);
-    url.searchParams.set("email", email);
-    return url.toString();
-  } catch {
-    return plan.checkoutUrl;
-  }
 }
 
 export function PaymentGuardOverlay({ userEmail, onActivated }: PaymentGuardProps) {
@@ -231,8 +219,8 @@ export function PaymentGuardOverlay({ userEmail, onActivated }: PaymentGuardProp
             <span>Verificar Meu Pagamento</span>
           </h3>
           <p className="mt-1 text-xs text-slate-300">
-            Digite o mesmo e-mail que você usou na hora do pagamento. Verificamos automaticamente
-            — sem precisar de código ou chave de licença.
+            Digite o mesmo e-mail que você usou na hora do pagamento. Verificamos automaticamente —
+            sem precisar de código ou chave de licença.
           </p>
 
           <form onSubmit={handleActivate} className="mt-4 space-y-3">

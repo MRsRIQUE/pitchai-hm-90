@@ -1,5 +1,5 @@
 import { createFileRoute, Link, useNavigate, useSearch } from "@tanstack/react-router";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 import { Eye, EyeOff, Loader2, Lock, Mail } from "lucide-react";
 import {
@@ -12,8 +12,13 @@ import {
 } from "firebase/auth";
 import { doc, setDoc } from "firebase/firestore";
 import { getFirebaseAuth, getFirebaseDb, googleProvider } from "@/lib/firebase";
+import { checkoutUrlWithEmail, getPlanByPriceId } from "@/lib/live/plans";
 
-type Search = { next?: string };
+type AuthMode = "login" | "signup" | "forgot";
+
+/** `mode` abre direto no formulário certo; `plan` guarda o plano escolhido na
+ *  landing para levar ao checkout assim que a conta existir. */
+type Search = { next?: string; mode?: AuthMode; plan?: string };
 
 export const Route = createFileRoute("/entrar")({
   head: () => ({
@@ -35,6 +40,11 @@ export const Route = createFileRoute("/entrar")({
   }),
   validateSearch: (s: Record<string, unknown>): Search => ({
     next: typeof s.next === "string" ? s.next : undefined,
+    mode:
+      s.mode === "signup" || s.mode === "forgot" || s.mode === "login"
+        ? (s.mode as AuthMode)
+        : undefined,
+    plan: typeof s.plan === "string" ? s.plan : undefined,
   }),
   component: EntrarPage,
 });
@@ -68,9 +78,9 @@ function translateAuthError(err: unknown): string {
 }
 
 function EntrarPage() {
-  const { next } = useSearch({ from: "/entrar" });
+  const { next, mode: modeParam, plan: planParam } = useSearch({ from: "/entrar" });
   const navigate = useNavigate();
-  const [mode, setMode] = useState<"login" | "signup" | "forgot">("login");
+  const [mode, setMode] = useState<AuthMode>(modeParam ?? "login");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
@@ -82,8 +92,25 @@ function EntrarPage() {
   const [confirmError, setConfirmError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const dest = safeNext(next);
+  const selectedPlan = getPlanByPriceId(planParam);
 
-  function changeMode(nextMode: "login" | "signup" | "forgot") {
+  /**
+   * Destino depois de autenticar. Quem chegou por um botão "Assinar" segue
+   * direto para o checkout do plano escolhido — o checkout é um link externo,
+   * por isso não passa pelo `next` (que só aceita caminho interno).
+   */
+  const goAfterAuth = useCallback(
+    (userEmail?: string | null) => {
+      if (selectedPlan) {
+        window.location.href = checkoutUrlWithEmail(selectedPlan, userEmail);
+        return;
+      }
+      navigate({ to: dest });
+    },
+    [selectedPlan, navigate, dest],
+  );
+
+  function changeMode(nextMode: AuthMode) {
     setMode(nextMode);
     setFormError(null);
     setEmailError(null);
@@ -120,13 +147,13 @@ function EntrarPage() {
     // que causava double-navigate quando o usuário já estava logado.
     const unsubFb = onAuthStateChanged(fbAuth, (user) => {
       if (user) {
-        navigate({ to: dest });
+        goAfterAuth(user.email);
       }
     });
     return () => {
       unsubFb();
     };
-  }, [dest, navigate]);
+  }, [goAfterAuth]);
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
@@ -142,13 +169,17 @@ function EntrarPage() {
         await ensureUserDoc(user.uid, user.email ?? email);
         await activateIfPending(user);
         toast.success("Login efetuado com sucesso!");
-        navigate({ to: dest });
+        goAfterAuth(user.email ?? email);
       } else if (mode === "signup") {
         const { user } = await createUserWithEmailAndPassword(fbAuth, email, password);
         await ensureUserDoc(user.uid, user.email ?? email);
         await activateIfPending(user);
-        toast.success("Conta criada! Redirecionando...");
-        navigate({ to: dest });
+        toast.success(
+          selectedPlan
+            ? `Conta criada! Levando você ao checkout do plano ${selectedPlan.name}...`
+            : "Conta criada! Redirecionando...",
+        );
+        goAfterAuth(user.email ?? email);
       } else {
         await sendPasswordResetEmail(fbAuth, email, {
           url: window.location.origin + "/reset-password",
@@ -173,7 +204,7 @@ function EntrarPage() {
       await ensureUserDoc(user.uid, user.email ?? "");
       await activateIfPending(user);
       toast.success("Autenticado com Google com sucesso!");
-      navigate({ to: dest });
+      goAfterAuth(user.email);
     } catch (err) {
       toast.error(translateAuthError(err));
     } finally {
@@ -250,6 +281,12 @@ function EntrarPage() {
               ? "Informe seu e-mail e mandamos o link de redefinição."
               : "Seu roteiro, voz e configuração ficam salvos na nuvem."}
           </p>
+
+          {selectedPlan && mode !== "forgot" ? (
+            <p className="mx-auto mt-4 w-fit rounded-full border border-[#a855f7]/30 bg-[#a855f7]/10 px-3.5 py-1.5 text-xs text-[#d8b4fe]">
+              Plano {selectedPlan.name} selecionado. Crie a conta para ir ao pagamento.
+            </p>
+          ) : null}
         </div>
 
         <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-6 shadow-[0_20px_60px_rgba(0,0,0,0.4)] backdrop-blur-2xl">
@@ -328,7 +365,7 @@ function EntrarPage() {
                     setPassword(e.target.value);
                     if (passwordError) setPasswordError(e.target.value.length >= 8 ? null : "Use pelo menos 8 caracteres na senha.");
                   }}
-                  onBlur={() => setPasswordError(mode !== "forgot" && password.length < 8 ? "Use pelo menos 8 caracteres na senha." : null)}
+                  onBlur={() => setPasswordError(password.length < 8 ? "Use pelo menos 8 caracteres na senha." : null)}
                   className={`w-full rounded-lg border bg-white/5 px-3 py-2.5 pl-9 pr-10 text-sm outline-none transition focus:border-[#8b5cf6] focus:ring-1 focus:ring-[#8b5cf6]/40 ${passwordError ? "border-[#f87171]" : "border-white/10"}`}
                 />
                 <button

@@ -85,6 +85,33 @@ export function monthlyEquivalent(plan: PitchaiPlan): string {
   return formatBRL(Math.round(plan.amountCents / plan.months));
 }
 
+/** Busca um plano pelo price_id — usado para retomar o checkout após o cadastro. */
+export function getPlanByPriceId(priceId?: string | null): PitchaiPlan | undefined {
+  if (!priceId) return undefined;
+  return PITCHAI_PLANS.find((plan) => plan.priceId === priceId);
+}
+
+/**
+ * Destino do botão "Assinar": o usuário passa pela criação de conta antes do
+ * checkout, para que o pagamento já caia numa conta existente.
+ */
+export function signupLinkForPlan(plan: PitchaiPlan) {
+  return { to: "/entrar", search: { mode: "signup" as const, plan: plan.priceId } };
+}
+
+/** Anexa o e-mail do usuário ao link de checkout para pré-popular o campo e
+ *  permitir que o webhook de pagamento case a compra com a conta. */
+export function checkoutUrlWithEmail(plan: PitchaiPlan, email?: string | null): string {
+  if (!email) return plan.checkoutUrl;
+  try {
+    const url = new URL(plan.checkoutUrl);
+    url.searchParams.set("email", email);
+    return url.toString();
+  } catch {
+    return plan.checkoutUrl;
+  }
+}
+
 /** Mapa price_id → tier interno usado nos limites de uso. */
 export const PRICE_TO_PLAN: Record<string, PlanTier> = {
   pitchai_mensal: "pro",

@@ -8,18 +8,20 @@ import {
   Download,
   MessageSquare,
   Mic,
-  Minus,
   MousePointerClick,
   Pin,
   Plus,
   Shield,
   Timer,
   Volume2,
+  X,
   Zap,
 } from "lucide-react";
-import { SiteNav } from "@/components/live/SiteNav";
+import { LandingNav } from "@/components/live/LandingNav";
 import { GridField } from "@/components/live/GridField";
 import { PitchAiLogo } from "@/components/live/PitchAiLogo";
+import { StepPhone, type StepPhoneState } from "@/components/live/StepPhone";
+import { ChatDemo, VoiceDemo } from "@/components/live/FeatureDemos";
 import { PITCHAI_PLANS } from "@/lib/live/plans";
 import "@/styles/landing.css";
 
@@ -48,52 +50,66 @@ export const Route = createFileRoute("/")({
   component: Landing,
 });
 
-const FEATURES = [
+/**
+ * Recursos em bento: as duas células grandes trazem demonstração viva, porque
+ * chat e voz são o motivo da compra. As quatro menores são cards de ícone.
+ */
+const FEATURES: Array<{
+  icon: typeof Shield;
+  title: string;
+  desc: string;
+  badge: string;
+  hi?: boolean;
+  size?: "wide" | "tall";
+  demo?: "chat" | "voice";
+}> = [
+  {
+    icon: MessageSquare,
+    title: "Responde o chat em menos de 2 segundos",
+    desc: "Frete, tamanho, prazo e garantia com base na ficha técnica que você cadastrou. Quando a pergunta sai do escopo, ela chama você em vez de arriscar.",
+    badge: "Atendimento",
+    size: "wide",
+    demo: "chat",
+  },
+  {
+    icon: Mic,
+    title: "Oito vozes neurais em português",
+    desc: "Pitch, saudação e chamada de oferta narrados em tempo real na transmissão.",
+    badge: "Voz",
+    size: "tall",
+    demo: "voice",
+  },
   {
     icon: Shield,
     title: "Proteção da sua conta",
-    desc: "Monitora a live continuamente e encerra a transmissão sozinha ao detectar risco de punição — antes que o TikTok derrube.",
+    desc: "Monitora a live e encerra sozinha ao detectar risco de punição, antes que o TikTok derrube.",
     badge: "Antiviolação",
     hi: true,
   },
   {
     icon: Pin,
     title: "Auto-fixar produto",
-    desc: "Refixa o produto ativo em intervalos que você define, para a oferta nunca sumir do topo da tela de quem acabou de entrar.",
+    desc: "Refixa a oferta ativa no intervalo que você definir, para ela nunca sumir do topo da tela.",
     badge: "Conversão",
-    hi: false,
-  },
-  {
-    icon: MessageSquare,
-    title: "Respostas no chat",
-    desc: "Responde frete, tamanho, prazo e garantia com base na ficha técnica que você cadastrou. Sem inventar informação.",
-    badge: "Atendimento",
-    hi: false,
-  },
-  {
-    icon: Mic,
-    title: "Narração em tempo real",
-    desc: "Oito vozes neurais em português brasileiro puxando pitch, saudação e chamada de oferta direto na transmissão.",
-    badge: "Voz",
-    hi: false,
   },
   {
     icon: Clock,
     title: "Encerrar por tempo",
-    desc: "Agende o fim da live com precisão de segundos. Ideal para quem trabalha em turnos ou reveza apresentadores.",
+    desc: "Agende o fim da live com precisão de segundos. Ideal para quem reveza apresentadores.",
     badge: "Automação",
-    hi: false,
   },
   {
     icon: Volume2,
     title: "Alerta de venda",
-    desc: "Efeito sonoro a cada compra confirmada. Sobe a energia da live e cria prova social na hora certa.",
+    desc: "Efeito sonoro a cada compra confirmada. Sobe a energia da live e cria prova social.",
     badge: "Engajamento",
-    hi: false,
   },
 ];
 
-const PHONE_VIDEOS = Array.from({ length: 10 }, (_, index) => `/videos/demo-${String(index + 1).padStart(2, "0")}.mp4`);
+const PHONE_VIDEOS = Array.from(
+  { length: 10 },
+  (_, index) => `/videos/demo-${String(index + 1).padStart(2, "0")}.mp4`,
+);
 
 const METRICS = [
   { value: "<2s", label: "Resposta no chat", sub: "Ninguém desiste da compra esperando" },
@@ -102,13 +118,21 @@ const METRICS = [
   { value: "0", label: "Violações", sub: "Encerramento automático ao menor risco" },
 ];
 
-const STEPS = [
+const STEPS: Array<{
+  n: number;
+  title: string;
+  desc: string;
+  meta: string;
+  icon: typeof Timer;
+  state: StepPhoneState;
+}> = [
   {
     n: 1,
     title: "Instale o app",
     desc: "Baixe, entre com seu e-mail e cadastre os produtos da vitrine com preço, ficha técnica e prazo de entrega.",
     meta: "Leva cerca de 3 minutos",
     icon: Timer,
+    state: "setup",
   },
   {
     n: 2,
@@ -116,6 +140,7 @@ const STEPS = [
     desc: "Comece a transmissão no TikTok Shop normalmente. A Pitch AI reconhece a live e assume o chat e a vitrine.",
     meta: "2 cliques",
     icon: MousePointerClick,
+    state: "live",
   },
   {
     n: 3,
@@ -123,6 +148,7 @@ const STEPS = [
     desc: "Ela responde dúvidas, refixa o produto ativo, narra as ofertas e avisa você quando alguém compra.",
     meta: "O resto da live",
     icon: Coffee,
+    state: "selling",
   },
 ];
 
@@ -138,7 +164,7 @@ const MARQUEE_ITEMS = [
 const FAQ = [
   {
     q: "O TikTok pode banir minha conta por usar automação?",
-    a: "A Pitch AI não burla nem simula comportamento humano na plataforma: ela atua sobre o que você já faz na live — responder o chat, fixar produto e narrar oferta. O módulo antiviolação monitora a transmissão e a encerra automaticamente ao identificar risco, justamente para proteger a conta.",
+    a: "A Pitch AI não burla nem simula comportamento humano na plataforma. Ela atua sobre o que você já faz na live: responder o chat, fixar produto e narrar oferta. O módulo antiviolação monitora a transmissão e a encerra automaticamente ao identificar risco, justamente para proteger a conta.",
   },
   {
     q: "Preciso deixar o computador ligado durante a live?",
@@ -184,6 +210,7 @@ function Landing() {
   const [phoneVideoFailed, setPhoneVideoFailed] = useState(false);
   const [reduceMotion, setReduceMotion] = useState(false);
   const phoneVideoRef = useRef<HTMLVideoElement>(null);
+  const phoneVideoFailuresRef = useRef(0);
 
   useEffect(() => {
     const media = window.matchMedia("(prefers-reduced-motion: reduce)");
@@ -196,23 +223,25 @@ function Landing() {
   useEffect(() => {
     const video = phoneVideoRef.current;
     if (!video || reduceMotion || phoneVideoFailed) return;
-    video.load();
     void video.play().catch(() => undefined);
   }, [phoneVideoIndex, reduceMotion, phoneVideoFailed]);
 
-  useEffect(() => {
-    const video = phoneVideoRef.current;
-    if (!video || reduceMotion || phoneVideoFailed) return;
-    const onEnded = () => {
-      setPhoneVideoFailed(false);
-      setPhoneVideoIndex((index) => (index + 1) % PHONE_VIDEOS.length);
-    };
-    video.addEventListener("ended", onEnded);
-    return () => video.removeEventListener("ended", onEnded);
-  }, [reduceMotion, phoneVideoFailed]);
+  /* `ended` e `error` são props do React no próprio <video>: como a key muda a
+     cada clipe, o elemento é remontado e um listener imperativo ficaria preso
+     ao elemento anterior — era o que travava a playlist no fim do 2º vídeo. */
+  const handlePhoneVideoEnded = () => {
+    phoneVideoFailuresRef.current = 0;
+    setPhoneVideoIndex((index) => (index + 1) % PHONE_VIDEOS.length);
+  };
 
   const handlePhoneVideoError = () => {
-    setPhoneVideoFailed(true);
+    phoneVideoFailuresRef.current += 1;
+    // um clipe faltando não pode derrubar a playlist inteira
+    if (phoneVideoFailuresRef.current >= PHONE_VIDEOS.length) {
+      setPhoneVideoFailed(true);
+      return;
+    }
+    setPhoneVideoIndex((index) => (index + 1) % PHONE_VIDEOS.length);
   };
 
   useEffect(() => {
@@ -308,7 +337,7 @@ function Landing() {
     <div className="landing">
       <GridField />
       <div className="landing-progress" aria-hidden="true" />
-      <SiteNav tone="light" />
+      <LandingNav />
 
       {/* ============ HERO ============ */}
       <header className="hero">
@@ -330,8 +359,7 @@ function Landing() {
 
             <p className="lede">
               A Pitch AI fica ao lado da sua transmissão: responde o chat na hora, refixa o produto
-              ativo antes que ele suma e narra as ofertas em voz alta — enquanto você cuida da
-              câmera.
+              ativo antes que ele suma e narra as ofertas em voz alta enquanto você cuida da câmera.
             </p>
 
             <div className="hero-actions">
@@ -387,13 +415,19 @@ function Landing() {
                       playsInline
                       loop={false}
                       preload="metadata"
+                      onEnded={handlePhoneVideoEnded}
                       onError={handlePhoneVideoError}
                       aria-label={`Demonstração ${phoneVideoIndex + 1} da live no TikTok Shop`}
                     />
                   ) : null}
-                  <div className={`stage-fallback${phoneVideoFailed || reduceMotion ? " is-visible" : ""}`} aria-hidden="true">
+                  <div
+                    className={`stage-fallback${phoneVideoFailed || reduceMotion ? " is-visible" : ""}`}
+                    aria-hidden="true"
+                  >
                     <img src="/logo-nav.png" alt="" />
-                    <span>{phoneVideoFailed ? "Demonstração disponível em breve" : "Pitch AI ao vivo"}</span>
+                    <span>
+                      {phoneVideoFailed ? "Demonstração disponível em breve" : "Pitch AI ao vivo"}
+                    </span>
                   </div>
                 </div>
                 <div className="screen-bottom">
@@ -445,10 +479,9 @@ function Landing() {
             <div className="eyebrow">Como funciona</div>
             <h2>
               Do download à primeira venda em{" "}
-              <span className="h1-serif" style={{ fontStyle: "italic" }}>
-                5 minutos
+              <span className="h1-serif nowrap" style={{ fontStyle: "italic" }}>
+                5 minutos.
               </span>
-              .
             </h2>
             <p>
               Sem integração, sem API, sem configurar servidor. A Pitch AI roda junto com a sua live
@@ -458,12 +491,17 @@ function Landing() {
 
           <div className="steps rv">
             {STEPS.map((s) => (
-              <div className="step" key={s.n}>
-                <div className="step-n">{s.n}</div>
-                <h3>{s.title}</h3>
-                <p>{s.desc}</p>
-                <div className="step-meta">
-                  <s.icon /> {s.meta}
+              <div className="step" key={s.n} tabIndex={0}>
+                <div className="step-body">
+                  <div className="step-n">{s.n}</div>
+                  <h3>{s.title}</h3>
+                  <p>{s.desc}</p>
+                  <div className="step-meta">
+                    <s.icon /> {s.meta}
+                  </div>
+                </div>
+                <div className="step-stage">
+                  <StepPhone state={s.state} />
                 </div>
               </div>
             ))}
@@ -477,7 +515,7 @@ function Landing() {
         <div className="wrap">
           <div className="sec-head rv">
             <div className="eyebrow">Recursos</div>
-            <h2>Feito para as regras do TikTok Shop — não contra elas.</h2>
+            <h2>Feito para as regras do TikTok Shop, não contra elas.</h2>
             <p>
               Cada função nasceu de um problema real de quem faz live: o chat que ninguém dá conta,
               o produto que despina, a voz que cansa.
@@ -486,13 +524,18 @@ function Landing() {
 
           <div className="feat rv">
             {FEATURES.map((f) => (
-              <article className={`card${f.hi ? " hi" : ""}`} key={f.title}>
+              <article
+                className={`card${f.hi ? " hi" : ""}${f.size ? ` card-${f.size}` : ""}`}
+                key={f.title}
+              >
                 <div className="card-ic">
                   <f.icon />
                 </div>
                 <div className="card-tag">{f.badge}</div>
                 <h3>{f.title}</h3>
                 <p>{f.desc}</p>
+                {f.demo === "chat" ? <ChatDemo /> : null}
+                {f.demo === "voice" ? <VoiceDemo /> : null}
               </article>
             ))}
           </div>
@@ -537,14 +580,13 @@ function Landing() {
                     <span className="per">{per}</span>
                   </div>
                   <div className="plan-note">{note}</div>
-                  <a
-                    href={p.checkoutUrl}
-                    target="_blank"
-                    rel="noreferrer"
+                  <Link
+                    to="/entrar"
+                    search={{ mode: "signup", plan: p.priceId }}
                     className={`btn ${p.highlight ? "btn-dark" : "btn-outline"}`}
                   >
                     Assinar {p.name}
-                  </a>
+                  </Link>
                   {p.allowAudio ? (
                     <ul>
                       <li>
@@ -573,8 +615,8 @@ function Landing() {
                         <Check className="check" /> Auto-fixar e leitura da vitrine
                       </li>
                       <li className="muted-li">
-                        <Minus className="check" style={{ color: "var(--ink-3)" }} /> Sem narração
-                        por voz
+                        <X className="check" style={{ color: "var(--ink-3)" }} /> Sem narração por
+                        voz
                       </li>
                     </ul>
                   )}

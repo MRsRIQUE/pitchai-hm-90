@@ -7,6 +7,10 @@
    com font-display: swap para evitar render-blocking e garantir alta compatibilidade em produção. */
 
 @custom-variant light (&:is(.light *));
+/* `dark:` precisa seguir a classe <html class="dark"> aplicada pelo useTheme.
+   Sem esta linha o Tailwind cai no padrão @media (prefers-color-scheme: dark)
+   e o tema do sistema sobrepõe o toggle — era o que apagava textos no claro. */
+@custom-variant dark (&:is(.dark *));
 
 @theme inline {
   --font-display: "Plus Jakarta Sans", system-ui, sans-serif;
