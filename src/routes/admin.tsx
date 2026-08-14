@@ -350,13 +350,30 @@ function QuickLink({ label, hint, onClick }: { label: string; hint: string; onCl
   );
 }
 
+function readableAdminError(error: unknown): string {
+  const fallback = "Não foi possível carregar os dados. Atualize a página e tente novamente.";
+  const message = error instanceof Error ? error.message : String(error ?? "");
+
+  // O transporte das server functions pode devolver a página HTML de erro da
+  // aplicação. Nunca exibimos esse documento bruto dentro do painel.
+  if (
+    !message.trim() ||
+    /<(?:!doctype|html|head|body)\b/i.test(message) ||
+    /unexpected token\s+['"]?</i.test(message)
+  ) {
+    return fallback;
+  }
+
+  return message;
+}
+
 function ErrorState({ error }: { error: unknown }) {
   return (
     <div
       role="alert"
       className="rounded-xl border border-red-400/30 bg-red-500/10 p-4 text-sm text-red-200"
     >
-      {error instanceof Error ? error.message : "Não foi possível carregar os dados."}
+      {readableAdminError(error)}
     </div>
   );
 }

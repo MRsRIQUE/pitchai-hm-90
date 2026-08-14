@@ -56,8 +56,12 @@ function escapeCsvCell(value: unknown): string {
 
 function readableServerError(error: unknown, fallback: string): string {
   const message = error instanceof Error ? error.message : String(error ?? "");
-  if (message.includes("<!doctype html") || message.includes("<html")) {
-    return "O servidor não conseguiu processar a cortesia. Atualize a página e tente novamente.";
+  if (
+    !message.trim() ||
+    /<(?:!doctype|html|head|body)\b/i.test(message) ||
+    /unexpected token\s+['"]?</i.test(message)
+  ) {
+    return fallback;
   }
   return message || fallback;
 }
@@ -562,9 +566,10 @@ export function UsuariosTab() {
                   {usersError ? (
                     <tr>
                       <td colSpan={10} className="py-8 text-center text-red-300 font-sans">
-                        {usersError instanceof Error
-                          ? usersError.message
-                          : "Falha ao carregar usuários."}
+                        {readableServerError(
+                          usersError,
+                          "Falha ao carregar usuários. Atualize a página e tente novamente.",
+                        )}
                       </td>
                     </tr>
                   ) : usersLoading ? (
