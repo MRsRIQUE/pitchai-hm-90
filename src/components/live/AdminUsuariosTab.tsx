@@ -1,7 +1,8 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { CompedAccess } from "@/lib/live/comped.functions";
 import { getFirebaseAuth } from "@/lib/firebase";
+import { PITCHAI_PLANS } from "@/lib/live/plans";
 import {
   calculateUserCost,
   DEFAULT_PLAN_QUOTAS,
@@ -36,10 +37,22 @@ type SubTab = "custos" | "calculadora" | "cotas" | "cortesia";
 
 const PLAN_PRICES: Record<string, number> = {
   gratuito: 0,
-  starter: 47,
-  pro: 97,
-  studio: 197,
+  ...Object.fromEntries(
+    PITCHAI_PLANS.map((plan) => [plan.priceId, plan.amountCents / 100 / plan.months]),
+  ),
+  // Compatibilidade de leitura para assinaturas legadas.
+  pro: 27.9,
+  starter: 27.9,
+  studio: 27.9,
 };
+
+const PAID_PLAN_IDS = PITCHAI_PLANS.map((plan) => plan.priceId);
+
+function escapeCsvCell(value: unknown): string {
+  let text = String(value ?? "");
+  if (/^[=+\-@\t\r]/.test(text)) text = `'${text}`;
+  return `"${text.replace(/"/g, '""')}"`;
+}
 
 function readableServerError(error: unknown, fallback: string): string {
   const message = error instanceof Error ? error.message : String(error ?? "");
@@ -95,6 +108,7 @@ export function UsuariosTab() {
   const {
     data: usersList = [],
     isLoading: usersLoading,
+    error: usersError,
     refetch: refetchUsers,
   } = useQuery({
     queryKey: ["admin", "users-with-usage"],
@@ -145,7 +159,7 @@ export function UsuariosTab() {
     queryKey: ["admin", "plan-quotas"],
     queryFn: fetchPlanQuotas,
   });
-  useMemo(() => {
+  useEffect(() => {
     if (serverQuotas) setQuotas(serverQuotas);
   }, [serverQuotas]);
 
@@ -155,7 +169,7 @@ export function UsuariosTab() {
   });
 
   // Profiler Calculator State
-  const [simPlan, setSimPlan] = useState<"starter" | "pro" | "studio">("pro");
+  const [simPlan, setSimPlan] = useState("pitchai_mensal");
   const [simLives, setSimLives] = useState(15);
   const [simDuration, setSimDuration] = useState(60); // minutos por live
   const [simPromptsPerLive, setSimPromptsPerLive] = useState(25);
@@ -173,7 +187,7 @@ export function UsuariosTab() {
     const totalTokensOut = totalPrompts * tokensOutPerPrompt;
     const totalTtsMin = simLives * simTtsMinutesPerLive;
 
-    const planPrice = PLAN_PRICES[simPlan] || 97;
+    const planPrice = PLAN_PRICES[simPlan] || PLAN_PRICES.pitchai_mensal;
 
     const costDetails = calculateUserCost(
       totalTokensIn,
@@ -317,13 +331,14 @@ export function UsuariosTab() {
       u.isOverQuota ? "Sim" : "Não",
     ]);
 
-    const csvContent =
-      "data:text/csv;charset=utf-8," +
-      [headers.join(","), ...rows.map((r) => r.join(","))].join("\n");
-
-    const encodedUri = encodeURI(csvContent);
+    const csvContent = [headers, ...rows]
+      .map((row) => row.map(escapeCsvCell).join(","))
+      .join("\r\n");
+    const blobUrl = URL.createObjectURL(
+      new Blob(["\uFEFF", csvContent], { type: "text/csv;charset=utf-8" }),
+    );
     const link = document.createElement("a");
-    link.setAttribute("href", encodedUri);
+    link.setAttribute("href", blobUrl);
     link.setAttribute(
       "download",
       `relatorio-custos-usuarios-pitchai-${new Date().toISOString().slice(0, 10)}.csv`,
@@ -331,6 +346,7 @@ export function UsuariosTab() {
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
+    URL.revokeObjectURL(blobUrl);
   };
 
   return (
@@ -482,9 +498,16 @@ export function UsuariosTab() {
                 >
                   <option value="all">Todos os Planos</option>
                   <option value="gratuito">Gratuito</option>
-                  <option value="starter">Starter (R$ 47)</option>
-                  <option value="pro">Pro (R$ 97)</option>
-                  <option value="studio">Studio (R$ 197)</option>
+                  {PITCHAI_PLANS.map((plan) => (
+                    <option key={plan.priceId} value={plan.priceId}>
+                      {plan.name} (
+                      {(plan.amountCents / 100).toLocaleString("pt-BR", {
+                        style: "currency",
+                        currency: "BRL",
+                      })}
+                      )
+                    </option>
+                  ))}
                 </select>
 
                 <select
@@ -536,7 +559,21 @@ export function UsuariosTab() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-white/5 font-mono">
-                  {filteredUsers.length === 0 ? (
+                  {usersError ? (
+                    <tr>
+                      <td colSpan={10} className="py-8 text-center text-red-300 font-sans">
+                        {usersError instanceof Error
+                          ? usersError.message
+                          : "Falha ao carregar usuários."}
+                      </td>
+                    </tr>
+                  ) : usersLoading ? (
+                    <tr>
+                      <td colSpan={10} className="py-8 text-center text-white/40 font-sans">
+                        Carregando usuários…
+                      </td>
+                    </tr>
+                  ) : filteredUsers.length === 0 ? (
                     <tr>
                       <td colSpan={10} className="py-8 text-center text-white/40 font-sans">
                         Nenhum usuário encontrado para os filtros selecionados.
@@ -687,12 +724,22 @@ export function UsuariosTab() {
                 Plano do Usuário
                 <select
                   value={simPlan}
-                  onChange={(e) => setSimPlan(e.target.value as any)}
+                  onChange={(e) => setSimPlan(e.target.value)}
                   className="mt-1.5 rounded-lg bg-black/40 border border-white/10 px-3 py-2 text-white font-medium outline-none focus:border-[#7C3AED]"
                 >
-                  <option value="starter">Starter — R$ 47/mês</option>
-                  <option value="pro">Pro — R$ 97/mês</option>
-                  <option value="studio">Studio High Scale — R$ 197/mês</option>
+                  {PAID_PLAN_IDS.map((planId) => {
+                    const plan = PITCHAI_PLANS.find((item) => item.priceId === planId)!;
+                    return (
+                      <option key={planId} value={planId}>
+                        {plan.name} —{" "}
+                        {PLAN_PRICES[planId].toLocaleString("pt-BR", {
+                          style: "currency",
+                          currency: "BRL",
+                        })}
+                        /mês equivalente
+                      </option>
+                    );
+                  })}
                 </select>
               </label>
 

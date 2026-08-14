@@ -351,9 +351,7 @@ function EntrarPage() {
                   }}
                   onBlur={() =>
                     setPasswordError(
-                      mode !== "forgot" && password.length < 8
-                        ? "Use pelo menos 8 caracteres na senha."
-                        : null,
+                      password.length < 8 ? "Use pelo menos 8 caracteres na senha." : null,
                     )
                   }
                   className={`w-full rounded-lg border bg-white/5 px-3 py-2.5 pl-9 pr-10 text-sm outline-none transition focus:border-[#8b5cf6] focus:ring-1 focus:ring-[#8b5cf6]/40 ${passwordError ? "border-[#f87171]" : "border-white/10"}`}

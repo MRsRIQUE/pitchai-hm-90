@@ -1,6 +1,17 @@
 import { createServerFn } from "@tanstack/react-start";
 import { requireFirebaseAuth, type FirebaseAuthContext } from "@/lib/firebase-auth";
-import { isAdmin, fsQuery, fsSet, fsDelete, fsGet, getSubscription } from "@/lib/firebase.server";
+import {
+  isAdmin,
+  fsQuery,
+  fsGetMany,
+  fsSet,
+  fsDelete,
+  fsGet,
+  type SubscriptionData,
+} from "@/lib/firebase.server";
+import { PITCHAI_PLANS } from "@/lib/live/plans";
+import { parseLocaleNumber } from "@/lib/live/number-parsing";
+export { parseLocaleNumber } from "@/lib/live/number-parsing";
 
 export type RankedProduct = {
   id: string;
@@ -32,6 +43,8 @@ export type Plan = {
   id: string;
   slug: string;
   nome: string;
+  amount_cents: number;
+  months: number;
   preco_mensal: number;
   assinantes: number;
   ordem: number;
@@ -53,6 +66,41 @@ async function ensureAdmin(ctx: FirebaseAuthContext): Promise<void> {
 
 function adminFirestoreOptions(ctx: FirebaseAuthContext) {
   return { mode: "server" as const, userToken: ctx.firebaseToken };
+}
+
+type SubscriptionWithUser = SubscriptionData & { userId: string };
+
+async function fetchSubscriptionsForUsers(
+  ctx: FirebaseAuthContext,
+  userIds: string[],
+): Promise<SubscriptionWithUser[]> {
+  const firestore = adminFirestoreOptions(ctx);
+  const docs = await fsGetMany(
+    userIds.map((userId) => `users/${userId}/subscription/current`),
+    firestore,
+  );
+  return docs
+    .filter((doc) => doc.id === "current")
+    .map((doc) => {
+      const match = doc.path.match(/^users\/([^/]+)\/subscription\/current$/);
+      const data = doc.data as unknown as SubscriptionData;
+      return { ...data, userId: data.user_id || match?.[1] || "" };
+    })
+    .filter((subscription) => Boolean(subscription.userId));
+}
+
+async function fetchAllSubscriptions(ctx: FirebaseAuthContext): Promise<SubscriptionWithUser[]> {
+  const users = await fsQuery("users", adminFirestoreOptions(ctx));
+  return fetchSubscriptionsForUsers(
+    ctx,
+    users.map((user) => user.id),
+  );
+}
+
+function isRevenueActive(subscription: SubscriptionData): boolean {
+  if (subscription.status !== "active") return false;
+  const end = subscription.current_period_end || subscription.granted_until;
+  return !end || (Number.isFinite(Date.parse(end)) && Date.parse(end) > Date.now());
 }
 
 /* ---------- Auth ---------- */
@@ -135,7 +183,23 @@ const updateProduct = createServerFn({ method: "POST" })
   .middleware([requireFirebaseAuth])
   .validator((data: { id: string; patch: Record<string, unknown> }) => {
     if (!data?.id || typeof data.patch !== "object") throw new Error("Invalid update payload");
-    return data;
+    const allowed = new Set([
+      "nome",
+      "vendas",
+      "receita",
+      "destaque",
+      "link",
+      "preco",
+      "imagem_url",
+      "categoria",
+      "comissao_pct",
+      "ordem",
+    ]);
+    const patch = Object.fromEntries(
+      Object.entries(data.patch).filter(([key]) => allowed.has(key)),
+    );
+    if (!Object.keys(patch).length) throw new Error("No valid product fields provided");
+    return { id: data.id, patch };
   })
   .handler(async ({ data, context }) => {
     await ensureAdmin(context);
@@ -181,6 +245,36 @@ export async function deleteAllRankedProducts() {
   await deleteAllProducts({});
 }
 
+function detectDelimiter(line: string): "," | ";" | "\t" {
+  if (line.includes("\t")) return "\t";
+  if (line.includes(";")) return ";";
+  return ",";
+}
+
+function splitDelimitedLine(line: string, delimiter: string): string[] {
+  const fields: string[] = [];
+  let field = "";
+  let quoted = false;
+  for (let index = 0; index < line.length; index += 1) {
+    const char = line[index];
+    if (char === '"') {
+      if (quoted && line[index + 1] === '"') {
+        field += '"';
+        index += 1;
+      } else {
+        quoted = !quoted;
+      }
+    } else if (char === delimiter && !quoted) {
+      fields.push(field.trim());
+      field = "";
+    } else {
+      field += char;
+    }
+  }
+  fields.push(field.trim());
+  return fields;
+}
+
 /**
  * Parseia CSV/colagens:
  *   nome,vendas,receita[,preco[,comissao_pct[,link[,imagem_url[,categoria]]]]]
@@ -203,7 +297,8 @@ export function parseRankingCSV(raw: string): NewRankedProduct[] {
   const isHeaderRow = (cols: string[]) =>
     /^(nome|name|produto|product)$/i.test(cols[0]) && /^(vendas|sales|qtd)$/i.test(cols[1] ?? "");
 
-  const firstCols = lines[0].split(/[,;\t]/).map((c) => c.trim());
+  const delimiter = detectDelimiter(lines[0]);
+  const firstCols = splitDelimitedLine(lines[0], delimiter);
   const hasHeader = isHeaderRow(firstCols);
   const headerCols = hasHeader ? firstCols.map((c) => c.toLowerCase()) : [];
 
@@ -226,18 +321,18 @@ export function parseRankingCSV(raw: string): NewRankedProduct[] {
   const dataLines = hasHeader ? lines.slice(1) : lines;
 
   for (const line of dataLines) {
-    const cols = line.split(/[,;\t]/).map((c) => c.trim());
+    const cols = splitDelimitedLine(line, delimiter);
     if (cols.length < 2) continue;
 
     const nome = cols[0];
     if (!nome) continue;
 
-    const numOr0 = (v: string | undefined) => (v ? Number(v.replace(/[^\d.-]/g, "")) || 0 : 0);
-
-    const vendas = numOr0(cols[1]);
-    const receita = revenueIdx >= 0 ? numOr0(cols[revenueIdx]) : numOr0(cols[2]);
-    const preco = priceIdx >= 0 ? numOr0(cols[priceIdx]) : numOr0(cols[3]);
-    const comissao = commissionIdx >= 0 ? numOr0(cols[commissionIdx]) : numOr0(cols[4]);
+    const vendas = parseLocaleNumber(cols[1]);
+    const receita =
+      revenueIdx >= 0 ? parseLocaleNumber(cols[revenueIdx]) : parseLocaleNumber(cols[2]);
+    const preco = priceIdx >= 0 ? parseLocaleNumber(cols[priceIdx]) : parseLocaleNumber(cols[3]);
+    const comissao =
+      commissionIdx >= 0 ? parseLocaleNumber(cols[commissionIdx]) : parseLocaleNumber(cols[4]);
     const link = linkIdx >= 0 ? (cols[linkIdx] ?? "") : (cols[5] ?? "");
     const imagem = imageIdx >= 0 ? (cols[imageIdx] ?? "") : (cols[6] ?? "");
     const categoria = categoryIdx >= 0 ? (cols[categoryIdx] ?? "") : (cols[7] ?? "");
@@ -263,17 +358,22 @@ const getPlans = createServerFn({ method: "GET" })
   .middleware([requireFirebaseAuth])
   .handler(async ({ context }): Promise<Plan[]> => {
     await ensureAdmin(context);
-    const docs = await fsQuery("admin_plans", {
-      orderBy: { field: "ordem", direction: "ASCENDING" },
-      ...adminFirestoreOptions(context),
-    });
-    return docs.map((d) => ({
-      id: d.id,
-      slug: (d.data.slug as string) ?? d.id,
-      nome: (d.data.nome as string) ?? "",
-      preco_mensal: (d.data.preco_mensal as number) ?? 0,
-      assinantes: (d.data.assinantes as number) ?? 0,
-      ordem: (d.data.ordem as number) ?? 0,
+    const subscriptions = await fetchAllSubscriptions(context);
+    const activeCounts = subscriptions.reduce<Record<string, number>>((counts, subscription) => {
+      if (isRevenueActive(subscription)) {
+        counts[subscription.plan] = (counts[subscription.plan] ?? 0) + 1;
+      }
+      return counts;
+    }, {});
+    return PITCHAI_PLANS.map((plan, index) => ({
+      id: plan.priceId,
+      slug: plan.priceId,
+      nome: plan.name,
+      amount_cents: plan.amountCents,
+      months: plan.months,
+      preco_mensal: plan.amountCents / 100 / plan.months,
+      assinantes: activeCounts[plan.priceId] ?? 0,
+      ordem: index,
     }));
   });
 
@@ -285,7 +385,12 @@ const updatePlanFn = createServerFn({ method: "POST" })
   .middleware([requireFirebaseAuth])
   .validator((data: { id: string; patch: Record<string, unknown> }) => {
     if (!data?.id || typeof data.patch !== "object") throw new Error("Invalid update payload");
-    return data;
+    const allowed = new Set(["nome", "preco_mensal", "assinantes", "ordem"]);
+    const patch = Object.fromEntries(
+      Object.entries(data.patch).filter(([key]) => allowed.has(key)),
+    );
+    if (!Object.keys(patch).length) throw new Error("No valid plan fields provided");
+    return { id: data.id, patch };
   })
   .handler(async ({ data, context }) => {
     await ensureAdmin(context);
@@ -371,30 +476,64 @@ export type AdminCommission = {
   paid_at: string | null;
 };
 
+function mapCommission(d: { id: string; data: Record<string, unknown> }): AdminCommission {
+  return {
+    id: d.id,
+    referrer_id: (d.data.referrerUid as string) ?? "",
+    referred_id: (d.data.refereeUid as string) ?? "",
+    plan: (d.data.plan as string) ?? null,
+    base_cents: (d.data.base_cents as number) ?? 0,
+    amount_cents: (d.data.amount_cents as number) ?? 0,
+    status: (d.data.status as string) ?? "pendente",
+    created_at: (d.data.createdAt as string) ?? "",
+    paid_at: (d.data.paidAt as string) ?? null,
+  };
+}
+
 const getCommissions = createServerFn({ method: "GET" })
   .middleware([requireFirebaseAuth])
   .handler(async ({ context }): Promise<AdminCommission[]> => {
     await ensureAdmin(context);
     const docs = await fsQuery("referral_commissions", {
       orderBy: { field: "createdAt", direction: "DESCENDING" },
-      limit: 500,
       ...adminFirestoreOptions(context),
     });
-    return docs.map((d) => ({
-      id: d.id,
-      referrer_id: (d.data.referrerUid as string) ?? "",
-      referred_id: (d.data.refereeUid as string) ?? "",
-      plan: (d.data.plan as string) ?? null,
-      base_cents: (d.data.base_cents as number) ?? 0,
-      amount_cents: (d.data.amount_cents as number) ?? 0,
-      status: (d.data.status as string) ?? "pendente",
-      created_at: (d.data.createdAt as string) ?? "",
-      paid_at: (d.data.paidAt as string) ?? null,
-    }));
+    return docs.map(mapCommission);
   });
 
 export async function fetchCommissions(): Promise<AdminCommission[]> {
   return getCommissions({});
+}
+
+export type AdminCommissionPage = {
+  items: AdminCommission[];
+  nextCursor: string | null;
+};
+
+const getCommissionsPage = createServerFn({ method: "POST" })
+  .middleware([requireFirebaseAuth])
+  .validator((data: { cursor?: string | null }) => ({ cursor: data?.cursor || null }))
+  .handler(async ({ data, context }): Promise<AdminCommissionPage> => {
+    await ensureAdmin(context);
+    const pageSize = 100;
+    const docs = await fsQuery("referral_commissions", {
+      orderBy: { field: "createdAt", direction: "DESCENDING" },
+      ...(data.cursor ? { startAfter: data.cursor } : {}),
+      limit: pageSize + 1,
+      ...adminFirestoreOptions(context),
+    });
+    const hasMore = docs.length > pageSize;
+    const pageDocs = docs.slice(0, pageSize);
+    return {
+      items: pageDocs.map(mapCommission),
+      nextCursor: hasMore
+        ? ((pageDocs.at(-1)?.data.createdAt as string | undefined) ?? null)
+        : null,
+    };
+  });
+
+export async function fetchCommissionsPage(cursor?: string | null): Promise<AdminCommissionPage> {
+  return getCommissionsPage({ data: { cursor } });
 }
 
 const setStatusFn = createServerFn({ method: "POST" })
@@ -432,7 +571,7 @@ export async function setCommissionStatus(id: string, status: "pendente" | "pago
 export type UserCostProfile = {
   userId: string;
   email: string;
-  plan: "gratuito" | "starter" | "pro" | "studio";
+  plan: string;
   status: "active" | "comped" | "quota_exceeded" | "blocked";
   tokensIn: number;
   tokensOut: number;
@@ -465,30 +604,30 @@ export const DEFAULT_PLAN_QUOTAS: Record<string, PlanQuota> = {
     allowedModel: "flash",
     overLimitAction: "block",
   },
-  starter: {
-    planSlug: "starter",
-    planName: "Iniciante",
-    dailyTokenLimit: 100000,
-    monthlyTokenLimit: 1000000,
-    ttsMinutesLimit: 30,
+  pitchai_mensal: {
+    planSlug: "pitchai_mensal",
+    planName: "Mensal",
+    dailyTokenLimit: 500000,
+    monthlyTokenLimit: 5000000,
+    ttsMinutesLimit: 0,
     allowedModel: "flash",
-    overLimitAction: "throttle",
+    overLimitAction: "alert",
   },
-  pro: {
-    planSlug: "pro",
-    planName: "Profissional",
+  pitchai_trimestral: {
+    planSlug: "pitchai_trimestral",
+    planName: "Trimestral",
     dailyTokenLimit: 500000,
     monthlyTokenLimit: 5000000,
     ttsMinutesLimit: 180,
     allowedModel: "both",
     overLimitAction: "alert",
   },
-  studio: {
-    planSlug: "studio",
-    planName: "Live Studio High Scale",
-    dailyTokenLimit: 2000000,
-    monthlyTokenLimit: 20000000,
-    ttsMinutesLimit: 600,
+  pitchai_anual: {
+    planSlug: "pitchai_anual",
+    planName: "Anual",
+    dailyTokenLimit: 500000,
+    monthlyTokenLimit: 5000000,
+    ttsMinutesLimit: 180,
     allowedModel: "both",
     overLimitAction: "alert",
   },
@@ -547,18 +686,30 @@ const getUsersWithUsage = createServerFn({ method: "GET" })
     await ensureAdmin(context);
     const firestore = adminFirestoreOptions(context);
     // Lê todos os docs de ai_usage_stats para obter uso real
-    const docs = await fsQuery("ai_usage_stats", { limit: 500, ...firestore });
-    const out: AdminUserUsage[] = [];
-    for (const d of docs) {
-      const sub = await getSubscription(d.id, firestore);
+    const docs = await fsQuery("ai_usage_stats", firestore);
+    const userIds = docs.map((doc) => doc.id);
+    const [subscriptions, userProfiles] = await Promise.all([
+      fetchSubscriptionsForUsers(context, userIds),
+      fsGetMany(
+        userIds.map((userId) => `users/${userId}`),
+        firestore,
+      ),
+    ]);
+    const subscriptionsByUser = new Map(subscriptions.map((sub) => [sub.userId, sub]));
+    const profilesByUser = new Map(userProfiles.map((profile) => [profile.id, profile.data]));
+    return docs.map((d): AdminUserUsage => {
+      const sub = subscriptionsByUser.get(d.id);
       const planFromSub = sub?.plan ?? "gratuito";
       const statFromSub = sub?.status ?? "active";
       const isComped = sub?.status === "comped";
       const usageStatus = (d.data.status as string) ?? "active";
       const isBlocked = usageStatus === "blocked";
-      out.push({
+      return {
         userId: d.id,
-        email: (d.data.userEmail as string) ?? "(sem e-mail)",
+        email:
+          (d.data.userEmail as string) ??
+          (profilesByUser.get(d.id)?.email as string) ??
+          "(sem e-mail)",
         plan: planFromSub,
         status: statFromSub,
         tokensInput: (d.data.tokensInput as number) ?? 0,
@@ -571,9 +722,8 @@ const getUsersWithUsage = createServerFn({ method: "GET" })
         isBlocked,
         isComped,
         costEstimateUsd: (d.data.costEstimateUsd as number) ?? 0,
-      });
-    }
-    return out;
+      };
+    });
   });
 
 export async function fetchUsersWithUsage(): Promise<AdminUserUsage[]> {

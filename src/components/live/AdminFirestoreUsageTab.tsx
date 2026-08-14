@@ -1,14 +1,11 @@
 import { useEffect, useMemo, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import {
-  recordAiUsageForUserInFirestore,
-  resetUserUsageStatsInFirestore,
-  seedSampleUsageDataInFirestore,
-  subscribeToRecentApiLogs,
   subscribeToUserUsageStats,
   testFirestoreConnection,
-  type AiApiLog,
   type UserAiUsageStat,
 } from "@/lib/live/firestore-usage";
+import { fetchCosts, resetUserUsageAdmin } from "@/lib/live/admin";
 import {
   Activity,
   Cpu,
@@ -19,49 +16,39 @@ import {
   RefreshCw,
   Search,
   Sparkles,
-  Zap,
 } from "lucide-react";
-
-const USD_BRL_RATE = 5.6;
 
 export function AdminFirestoreUsageTab() {
   const [stats, setStats] = useState<UserAiUsageStat[]>([]);
-  const [logs, setLogs] = useState<AiApiLog[]>([]);
-  const [isConnected, setIsConnected] = useState<boolean>(true);
+  const [isConnected, setIsConnected] = useState(false);
+  const [connectionAttempted, setConnectionAttempted] = useState(false);
+  const [actionError, setActionError] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [modelFilter, setModelFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("all");
-  const [isSimulating, setIsSimulating] = useState(false);
-  const [simulatedCount, setSimulatedCount] = useState(0);
+  const { data: costs } = useQuery({ queryKey: ["admin", "costs"], queryFn: fetchCosts });
+  const usdBrlRate = Number(costs?.usd_brl ?? 0);
 
   // Initialize Firestore listeners
   useEffect(() => {
-    testFirestoreConnection();
+    testFirestoreConnection().finally(() => setConnectionAttempted(true));
 
     // Subscribe to usage stats
     const unsubscribeStats = subscribeToUserUsageStats(
       (data) => {
         setIsConnected(true);
+        setConnectionAttempted(true);
         setStats(data);
       },
       (err) => {
         console.error("Firestore listener error:", err);
         setIsConnected(false);
+        setConnectionAttempted(true);
       },
-    );
-
-    // Subscribe to live logs feed
-    const unsubscribeLogs = subscribeToRecentApiLogs(
-      (logsData) => {
-        setLogs(logsData);
-      },
-      (err) => console.error("Firestore logs error:", err),
-      15,
     );
 
     return () => {
       unsubscribeStats();
-      unsubscribeLogs();
     };
   }, []);
 
@@ -91,7 +78,7 @@ export function AdminFirestoreUsageTab() {
         : 0;
 
     const totalCostUsd = stats.reduce((s, u) => s + (u.costEstimateUsd || 0), 0);
-    const totalCostBrl = totalCostUsd * USD_BRL_RATE;
+    const totalCostBrl = usdBrlRate > 0 ? totalCostUsd * usdBrlRate : null;
 
     const quotaAlerts = stats.filter(
       (u) => u.status === "quota_alert" || u.status === "throttled",
@@ -108,46 +95,16 @@ export function AdminFirestoreUsageTab() {
       totalCostBrl,
       quotaAlerts,
     };
-  }, [stats]);
-
-  // Trigger real-time simulation call to Firestore
-  const handleSimulateCall = async (targetUserId?: string, targetEmail?: string) => {
-    setIsSimulating(true);
-    try {
-      const selectedUserId = targetUserId || "usr_carla_vendas";
-      const selectedEmail = targetEmail || "carla.vendas@gmail.com";
-
-      const endpoints = ["/api/live/chat", "/api/live/script", "/api/live/tts", "/api/live/preset"];
-      const models = ["gemini-2.5-flash", "gemini-2.5-pro"];
-
-      const chosenEndpoint = endpoints[Math.floor(Math.random() * endpoints.length)];
-      const chosenModel = models[Math.floor(Math.random() * models.length)];
-
-      const promptTokens = Math.floor(Math.random() * 2500) + 800;
-      const completionTokens = Math.floor(Math.random() * 800) + 200;
-
-      await recordAiUsageForUserInFirestore(
-        selectedUserId,
-        selectedEmail,
-        promptTokens,
-        completionTokens,
-        chosenModel,
-        chosenEndpoint,
-      );
-
-      setSimulatedCount((prev) => prev + 1);
-    } catch (e) {
-      console.error("Simulation error:", e);
-    } finally {
-      setIsSimulating(false);
-    }
-  };
+  }, [stats, usdBrlRate]);
 
   const handleResetUser = async (userId: string) => {
+    if (!window.confirm("Zerar definitivamente as estatísticas deste usuário?")) return;
+    setActionError(null);
     try {
-      await resetUserUsageStatsInFirestore(userId);
+      await resetUserUsageAdmin(userId);
     } catch (e) {
       console.error("Reset error:", e);
+      setActionError(e instanceof Error ? e.message : "Falha ao zerar estatísticas.");
     }
   };
 
@@ -176,7 +133,11 @@ export function AdminFirestoreUsageTab() {
                     isConnected ? "bg-[#00E676] animate-pulse" : "bg-red-500"
                   }`}
                 />
-                {isConnected ? "Firestore Live Stream (onSnapshot)" : "Reconectando..."}
+                {isConnected
+                  ? "Firestore conectado (onSnapshot)"
+                  : connectionAttempted
+                    ? "Falha na conexão"
+                    : "Conectando…"}
               </span>
             </div>
             <p className="text-xs text-white/50 mt-0.5">
@@ -186,27 +147,16 @@ export function AdminFirestoreUsageTab() {
           </div>
         </div>
 
-        <div className="flex items-center gap-2 w-full sm:w-auto">
-          <button
-            type="button"
-            onClick={() => handleSimulateCall()}
-            disabled={isSimulating}
-            className="flex items-center justify-center gap-2 px-3.5 py-2 rounded-xl bg-[#7C3AED] hover:bg-[#6D28D9] text-white text-xs font-semibold shadow-lg transition disabled:opacity-50 w-full sm:w-auto"
-          >
-            <Zap className={`w-3.5 h-3.5 ${isSimulating ? "animate-spin" : ""}`} />
-            {isSimulating ? "Registrando Chamada..." : "Simular Chamada IA Live"}
-          </button>
-
-          <button
-            type="button"
-            onClick={() => seedSampleUsageDataInFirestore()}
-            title="Recarregar dados de exemplo no Firestore"
-            className="p-2 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-white/70 hover:text-white text-xs transition"
-          >
-            <RefreshCw className="w-4 h-4" />
-          </button>
-        </div>
+        <div className="text-xs text-white/45">Somente dados reais registrados pelo backend</div>
       </div>
+      {actionError && (
+        <div
+          role="alert"
+          className="rounded-xl border border-red-400/30 bg-red-500/10 p-3 text-sm text-red-200"
+        >
+          {actionError}
+        </div>
+      )}
 
       {/* Metric Cards Grid */}
       <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
@@ -263,7 +213,9 @@ export function AdminFirestoreUsageTab() {
             <Sparkles className="w-4 h-4 text-purple-400" />
           </div>
           <div className="text-xl font-bold font-mono text-purple-300 mt-1">
-            R$ {metrics.totalCostBrl.toFixed(2)}
+            {metrics.totalCostBrl == null
+              ? "Câmbio não configurado"
+              : `R$ ${metrics.totalCostBrl.toFixed(2)}`}
           </div>
           <div className="text-[10px] text-white/40 mt-0.5 font-mono">
             USD ${metrics.totalCostUsd.toFixed(3)}
@@ -405,7 +357,9 @@ export function AdminFirestoreUsageTab() {
                           ${u.costEstimateUsd.toFixed(3)}
                         </div>
                         <div className="text-[10px] text-white/40">
-                          R$ {(u.costEstimateUsd * USD_BRL_RATE).toFixed(2)}
+                          {usdBrlRate > 0
+                            ? `R$ ${(u.costEstimateUsd * usdBrlRate).toFixed(2)}`
+                            : "—"}
                         </div>
                       </td>
 
@@ -435,14 +389,6 @@ export function AdminFirestoreUsageTab() {
                       <td className="py-3 text-right font-sans space-x-1 whitespace-nowrap">
                         <button
                           type="button"
-                          onClick={() => handleSimulateCall(u.userId, u.userEmail)}
-                          title="Simular chamada de IA para este usuário"
-                          className="px-2 py-1 rounded bg-[#7C3AED]/20 hover:bg-[#7C3AED]/40 text-[#7C3AED] hover:text-white text-[11px] font-medium transition"
-                        >
-                          +1 Req
-                        </button>
-                        <button
-                          type="button"
                           onClick={() => handleResetUser(u.userId)}
                           title="Zerar estatísticas no Firestore"
                           className="p-1 rounded bg-white/5 hover:bg-white/10 text-white/50 hover:text-white transition"
@@ -456,58 +402,6 @@ export function AdminFirestoreUsageTab() {
               )}
             </tbody>
           </table>
-        </div>
-      </div>
-
-      {/* Real-time Stream Log Feed */}
-      <div className="p-5 rounded-2xl border border-white/10 bg-white/[0.03] space-y-3">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <Activity className="w-4 h-4 text-[#00E676]" />
-            <h3 className="font-semibold text-sm text-white">
-              Feed de Execução de Chamadas de IA em Tempo Real (`ai_api_logs`)
-            </h3>
-          </div>
-          <span className="text-[11px] font-mono text-white/40">
-            Sincronização instantânea Firestore
-          </span>
-        </div>
-
-        <div className="space-y-1.5 max-h-60 overflow-y-auto pr-1">
-          {logs.length === 0 ? (
-            <div className="p-4 text-center text-xs text-white/40">
-              Nenhuma chamada gravada nos logs recentes do Firestore. Clique em "Simular Chamada IA
-              Live" acima para testar.
-            </div>
-          ) : (
-            logs.map((log) => (
-              <div
-                key={log.id || `${log.userId}-${log.timestamp}`}
-                className="p-2.5 rounded-xl bg-black/40 border border-white/5 text-xs flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 font-mono hover:bg-white/[0.02] transition"
-              >
-                <div className="flex items-center gap-2.5">
-                  <span className="w-2 h-2 rounded-full bg-[#00E676]" />
-                  <div>
-                    <span className="text-white font-medium">{log.userEmail}</span>
-                    <span className="text-white/40 ml-2 font-sans text-[11px]">{log.endpoint}</span>
-                  </div>
-                </div>
-
-                <div className="flex items-center gap-3 text-[11px] text-white/60">
-                  <span className="px-2 py-0.5 rounded bg-white/5 border border-white/10 text-white/80">
-                    {log.model}
-                  </span>
-                  <span className="text-sky-300">
-                    {log.promptTokens + log.completionTokens} tokens
-                  </span>
-                  <span className="text-amber-400">{log.latencyMs}ms</span>
-                  <span className="text-white/40 text-[10px]">
-                    {new Date(log.timestamp).toLocaleTimeString("pt-BR")}
-                  </span>
-                </div>
-              </div>
-            ))
-          )}
         </div>
       </div>
     </div>
