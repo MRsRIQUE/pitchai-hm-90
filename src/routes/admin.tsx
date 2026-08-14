@@ -181,7 +181,13 @@ function OverviewTab({ onNavigate }: { onNavigate: (tab: Tab) => void }) {
   const costs = useQuery({ queryKey: ["admin", "costs"], queryFn: fetchCosts });
   const commissions = useQuery({ queryKey: ["admin", "commissions"], queryFn: fetchCommissions });
   const ranking = useQuery({ queryKey: ["admin", "ranking"], queryFn: fetchRanking });
-  const loading = plans.isLoading || costs.isLoading || commissions.isLoading || ranking.isLoading;
+  const loading = plans.isLoading && costs.isLoading && commissions.isLoading && ranking.isLoading;
+  const failedSources = [
+    plans.error ? "planos e assinaturas" : null,
+    costs.error ? "custos" : null,
+    commissions.error ? "comissões" : null,
+    ranking.error ? "ranking" : null,
+  ].filter((source): source is string => Boolean(source));
   const planRows = plans.data ?? [];
   const activePlans = planRows.filter((plan) => plan.assinantes > 0);
   const monthlyRevenue = planRows.reduce(
@@ -198,7 +204,9 @@ function OverviewTab({ onNavigate }: { onNavigate: (tab: Tab) => void }) {
         costData.minutos_tts_mes * costData.tts_per_min) *
       costData.usd_brl
     : 0;
-  const error = plans.error || costs.error || commissions.error || ranking.error;
+  const retryAll = () => {
+    void Promise.all([plans.refetch(), costs.refetch(), commissions.refetch(), ranking.refetch()]);
+  };
 
   return (
     <div className="space-y-6">
@@ -214,9 +222,25 @@ function OverviewTab({ onNavigate }: { onNavigate: (tab: Tab) => void }) {
         </div>
         <p className="text-xs text-white/40">Atualizado sob demanda</p>
       </div>
-      {error ? (
-        <ErrorState error={error} />
-      ) : loading ? (
+      {failedSources.length > 0 && (
+        <div
+          role="alert"
+          className="flex flex-col gap-3 rounded-2xl border border-amber-400/25 bg-amber-500/10 px-4 py-3 text-sm text-amber-100 sm:flex-row sm:items-center sm:justify-between"
+        >
+          <span>
+            Não foi possível atualizar: {failedSources.join(", ")}. Os demais indicadores continuam
+            disponíveis.
+          </span>
+          <button
+            type="button"
+            onClick={retryAll}
+            className="shrink-0 rounded-lg border border-amber-300/25 bg-amber-200/10 px-3 py-1.5 text-xs font-semibold transition hover:bg-amber-200/20"
+          >
+            Tentar novamente
+          </button>
+        </div>
+      )}
+      {loading ? (
         <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-8 text-center text-sm text-white/50">
           Carregando indicadores reais…
         </div>
@@ -225,42 +249,70 @@ function OverviewTab({ onNavigate }: { onNavigate: (tab: Tab) => void }) {
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
             <ExecutiveStat
               label="Receita configurada"
-              value={brl(monthlyRevenue)}
-              detail={`${activePlans.length} planos ativos`}
+              value={plans.error ? "Indisponível" : brl(monthlyRevenue)}
+              detail={
+                plans.error
+                  ? "Falha ao consultar assinaturas"
+                  : `${activePlans.length} planos ativos`
+              }
               tone="violet"
             />
             <ExecutiveStat
               label="Custo registrado"
-              value={brl(costTotal)}
-              detail="Custos cadastrados no painel"
+              value={costs.error ? "Indisponível" : brl(costTotal)}
+              detail={costs.error ? "Falha ao consultar custos" : "Custos cadastrados no painel"}
               tone="orange"
             />
             <ExecutiveStat
               label="Comissões pendentes"
-              value={brl(commissionTotal)}
-              detail={`${pendingCommissions.length} pagamentos aguardando`}
+              value={commissions.error ? "Indisponível" : brl(commissionTotal)}
+              detail={
+                commissions.error
+                  ? "Falha ao consultar comissões"
+                  : `${pendingCommissions.length} pagamentos aguardando`
+              }
               tone="rose"
             />
             <ExecutiveStat
               label="Produtos ranqueados"
-              value={String((ranking.data ?? []).length)}
-              detail="Catálogo operacional"
+              value={ranking.error ? "Indisponível" : String((ranking.data ?? []).length)}
+              detail={ranking.error ? "Falha ao consultar ranking" : "Catálogo operacional"}
               tone="green"
             />
           </div>
           <div className="grid gap-4 lg:grid-cols-[1.4fr_1fr]">
             <Card title="Leitura rápida" hint="Sinais para acompanhar nesta sessão.">
               <div className="space-y-3">
-                <Insight label="Planos ativos" value={`${activePlans.length}`} tone="positive" />
+                <Insight
+                  label="Planos ativos"
+                  value={plans.error ? "Dados indisponíveis" : `${activePlans.length}`}
+                  tone={plans.error ? "warning" : "positive"}
+                />
                 <Insight
                   label="Comissões a pagar"
-                  value={commissionTotal > 0 ? brl(commissionTotal) : "Nenhuma pendência"}
-                  tone={commissionTotal > 0 ? "warning" : "positive"}
+                  value={
+                    commissions.error
+                      ? "Dados indisponíveis"
+                      : commissionTotal > 0
+                        ? brl(commissionTotal)
+                        : "Nenhuma pendência"
+                  }
+                  tone={commissions.error || commissionTotal > 0 ? "warning" : "positive"}
                 />
                 <Insight
                   label="Cobertura de custos"
-                  value={monthlyRevenue > costTotal ? "Receita acima dos custos" : "Revisar margem"}
-                  tone={monthlyRevenue > costTotal ? "positive" : "warning"}
+                  value={
+                    plans.error || costs.error
+                      ? "Dados indisponíveis"
+                      : monthlyRevenue > costTotal
+                        ? "Receita acima dos custos"
+                        : "Revisar margem"
+                  }
+                  tone={
+                    !plans.error && !costs.error && monthlyRevenue > costTotal
+                      ? "positive"
+                      : "warning"
+                  }
                 />
               </div>
             </Card>

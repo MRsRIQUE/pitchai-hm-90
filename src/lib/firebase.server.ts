@@ -7,6 +7,7 @@ export const FIREBASE_SERVER_EMAIL = process.env.FIREBASE_SERVER_EMAIL || "";
 
 const IDENTITYTOOLKIT_URL = "https://identitytoolkit.googleapis.com/v1";
 const FIRESTORE_BASE_URL = `https://firestore.googleapis.com/v1/projects/${FIREBASE_PROJECT_ID}/databases/${FIREBASE_DATABASE_ID}`;
+const FIRESTORE_RESOURCE_ROOT = `projects/${FIREBASE_PROJECT_ID}/databases/${FIREBASE_DATABASE_ID}`;
 
 export interface FirebaseUserInfo {
   uid: string;
@@ -217,7 +218,8 @@ export async function fsGetMany(
         method: "POST",
         headers: { "content-type": "application/json", ...headers },
         body: JSON.stringify({
-          documents: chunk.map((path) => `${FIRESTORE_BASE_URL}/documents/${path}`),
+          // batchGet exige nomes de recurso, não URLs HTTP completas.
+          documents: chunk.map((path) => `${FIRESTORE_RESOURCE_ROOT}/documents/${path}`),
         }),
       });
       if (!res.ok) {
