@@ -15,6 +15,8 @@ import { toast } from "sonner";
 import { SiteNav } from "@/components/live/SiteNav";
 import { ExtensionStatusBanner } from "@/components/live/ExtensionStatusBanner";
 import { APP_VERSION } from "@/lib/live/version";
+import { copyToClipboard } from "@/lib/clipboard";
+import { downloadExtensionZip } from "@/lib/live/download-extension";
 
 export const Route = createFileRoute("/download")({
   head: () => ({
@@ -38,30 +40,28 @@ export const Route = createFileRoute("/download")({
 function DownloadPage() {
   const [showUnzipHelp, setShowUnzipHelp] = useState(false);
 
-  const handleDownload = () => {
-    fetch(`/pitchai-extension.zip?v=${APP_VERSION}`)
-      .then((res) => {
-        if (!res.ok) throw new Error(`Download falhou: ${res.status}`);
-        return res.blob();
-      })
-      .then((blob) => {
-        const a = document.createElement("a");
-        a.href = URL.createObjectURL(blob);
-        a.download = "pitchai-extension.zip";
-        a.click();
-        URL.revokeObjectURL(a.href);
-        toast.success("Download iniciado!", {
-          description: "Confira a pasta 'Downloads' do seu computador.",
-        });
-      })
-      .catch((err) => toast.error(err.message));
+  const handleDownload = async () => {
+    try {
+      await downloadExtensionZip();
+      toast.success("Download iniciado!", {
+        description: "Confira a pasta 'Downloads' do seu computador.",
+      });
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Falha ao baixar a extensão");
+    }
   };
 
-  const copyChromeUrl = () => {
-    navigator.clipboard.writeText("chrome://extensions");
-    toast.success("Endereço 'chrome://extensions' copiado!", {
-      description: "Cole na barra de endereço de uma nova aba do Chrome.",
-    });
+  const copyChromeUrl = async () => {
+    const copied = await copyToClipboard("chrome://extensions");
+    if (copied) {
+      toast.success("Endereço 'chrome://extensions' copiado!", {
+        description: "Cole na barra de endereço de uma nova aba do Chrome.",
+      });
+    } else {
+      toast.error("Não consegui copiar", {
+        description: "Digite chrome://extensions na barra de endereços do Chrome.",
+      });
+    }
   };
 
   return (
@@ -96,12 +96,12 @@ function DownloadPage() {
               <div>
                 <div className="font-display text-xl font-extrabold text-white flex items-center gap-2">
                   <span>pitchai-extension.zip</span>
-                  <span className="rounded-full bg-emerald-500/20 px-2 py-0.5 text-[10px] font-extrabold text-emerald-400 border border-emerald-500/30">
+                  <span className="rounded-full bg-emerald-500/20 px-2 py-1 text-[10px] font-extrabold text-emerald-400 border border-emerald-500/30">
                     Pronto
                   </span>
                 </div>
                 <div className="mt-1 flex flex-wrap items-center gap-3 text-xs text-slate-400 font-medium">
-                  <span className="rounded-full bg-white/10 px-2.5 py-0.5 text-purple-300 font-bold">
+                  <span className="rounded-full bg-white/10 px-2.5 py-1 text-purple-300 font-bold">
                     v{APP_VERSION}
                   </span>
                   <span>Extensão Oficial</span>

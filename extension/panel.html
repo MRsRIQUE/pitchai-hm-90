@@ -97,7 +97,7 @@
             <span>💡</span>
             <div>
               <strong>Como funciona a IA na sua Live:</strong>
-              Ela lê as perguntas do chat do TikTok e responde com voz ao vivo. Você pode ativar filtros de segurança e aprovação antes de enviar.
+              Ela lê as perguntas do chat do TikTok e responde com voz ao vivo. Você pode ativar filtros de segurança e confirmar cada resposta antes de a IA falar.
             </div>
           </div>
 
@@ -117,15 +117,15 @@
               <div class="pnl-row">
                 <div>
                   <h3>Ligar Respostas por Voz</h3>
-                  <p>A IA responderá os espectadores da live usando fala natural.</p>
+                  <p>A IA lê o chat e responde os espectadores com voz natural. É o mesmo botão “👁️ Ligar IA” da barra da live.</p>
                 </div>
                 <button class="pnl-toggle" data-key="respostasIA"></button>
               </div>
 
               <div class="pnl-row">
                 <div>
-                  <h3>Revisar antes de falar</h3>
-                  <p>Mostra uma prévia antes da IA falar na live para você aprovar.</p>
+                  <h3>Confirmar respostas antes de falar</h3>
+                  <p>Antes de a IA falar, você vê a resposta e aprova. Bom para os primeiros dias de live. É o mesmo botão “👀 Confirmar” da barra da live.</p>
                 </div>
                 <button class="pnl-toggle" data-key="revisarAntesDeEnviar"></button>
               </div>
@@ -183,19 +183,59 @@
           <details class="pnl-card">
             <summary>
               <div class="pnl-sum-txt">
-                <h3>🚫 Filtros de Palavras (Blacklist)</h3>
-                <p>Bloqueie termos específicos para a IA nunca falar</p>
+                <h3>🚫 Filtro de Palavras</h3>
+                <p>O que a IA nunca deve falar nem responder na sua live</p>
               </div>
             </summary>
             <div>
-              <p class="pnl-sub" style="margin-bottom: 8px">Digite uma palavra por linha. A IA vai ignorar ou recusar perguntas com essas palavras.</p>
-              <label class="mono">Palavras Bloqueadas (uma por linha)</label>
+              <!-- Lista pronta: a live já nasce protegida, sem o usuário digitar nada -->
+              <div class="pnl-row pnl-bl-head">
+                <div>
+                  <h3>Proteção padrão do Pitch AI</h3>
+                  <p>
+                    Já vem com <b id="pnl-bl-total">…</b> palavras bloqueadas de fábrica. Se
+                    alguém escrever uma delas no chat, a IA não responde nem repete.
+                  </p>
+                </div>
+                <button class="pnl-toggle" data-key="filtros.usarListaPadrao"></button>
+              </div>
+
+              <div class="pnl-bl-cats" id="pnl-bl-cats"></div>
+
+              <div class="pnl-inline pnl-bl-actions">
+                <button
+                  class="pnl-btn ghost"
+                  type="button"
+                  id="pnl-bl-show"
+                  aria-expanded="false"
+                  aria-controls="pnl-bl-full"
+                >
+                  👁 Ver a lista completa
+                </button>
+                <button class="pnl-btn ghost" type="button" id="pnl-bl-copy">
+                  ⧉ Copiar lista padrão para o meu filtro
+                </button>
+              </div>
+              <p class="pnl-sub" id="pnl-bl-msg"></p>
+
+              <div class="pnl-bl-full" id="pnl-bl-full" hidden></div>
+
+              <hr class="pnl-sep" />
+
+              <label class="mono">Minhas palavras bloqueadas (uma por linha)</label>
+              <p class="pnl-sub" style="margin: 2px 0 6px">
+                As suas palavras <b>somam</b> com a proteção padrão — elas não substituem a lista
+                de fábrica.
+              </p>
               <textarea
                 id="pnl-blacklist"
                 rows="3"
                 placeholder="exemplo:&#10;golpe&#10;concorrente&#10;fake"
               ></textarea>
               <label class="mono" style="margin-top: 10px; display: block">Palavras Permitidas / Prioritárias (Opcional)</label>
+              <p class="pnl-sub" style="margin: 2px 0 6px">
+                Assuntos que a IA deve tratar como prioridade ao responder.
+              </p>
               <textarea
                 id="pnl-whitelist"
                 rows="2"
@@ -530,6 +570,8 @@
       <span class="mono" id="pnl-sync-status"></span>
     </footer>
 
+    <!-- Lista padrão de palavras bloqueadas (window.PitchAIBlocklist) — precisa vir antes do panel.js -->
+    <script src="blocklist.js"></script>
     <script src="panel.js"></script>
   </body>
 </html>

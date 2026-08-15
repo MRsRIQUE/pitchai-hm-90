@@ -335,29 +335,43 @@
     return salt;
   }
 
+  // PBKDF2 com 600k iterações custa centenas de ms. Sem cache, cada loadConfig/
+  // saveConfig derivava a chave de novo e a barra travava a cada clique.
+  // A chave é a mesma durante toda a vida da página (mesmo salt + mesma seed).
+  const _keyCache = new Map();
+
   async function getStorageKey(seed) {
-    try {
-      const enc = new TextEncoder();
-      const extensionId = chrome.runtime?.id || "pitchai";
-      const keySeed = seed || `pitchai-extension:${extensionId}`;
-      const salt = await getOrCreateSalt();
-      const keyMaterial = await crypto.subtle.importKey(
-        "raw",
-        enc.encode(keySeed),
-        { name: "PBKDF2" },
-        false,
-        ["deriveKey"],
-      );
-      return await crypto.subtle.deriveKey(
-        { name: "PBKDF2", salt, iterations: PBKDF2_ITERATIONS, hash: "SHA-256" },
-        keyMaterial,
-        { name: "AES-GCM", length: 256 },
-        false,
-        ["encrypt", "decrypt"],
-      );
-    } catch {
-      return null;
-    }
+    const extensionId = chrome.runtime?.id || "pitchai";
+    const keySeed = seed || `pitchai-extension:${extensionId}`;
+    const cached = _keyCache.get(keySeed);
+    if (cached) return cached;
+    const pending = (async () => {
+      try {
+        const enc = new TextEncoder();
+        const salt = await getOrCreateSalt();
+        const keyMaterial = await crypto.subtle.importKey(
+          "raw",
+          enc.encode(keySeed),
+          { name: "PBKDF2" },
+          false,
+          ["deriveKey"],
+        );
+        return await crypto.subtle.deriveKey(
+          { name: "PBKDF2", salt, iterations: PBKDF2_ITERATIONS, hash: "SHA-256" },
+          keyMaterial,
+          { name: "AES-GCM", length: 256 },
+          false,
+          ["encrypt", "decrypt"],
+        );
+      } catch {
+        return null;
+      }
+    })();
+    _keyCache.set(keySeed, pending);
+    const key = await pending;
+    // chave inválida não fica no cache — na próxima tentativa deriva de novo
+    if (!key) _keyCache.delete(keySeed);
+    return key;
   }
 
   async function encryptConfigObj(obj) {
@@ -792,7 +806,7 @@
     },
 
     vozContextos: { default: null, greeting: null, offer: null, farewell: null },
-    filtros: { blacklist: [], whitelist: [] },
+    filtros: { blacklist: [], whitelist: [], usarListaPadrao: true },
     revisarAntesDeEnviar: false,
     produtos: [],
     aiContext: {},
@@ -803,15 +817,41 @@
     syncToken: "",
   };
 
+  /**
+   * Aplica os defaults preservando os sub-objetos (voz, filtros, demo…).
+   * Espelha o normalizeConfig do painel para que os dois lados enxerguem
+   * exatamente a mesma forma de config.
+   */
+  function normalizeConfig(raw) {
+    const stored = raw && typeof raw === "object" ? raw : {};
+    return {
+      ...DEFAULTS,
+      ...stored,
+      autoFixar: { ...DEFAULTS.autoFixar, ...(stored.autoFixar || {}) },
+      encerrarTempo: { ...DEFAULTS.encerrarTempo, ...(stored.encerrarTempo || {}) },
+      voz: {
+        ...DEFAULTS.voz,
+        ...(stored.voz || {}),
+        monitor: { ...DEFAULTS.voz.monitor, ...(stored.voz?.monitor || {}) },
+        pushToTalk: { ...DEFAULTS.voz.pushToTalk, ...(stored.voz?.pushToTalk || {}) },
+      },
+      vozContextos: { ...DEFAULTS.vozContextos, ...(stored.vozContextos || {}) },
+      filtros: { ...DEFAULTS.filtros, ...(stored.filtros || {}) },
+      somVenda: { ...DEFAULTS.somVenda, ...(stored.somVenda || {}) },
+      demo: { ...DEFAULTS.demo, ...(stored.demo || {}) },
+      produtos: Array.isArray(stored.produtos) ? stored.produtos : [],
+    };
+  }
+
   async function loadConfig() {
     return new Promise((res) => {
       chrome.storage.local.get([STORAGE_KEY], async (r) => {
         const raw = r[STORAGE_KEY];
-        if (!raw) return res({ ...DEFAULTS });
+        if (!raw) return res(normalizeConfig(null));
         // Se está cifrado (__enc/__iv presentes), decifra. Se não, usa direto
         // (compat com configs gravadas por versões anteriores que não cifravam).
         const decrypted = await decryptConfigObj(raw);
-        res({ ...DEFAULTS, ...(decrypted || {}) });
+        res(normalizeConfig(decrypted));
       });
     });
   }
@@ -1890,13 +1930,36 @@
   // ---------- Local filter (blacklist / whitelist) ----------
   function localFilter(text, cfg) {
     const t = (text || "").toLowerCase();
-    const bl = (cfg.filtros?.blacklist || [])
-      .map((w) => String(w).toLowerCase().trim())
-      .filter(Boolean);
     const wl = (cfg.filtros?.whitelist || [])
       .map((w) => String(w).toLowerCase().trim())
       .filter(Boolean);
-    if (bl.some((w) => t.includes(w))) return { block: true, reason: "blacklist" };
+
+    // Lista compartilhada (blocklist.js): casa por palavra inteira e soma a
+    // lista padrão às palavras do usuário. O toggle do painel é
+    // filtros.usarListaPadrao (ligado por padrão).
+    const BL = window.PitchAIBlocklist;
+    if (BL?.match) {
+      const hit = BL.match(text, {
+        extra: cfg.filtros?.blacklist || [],
+        usarListaPadrao: cfg.filtros?.usarListaPadrao !== false,
+      });
+      if (hit?.blocked) {
+        return {
+          block: true,
+          reason:
+            hit.category === "usuario"
+              ? `bloqueada pela sua lista (${hit.term})`
+              : `lista padrão · ${hit.category} (${hit.term})`,
+        };
+      }
+    } else {
+      // blocklist.js indisponível: mantém o filtro antigo só com a lista do usuário
+      const bl = (cfg.filtros?.blacklist || [])
+        .map((w) => String(w).toLowerCase().trim())
+        .filter(Boolean);
+      if (bl.some((w) => t.includes(w))) return { block: true, reason: "blacklist" };
+    }
+
     if (wl.length > 0 && !wl.some((w) => t.includes(w)))
       return { block: true, reason: "whitelist" };
     return { block: false };
@@ -2310,6 +2373,12 @@
     { author: "helena", text: "kkkkk boa noite gente" },
   ];
 
+  // Carimbo da última gravação de `demo.enabled` feita aqui no content script.
+  // Mesmo padrão de _mappingSelfWrite: o chrome.storage.onChanged devolve a
+  // nossa própria escrita e, sem isso, o listener chamava start()/stop() de novo
+  // em paralelo com o toggle (trabalho duplicado e estado piscando).
+  let _demoSelfWrite = 0;
+
   const demo = {
     on: false,
     chatTimer: null,
@@ -2323,8 +2392,9 @@
       return demo.on;
     },
 
-    async applyCatalog() {
-      const cfg = await loadConfig();
+    /** `preloaded` evita reler/decifrar a config quando quem chama já tem uma. */
+    async applyCatalog(preloaded) {
+      const cfg = preloaded || (await loadConfig());
       const atual = cfg.produtos || [];
       const byName = new Map(atual.map((p) => [(p.name || "").toLowerCase().trim(), p]));
       let added = 0;
@@ -2436,18 +2506,23 @@
       }
     },
 
-    async start() {
+    /**
+     * `preloaded` reaproveita a config de quem chamou (o toggle já releu).
+     * Nada de rede é aguardado aqui: a vitrine simulada e a sessão sobem em
+     * segundo plano para o botão da barra responder na hora.
+     */
+    async start(preloaded) {
       if (demo.on) return;
       demo.on = true;
       demo.showBadge();
-      const cfg = await loadConfig();
+      const cfg = preloaded || (await loadConfig());
       activity.log({
         type: "live",
         text: "Modo Demo ligado — tudo abaixo é simulado.",
         ts: Date.now(),
       });
-      await demo.applyCatalog();
-      sessionStart();
+      demo.applyCatalog(cfg).catch(() => {});
+      sessionStart().catch(() => {});
       chatState.detectVia = "demo";
       chatState.lastMsgAt = Date.now();
       startHealthCheck();
@@ -2476,7 +2551,8 @@
       }
     },
 
-    async stop() {
+    /** Mesma regra do start: desliga tudo na hora e deixa a rede para depois. */
+    async stop(preloaded) {
       if (!demo.on) return;
       demo.on = false;
       clearInterval(demo.chatTimer);
@@ -2488,21 +2564,31 @@
       demo.hideBadge();
       stopPitchLoop();
       stopHealthCheck();
-      const cfg = await loadConfig();
-      await clearViolation(cfg);
       chatState.detectVia = null;
       updateHealth();
-      await sessionEnd();
       activity.log({ type: "live", text: "Modo Demo desligado.", ts: Date.now() });
+      // encerramento da violação simulada + fim de sessão sem travar o clique
+      (async () => {
+        try {
+          const cfg = preloaded || (await loadConfig());
+          await clearViolation(cfg);
+        } catch {}
+        sessionEnd().catch(() => {});
+      })();
     },
 
     async toggle(next) {
-      const cfg = await loadConfig();
-      const on = typeof next === "boolean" ? next : !cfg.demo?.enabled;
-      cfg.demo = { ...(cfg.demo || {}), enabled: on };
-      saveConfig(cfg);
-      if (on) await demo.start();
-      else await demo.stop();
+      const on = typeof next === "boolean" ? next : !demo.on;
+      // carimbo para o storage listener ignorar o eco da nossa própria gravação
+      _demoSelfWrite = Date.now();
+      // gravação incremental: relê antes de gravar para não sobrescrever o painel
+      const cfg = await updateConfig((c) => {
+        c.demo = { ...(c.demo || {}), enabled: on };
+        return c;
+      });
+      _demoSelfWrite = Date.now();
+      if (on) await demo.start(cfg);
+      else await demo.stop(cfg);
       return on;
     },
   };
@@ -3093,18 +3179,140 @@
     if (cfg?.respostasIA && (chatState.observer || demo.isOn())) startPitchLoop();
   }
 
+  // Regex de violação: a fonte é o dom-map (mesma lista usada no auto-scan).
+  // A cópia local só entra em cena se o dom-map ainda não tiver carregado.
+  const VIOLATION_RX_LOCAL =
+    /(viola[çc][ãa]o|violation|infra[çc][ãa]o|aviso|warning|penalidad|restri[çc][ãa]o|adverten|bloqueio|conte[úu]do impr[óo]prio|pol[íi]tica da comunidade)/i;
+  const violationRx = () => DM()?.util?.VIOLATION_RX || VIOLATION_RX_LOCAL;
+  // textos que casam o regex mas significam "está tudo certo"
+  const VIOLATION_OK_RX =
+    /^0$|nenhum|nenhuma|sem viola|sem aviso|normal|saud[áa]vel|boa|tudo certo/i;
+  // termos que sozinhos já significam violação
+  const VIOLATION_STRONG_RX =
+    /(viola[çc][ãa]o|violation|infra[çc][ãa]o|penalidad|adverten|conte[úu]do impr[óo]prio|pol[íi]tica da comunidade|community guideline|strike)/i;
+  // termos vagos ("aviso", "warning", "restrição") só valem com contexto de live
+  const VIOLATION_CTX_RX =
+    /(live|transmiss[ãa]o|stream|conte[úu]do|comunidade|pol[íi]tica|regra|produto|conta|canal|banimento|remov)/i;
+  // onde banners, toasts e avisos costumam viver
+  const VIOLATION_HOT_SELECTOR =
+    '[role="alert"], [role="status"], [aria-live], [class*="toast" i], [class*="notice" i], [class*="notification" i], [class*="banner" i], [class*="alert" i], [class*="warn" i], [class*="violat" i], [data-e2e*="warn" i], [data-e2e*="violat" i]';
+
+  /** A UI da própria extensão nunca pode virar alvo (senão o escudo se autodetecta). */
+  function isPitchaiUI(el) {
+    try {
+      if (!el || !(el instanceof Element)) return false;
+      if (el.closest?.('[id^="pitchai"], [class*="pitchai"]')) return true;
+      // shadow root / iframe: closest não sobe até o host, então confere o dono
+      const rootHost = el.getRootNode?.()?.host;
+      if (rootHost && rootHost !== el) return isPitchaiUI(rootHost);
+      return false;
+    } catch {
+      return false;
+    }
+  }
+
+  /**
+   * Fallback quando não há área de avisos apontada: varre a página inteira
+   * (documentos, iframes acessíveis e shadow roots abertos, via dom-map.util)
+   * atrás de banners/toasts com texto de violação. Devolve o candidato de texto
+   * mais curto — normalmente o próprio aviso, não o container que o embrulha.
+   */
+  async function findViolationHeuristic() {
+    const util = DM()?.util || {};
+    const roots = (() => {
+      try {
+        return util.allRoots?.() || [document];
+      } catch {
+        return [document];
+      }
+    })();
+    const visible = util.isVisible || (() => true);
+    const rx = violationRx();
+
+    // mensagens do chat citando "aviso"/"bloqueio" não são violação do TikTok
+    let chatNode = null;
+    try {
+      if (DM()?.status?.()?.chat?.found) chatNode = await mapNode("chat");
+    } catch {}
+
+    let best = null;
+    // `hot` = elemento veio de um banner/toast/aria-live; fora deles exigimos
+    // termo forte, senão qualquer menu com a palavra "avisos" viraria violação.
+    const consider = (el, hot) => {
+      if (!(el instanceof Element)) return;
+      if (isPitchaiUI(el)) return;
+      if (chatNode && (chatNode === el || chatNode.contains?.(el))) return;
+      const t = (el.textContent || "").replace(/\s+/g, " ").trim();
+      if (t.length < 8 || t.length > 200) return;
+      if (!rx.test(t) || VIOLATION_OK_RX.test(t)) return;
+      if (!VIOLATION_STRONG_RX.test(t)) {
+        if (!hot) return;
+        if (t.length < 20 || !VIOLATION_CTX_RX.test(t)) return;
+      }
+      if (!visible(el)) return;
+      if (!best || t.length < best.text.length) best = { node: el, text: t };
+    };
+
+    for (const root of roots) {
+      let hot = [];
+      try {
+        hot = Array.from(root.querySelectorAll(VIOLATION_HOT_SELECTOR)).slice(0, 400);
+      } catch {}
+      for (const el of hot) consider(el, true);
+    }
+    if (best) return best;
+
+    let scanned = 0;
+    for (const root of roots) {
+      let list = [];
+      try {
+        list = Array.from(root.querySelectorAll("span, p, div, button, li"));
+      } catch {}
+      for (const el of list) {
+        if (++scanned > 5000) return best;
+        consider(el, false);
+      }
+    }
+    return best;
+  }
+
+  let _violationNoTargetWarned = false;
+
   async function violationTick() {
     const cfg = await loadConfig();
     if (!cfg.violacao) return;
     if (demo.isOn()) return; // em demo a violação é disparada manualmente
     const node = await mapNode("violation");
-    const txt = (node?.textContent || "").replace(/\s+/g, " ").trim();
-    const bad = !!txt && !/^0$|nenhum|sem viola|normal|saud[áa]vel|boa/i.test(txt);
+    const apontado = !!DM()?.hasManual?.("violation");
+    const alvo = node && !isPitchaiUI(node) ? node : null;
+    let txt = (alvo?.textContent || "").replace(/\s+/g, " ").trim();
+    // nó apontado pelo usuário: qualquer texto vale. Nó achado no auto-scan:
+    // só vale se o texto realmente parecer um aviso.
+    let bad = !!txt && !VIOLATION_OK_RX.test(txt) && (apontado || violationRx().test(txt));
+
+    if (!bad) {
+      const found = await findViolationHeuristic();
+      if (found) {
+        txt = found.text;
+        bad = true;
+      }
+    }
+
+    if (!alvo && !apontado && !_violationNoTargetWarned) {
+      _violationNoTargetWarned = true;
+      activity.log({
+        type: "violation",
+        text: "Escudo ligado, mas a área de avisos ainda não foi apontada — use 🎯 Apontar (opção “avisos”). Enquanto isso, vasculho a página inteira atrás de banners de violação.",
+        ts: Date.now(),
+      });
+    }
+
     if (bad) await setViolation(txt, cfg);
     else await clearViolation(cfg);
   }
   function startViolationWatcher() {
     if (auto.violationTimer) return;
+    _violationNoTargetWarned = false;
     auto.violationTimer = setInterval(() => {
       violationTick().catch(() => {});
     }, 10000);
@@ -3710,11 +3918,23 @@
       title: "Proteção geral",
     });
     master.addEventListener("click", async () => {
-      const c = await loadConfig();
-      if (!(await checkExtensionLock(c.syncToken))) return;
-      c.protecaoGeral = !c.protecaoGeral;
-      saveConfig(c);
-      master.classList.toggle("on", c.protecaoGeral);
+      const alvo = !master.classList.contains("on");
+      master.classList.toggle("on", alvo); // feedback imediato
+      try {
+        const c = await loadConfig();
+        if (!(await checkExtensionLock(c.syncToken))) {
+          master.classList.toggle("on", !alvo); // sem licença: desfaz
+          return;
+        }
+        // gravação incremental: relê antes de gravar para não desfazer o que o
+        // painel acabou de salvar (antes gravava a config inteira em memória)
+        await updateConfig((fresh) => {
+          fresh.protecaoGeral = alvo;
+          return fresh;
+        });
+      } catch {
+        master.classList.toggle("on", !alvo);
+      }
     });
 
     const scrapeBtn = el(
@@ -3756,13 +3976,20 @@
       "🎯 Apontar",
     );
     pickBtn.addEventListener("click", () => {
-      const alvo = window.prompt("Apontar qual elemento? Digite: chat, vitrine ou vendas", "chat");
+      const alvo = window.prompt(
+        "Apontar qual elemento? Digite: chat, vitrine, vendas ou avisos",
+        "chat",
+      );
       if (!alvo) return;
       const map = {
         chat: "pick:chat",
         vitrine: "pick:products",
         produtos: "pick:products",
         vendas: "pick:sales",
+        avisos: "pick:violation",
+        aviso: "pick:violation",
+        violacao: "pick:violation",
+        violação: "pick:violation",
       };
       const cmd = map[alvo.trim().toLowerCase()];
       if (cmd) runDemoCommand(cmd);
@@ -3772,22 +3999,33 @@
     // O processamento continua em segundo plano e o estado fica resumido em `health`.
     chatState.statusEl = null;
 
+    // Rótulos do botão de escuta em um só lugar (barra e eco do painel).
+    const LISTEN_ON_LABEL = "👁️ IA de olho";
+    const LISTEN_OFF_LABEL = "👁️ Ligar IA";
+
     const listenBtn = el(
       "button",
       {
         class: "pitchai-btn" + (cfg.respostasIA ? " primary" : ""),
         id: "pitchai-listen",
-        title: "Ligar/desligar leitura do chat",
+        title: "Ligar/desligar a leitura do chat pela IA",
       },
-      cfg.respostasIA ? "🎙️ Ouvindo" : "🎙️ Ouvir",
+      cfg.respostasIA ? LISTEN_ON_LABEL : LISTEN_OFF_LABEL,
     );
+    // Estado visual da escuta em um lugar só (clique e eco do painel).
+    const applyListenUi = (on) => {
+      listenBtn.classList.toggle("primary", on);
+      listenBtn.textContent = on ? LISTEN_ON_LABEL : LISTEN_OFF_LABEL;
+    };
     listenBtn.addEventListener("click", async () => {
-      const c = await loadConfig();
-      c.respostasIA = !c.respostasIA;
-      saveConfig(c);
-      listenBtn.classList.toggle("primary", c.respostasIA);
-      listenBtn.textContent = c.respostasIA ? "🎙️ Ouvindo" : "🎙️ Ouvir";
-      if (c.respostasIA) {
+      const on = !listenBtn.classList.contains("primary");
+      applyListenUi(on); // feedback imediato
+      // gravação incremental para não sobrescrever o que o painel salvou
+      await updateConfig((fresh) => {
+        fresh.respostasIA = on;
+        return fresh;
+      }).catch(() => {});
+      if (on) {
         sessionStart();
         const ok = await startChatListener();
         if (!ok) {
@@ -3806,16 +4044,18 @@
       "button",
       {
         class: "pitchai-btn" + (cfg.revisarAntesDeEnviar ? " primary" : ""),
-        title: "Revisar cada resposta antes da IA falar",
+        title: "Confirmar cada resposta antes de a IA falar",
       },
-      cfg.revisarAntesDeEnviar ? "👀 Revisando" : "👀 Revisar",
+      cfg.revisarAntesDeEnviar ? "👀 Confirmando" : "👀 Confirmar",
     );
     reviewBtn.addEventListener("click", async () => {
-      const c = await loadConfig();
-      c.revisarAntesDeEnviar = !c.revisarAntesDeEnviar;
-      saveConfig(c);
-      reviewBtn.classList.toggle("primary", c.revisarAntesDeEnviar);
-      reviewBtn.textContent = c.revisarAntesDeEnviar ? "👀 Revisando" : "👀 Revisar";
+      const on = !reviewBtn.classList.contains("primary");
+      reviewBtn.classList.toggle("primary", on);
+      reviewBtn.textContent = on ? "👀 Confirmando" : "👀 Confirmar";
+      await updateConfig((fresh) => {
+        fresh.revisarAntesDeEnviar = on;
+        return fresh;
+      }).catch(() => {});
     });
 
     // ---- Modo Demo ----
@@ -3851,11 +4091,18 @@
     document.body.appendChild(tray);
     if (cfg.demo?.enabled) tray.classList.add("open");
 
-    demoBtn.addEventListener("click", async () => {
-      const on = await demo.toggle();
+    // Estado visual do Demo em um lugar só (clique, eco do painel e reversão).
+    const applyDemoUi = (on) => {
       demoBtn.classList.toggle("demo-on", on);
       demoBtn.textContent = on ? "🧪 Demo ON" : "🧪 Demo";
       tray.classList.toggle("open", on);
+    };
+
+    demoBtn.addEventListener("click", () => {
+      const on = !demoBtn.classList.contains("demo-on");
+      applyDemoUi(on); // otimista: a barra responde no clique
+      // o trabalho pesado (config cifrada, catálogo, sessão) roda depois
+      demo.toggle(on).catch(() => applyDemoUi(!on));
     });
 
     const openBtn = el(
@@ -3927,7 +4174,7 @@
       openBtn.textContent = frame.classList.contains("open") ? "Painel ▴" : "Painel ▾";
     });
 
-    if (cfg.demo?.enabled) demo.start().catch(() => {});
+    if (cfg.demo?.enabled) demo.start(cfg).catch(() => {});
 
     // Se a conta já tem apontamentos salvos e este navegador não, baixa
     setTimeout(() => {
@@ -3939,13 +4186,13 @@
       const storedConfig = changes[STORAGE_KEY]?.newValue;
       if (storedConfig) {
         const c = normalizeConfig(await decryptConfigObj(storedConfig));
-        document.getElementById("pitchai-master")?.classList.toggle("on", !!c.protecaoGeral);
+        master.classList.toggle("on", !!c.protecaoGeral);
+        applyListenUi(!!c.respostasIA);
         const wants = !!c.demo?.enabled;
-        if (wants !== demo.isOn()) {
-          (wants ? demo.start() : demo.stop()).catch(() => {});
-          demoBtn.classList.toggle("demo-on", wants);
-          demoBtn.textContent = wants ? "🧪 Demo ON" : "🧪 Demo";
-          tray.classList.toggle("open", wants);
+        // ignora o eco da nossa própria gravação (senão start/stop roda duas vezes)
+        if (wants !== demo.isOn() && Date.now() - _demoSelfWrite > 1500) {
+          applyDemoUi(wants);
+          (wants ? demo.start(c) : demo.stop(c)).catch(() => {});
         }
       }
       // Mapeamento importado pelo painel → recarrega e reaplica

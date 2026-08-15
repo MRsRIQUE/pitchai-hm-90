@@ -2,7 +2,18 @@ import { createFileRoute } from "@tanstack/react-router";
 import { guardApiRequest } from "@/lib/live/api-auth.server";
 import { corsHeaders } from "@/lib/live/cors.server";
 import { validateContentForPublish } from "@/lib/live/validation.server";
+import {
+  TTS_MAX_CHARS,
+  synthesizeSpeech,
+  ttsAudioResponse,
+  ttsErrorResponse,
+} from "@/lib/live/tts.server";
 
+/**
+ * Voz da IA consumida pela extensão durante a live.
+ * Compartilha o núcleo de síntese com /api/tts/preview via `@/lib/live/tts.server`
+ * — antes as duas rotas eram cópias e divergiram.
+ */
 export const Route = createFileRoute("/api/public/tts/speak")({
   server: {
     handlers: {
@@ -10,72 +21,47 @@ export const Route = createFileRoute("/api/public/tts/speak")({
         new Response(null, { status: 204, headers: corsHeaders(request) }),
       POST: async ({ request }) => {
         const CORS = corsHeaders(request);
-        const jsonError = (status: number, message: string, code = "error") =>
-          new Response(JSON.stringify({ error: code, message, remaining: 0, locked: true }), {
+        const json = (status: number, body: unknown) =>
+          new Response(JSON.stringify(body), {
             status,
-            headers: { ...CORS, "Content-Type": "application/json" },
+            headers: { ...CORS, "Content-Type": "application/json", "Cache-Control": "no-store" },
           });
 
         const guard = await guardApiRequest(request, "tts_speak");
         if (!guard.ok) {
-          return jsonError(
-            guard.status ?? 500,
-            guard.message ?? "Acesso negado",
-            guard.status === 429 ? "quota_exceeded" : "invalid_token",
-          );
+          return json(guard.status ?? 500, {
+            error: guard.status === 429 ? "quota_exceeded" : "invalid_token",
+            message: guard.message ?? "Acesso negado",
+            remaining: 0,
+            locked: true,
+          });
         }
-
-        const key = process.env.LOVABLE_API_KEY || process.env.GEMINI_API_KEY;
-        if (!key)
-          return jsonError(500, "Missing LOVABLE_API_KEY or GEMINI_API_KEY", "missing_api_key");
 
         let body: { text?: string; voice?: string; speed?: number };
         try {
           body = await request.json();
         } catch {
-          return new Response("Invalid JSON", { status: 400, headers: CORS });
+          return json(400, { error: "invalid_json", message: "Corpo da requisição inválido." });
         }
 
-        const rawText = (body.text ?? "").toString().slice(0, 500);
+        const rawText = (body.text ?? "").toString().slice(0, TTS_MAX_CHARS);
         const validation = validateContentForPublish(rawText);
         if (!validation.valid) {
-          return new Response("Empty or whitespace text", { status: 400, headers: CORS });
+          return json(400, { error: "empty_text", message: "Nenhum texto para falar." });
         }
-        const text = validation.content;
-        const voice = (body.voice ?? "nova").toString();
-        const speed = Math.max(0.7, Math.min(1.2, Number(body.speed) || 1.0));
 
-        const upstream = await fetch("https://ai.gateway.lovable.dev/v1/audio/speech", {
-          method: "POST",
-          headers: {
-            Authorization: `Bearer ${key}`,
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            model: "openai/gpt-4o-mini-tts",
-            input: text,
-            voice,
-            speed,
-            response_format: "mp3",
-          }),
+        const result = await synthesizeSpeech({
+          text: validation.content,
+          voice: body.voice,
+          speed: body.speed,
         });
 
-        if (!upstream.ok) {
-          const err = await upstream.text().catch(() => "");
-          return new Response(err || "TTS failed", {
-            status: upstream.status,
-            headers: CORS,
-          });
-        }
+        if (!result.ok) return ttsErrorResponse(result, CORS);
 
-        return new Response(upstream.body, {
-          headers: {
-            ...CORS,
-            "Content-Type": "audio/mpeg",
-            "Cache-Control": "no-store",
-            "x-pitchai-remaining": String(guard.remaining ?? 0),
-            "x-pitchai-plan": guard.plan ?? "",
-          },
+        return ttsAudioResponse(result, {
+          ...CORS,
+          "x-pitchai-remaining": String(guard.remaining ?? 0),
+          "x-pitchai-plan": guard.plan ?? "",
         });
       },
     },

@@ -110,6 +110,19 @@
     }
   }
 
+  /** A UI da própria extensão nunca é alvo válido (evita autodetecção). */
+  function isOwnUI(el) {
+    try {
+      if (!el || !(el instanceof Element)) return false;
+      if (el.closest?.('[id^="pitchai"], [class*="pitchai"]')) return true;
+      const host = el.getRootNode?.()?.host;
+      if (host && host !== el) return isOwnUI(host);
+      return false;
+    } catch {
+      return false;
+    }
+  }
+
   function insidePlayer(el) {
     let n = el;
     let hops = 0;
@@ -610,7 +623,8 @@
       }
     };
     // alvos "loose" (violação, encerrar) podem estar fora do setor — só perdem bônus
-    const reject = (el) => !def.loose && scopes.length && !inRegion(el);
+    // (a barra/tray da própria extensão fica sempre de fora)
+    const reject = (el) => isOwnUI(el) || (!def.loose && scopes.length && !inRegion(el));
 
     const hint = HINT_XPATHS[target] ? byXPath(HINT_XPATHS[target]) : null;
     if (hint && !reject(hint)) {
@@ -933,8 +947,10 @@
     util: {
       PRICE_RX,
       SALE_RX,
+      VIOLATION_RX,
       allDocs,
       allRoots,
+      isOwnUI,
       isVisible,
       txt,
       ownTextOf,

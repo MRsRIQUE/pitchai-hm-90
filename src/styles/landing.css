@@ -31,7 +31,12 @@
 
   background: var(--bg);
   color: var(--ink);
-  font-family: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-family:
+    "Inter",
+    -apple-system,
+    BlinkMacSystemFont,
+    "Segoe UI",
+    sans-serif;
   font-size: 16px;
   line-height: 1.6;
   letter-spacing: -0.011em;
@@ -68,145 +73,327 @@
 }
 
 /* ============================================================
-   NAV FLUTUANTE — pílula de vidro destacada do topo
+   MOLDURA + NAV — layout do template Circular (rbp-saas-template)
+   reescrito com os tokens da Pitch AI: roxo no lugar do verde-limão e
+   moldura que acompanha o modo claro/escuro.
    ============================================================ */
-.landing .lp-nav {
-  position: sticky;
-  top: 0;
-  z-index: 50;
-  padding: 14px 16px 6px;
+.landing {
+  /* fundo da moldura e da nav — quase-preto no claro, preto puro no escuro */
+  --frame: #0c0c0d;
+  --frame-ink: #fafafa;
 }
-.landing .lp-nav-pill {
-  width: fit-content;
-  max-width: 100%;
-  margin: 0 auto;
+.landing.has-frame {
+  --frame-t: 10px;
+}
+
+/* --- moldura: 4 barras fixas + 4 cantos côncavos, sem cortar o conteúdo --- */
+.landing .site-frame {
+  position: fixed;
+  display: block;
+  z-index: 92;
+  pointer-events: none;
+  background-color: var(--frame);
+}
+.landing .site-frame--top {
+  top: 0;
+  left: 0;
+  right: 0;
+  height: var(--frame-thickness);
+}
+.landing .site-frame--bottom {
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: var(--frame-thickness);
+}
+.landing .site-frame--left {
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: var(--frame-thickness);
+}
+.landing .site-frame--right {
+  top: 0;
+  bottom: 0;
+  right: 0;
+  width: var(--frame-thickness);
+}
+.landing .site-corner {
+  position: fixed;
+  display: block;
+  z-index: 91;
+  pointer-events: none;
+  color: var(--frame);
+}
+.landing .site-corner--top-left {
+  top: var(--frame-thickness);
+  left: var(--frame-thickness);
+  transform: rotate(90deg);
+}
+.landing .site-corner--top-right {
+  top: var(--frame-thickness);
+  right: var(--frame-thickness);
+  transform: rotate(180deg);
+}
+.landing .site-corner--bottom-left {
+  bottom: var(--frame-thickness);
+  left: var(--frame-thickness);
+  transform: rotate(0deg);
+}
+.landing .site-corner--bottom-right {
+  bottom: var(--frame-thickness);
+  right: var(--frame-thickness);
+  transform: rotate(270deg);
+}
+/* no mobile a moldura some, como no original */
+@media (max-width: 850px) {
+  .landing .site-frame,
+  .landing .site-corner {
+    display: none;
+  }
+}
+
+/* --- nav: barra fixa encaixada na moldura, cantos de baixo arredondados --- */
+.landing .lp-nav {
+  position: fixed;
+  top: var(--frame-t, 0px);
+  left: 50%;
+  transform: translateX(-50%);
+  width: 100%;
+  max-width: 1060px;
+  z-index: 90;
+  background: var(--frame);
+  border-radius: 0 0 32px 32px;
+  box-shadow: 0 20px 50px -28px rgba(0, 0, 0, 0.7);
+}
+.landing .lp-nav-bar {
+  height: 76px;
   display: flex;
   align-items: center;
-  gap: 3px;
-  padding: 6px 6px 6px 14px;
-  border-radius: 999px;
-  border: 1px solid rgba(255, 255, 255, 0.85);
-  background-color: rgba(252, 252, 253, 0.76);
-  background-image: linear-gradient(160deg, rgba(255, 255, 255, 0.66), rgba(255, 255, 255, 0.38));
-  backdrop-filter: blur(28px) saturate(200%);
-  -webkit-backdrop-filter: blur(28px) saturate(200%);
-  box-shadow:
-    inset 0 1px 0 0 rgba(255, 255, 255, 0.96),
-    inset 1px 0 0 0 rgba(255, 255, 255, 0.5),
-    var(--shadow-sm);
-  transition:
-    box-shadow 0.3s ease,
-    background-color 0.3s ease;
-}
-.landing .lp-nav-pill.is-scrolled {
-  box-shadow:
-    inset 0 1px 0 0 rgba(255, 255, 255, 0.96),
-    inset 1px 0 0 0 rgba(255, 255, 255, 0.5),
-    var(--shadow-md);
+  justify-content: space-between;
+  gap: 12px;
+  padding: 0 14px 0 22px;
 }
 .landing .lp-nav-brand {
   display: inline-flex;
   align-items: center;
-  margin-right: 8px;
   flex: none;
 }
-/* a logo herda o tamanho do app; aqui ela encolhe para caber na pílula */
+/* a logo herda o tamanho do app; aqui ela encolhe para caber na barra */
 .landing .lp-nav-brand img,
 .landing .lp-nav-brand > div > span:first-child {
-  width: 24px;
-  height: 24px;
+  width: 26px;
+  height: 26px;
 }
 .landing .lp-nav-brand span:last-child {
-  font-size: 16px;
+  font-size: 17px;
   letter-spacing: -0.03em;
 }
+
 .landing .lp-nav-links {
   display: flex;
   align-items: center;
-  gap: 1px;
+  gap: 2px;
 }
 .landing .lp-nav-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
   border-radius: 999px;
-  padding: 7px 13px;
-  font-size: 13.5px;
+  padding: 8px 14px;
+  font-size: 14px;
   font-weight: 500;
-  color: var(--ink-3);
+  color: rgba(250, 250, 250, 0.78);
   white-space: nowrap;
   transition:
     background 0.18s ease,
     color 0.18s ease;
 }
 .landing .lp-nav-link:hover {
-  background: rgba(255, 255, 255, 0.7);
-  color: var(--ink);
+  background: rgba(250, 250, 250, 0.07);
+  color: var(--frame-ink);
+}
+
+/* --- dropdown de produto --- */
+.landing .lp-nav-drop {
+  position: relative;
+}
+.landing .lp-nav-chev {
+  width: 15px;
+  height: 15px;
+  transition: transform 0.2s ease;
+}
+.landing .lp-nav-chev.is-open {
+  transform: rotate(180deg);
+}
+.landing .lp-nav-menu {
+  position: absolute;
+  left: 50%;
+  top: 100%;
+  width: 272px;
+  padding-top: 14px;
+  opacity: 0;
+  pointer-events: none;
+  transform: translateX(-50%) translateY(-4px);
+  transition:
+    opacity 0.18s ease,
+    transform 0.18s ease;
+}
+.landing .lp-nav-menu.is-open {
+  opacity: 1;
+  pointer-events: auto;
+  transform: translateX(-50%) translateY(0);
+}
+.landing .lp-nav-menu-card {
+  border-radius: 18px;
+  border: 1px solid rgba(250, 250, 250, 0.1);
+  background: #16161c;
+  padding: 8px;
+  box-shadow: 0 30px 60px -24px rgba(0, 0, 0, 0.85);
+}
+.landing .lp-nav-menu-item {
+  display: block;
+  border-radius: 12px;
+  padding: 9px 12px;
+  transition: background 0.15s ease;
+}
+.landing .lp-nav-menu-item:hover {
+  background: rgba(250, 250, 250, 0.07);
+}
+.landing .lp-nav-menu-title {
+  display: block;
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--frame-ink);
+}
+.landing .lp-nav-menu-desc {
+  display: block;
+  font-size: 12px;
+  line-height: 1.4;
+  color: rgba(250, 250, 250, 0.48);
+}
+
+/* --- ações + CTA de pastilha e seta --- */
+.landing .lp-nav-actions {
+  display: flex;
+  align-items: center;
+  gap: 14px;
 }
 .landing .lp-nav-signin {
-  margin-left: 2px;
+  padding: 8px 6px;
 }
 .landing .lp-nav-cta {
+  position: relative;
   display: inline-flex;
   align-items: center;
-  justify-content: center;
-  height: 34px;
+  flex: none;
+}
+/* o bloco roxo mora atrás da pastilha e aparece só sob o quadrado da seta */
+.landing .lp-nav-cta-bg {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: calc(100% - 1.5rem);
+  border-radius: 12px;
+  background: var(--accent);
+}
+.landing .lp-nav-cta-label {
+  position: relative;
+  z-index: 1;
+  display: inline-flex;
+  align-items: center;
+  height: 40px;
   padding: 0 18px;
-  margin-left: 4px;
-  border-radius: 999px;
-  background: var(--ink);
-  color: #fff;
+  border-radius: 12px;
+  background: var(--frame-ink);
+  color: #0c0c0d;
   font-size: 13.5px;
   font-weight: 560;
   white-space: nowrap;
-  transition:
-    background 0.18s ease,
-    transform 0.12s ease;
 }
-.landing .lp-nav-cta:hover {
-  background: #26262b;
-}
-.landing .lp-nav-cta:active {
-  transform: translateY(0.5px);
-}
-.landing .lp-nav-burger {
-  display: none;
-  width: 34px;
-  height: 34px;
-  margin-left: 2px;
-  border-radius: 999px;
-  place-items: center;
-  color: var(--ink-2);
-}
-.landing .lp-nav-burger:hover {
-  background: rgba(255, 255, 255, 0.7);
-}
-.landing .lp-nav-sheet {
-  width: fit-content;
-  min-width: 240px;
-  margin: 8px auto 0;
+.landing .lp-nav-cta-arrow {
+  position: relative;
+  z-index: 1;
+  left: -1px;
   display: grid;
-  gap: 2px;
-  padding: 8px;
-  border-radius: 20px;
-  border: 1px solid rgba(255, 255, 255, 0.85);
-  /* o painel cobre conteúdo: opacidade alta o bastante para não depender
-     do backdrop-filter, que nem todo navegador aplica em overlay */
-  background-color: rgba(252, 252, 253, 0.97);
-  background-image: linear-gradient(160deg, rgba(255, 255, 255, 0.7), rgba(255, 255, 255, 0.45));
-  backdrop-filter: blur(28px) saturate(200%);
-  -webkit-backdrop-filter: blur(28px) saturate(200%);
-  box-shadow: var(--shadow-md);
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  color: #ffffff;
 }
-.landing .lp-nav-sheet a {
-  border-radius: 12px;
-  padding: 10px 16px;
-  font-size: 15px;
-  color: var(--ink-2);
+.landing .lp-nav-cta-arrow svg {
+  transition: transform 0.3s ease;
 }
-.landing .lp-nav-sheet a:hover {
-  background: rgba(255, 255, 255, 0.75);
-  color: var(--ink);
+.landing .lp-nav-cta:hover .lp-nav-cta-arrow svg {
+  transform: rotate(-45deg);
 }
 
-@media (max-width: 900px) {
+.landing .lp-nav-burger {
+  display: none;
+  width: 40px;
+  height: 40px;
+  border-radius: 12px;
+  place-items: center;
+  color: var(--frame-ink);
+  transition: background 0.18s ease;
+}
+.landing .lp-nav-burger:hover {
+  background: rgba(250, 250, 250, 0.08);
+}
+
+.landing .lp-nav-sheet {
+  border-top: 1px solid rgba(250, 250, 250, 0.1);
+  padding: 12px 18px 18px;
+  display: grid;
+  gap: 2px;
+}
+.landing .lp-nav-sheet-group {
+  display: grid;
+}
+.landing .lp-nav-sheet a,
+.landing .lp-nav-sheet .lp-nav-sheet-title {
+  display: block;
+  border-radius: 10px;
+  padding: 9px 12px;
+  font-size: 14.5px;
+  color: rgba(250, 250, 250, 0.8);
+}
+.landing .lp-nav-sheet .lp-nav-sheet-title {
+  font-size: 11.5px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: rgba(250, 250, 250, 0.4);
+  padding-bottom: 2px;
+}
+.landing .lp-nav-sheet a.sub {
+  padding-left: 24px;
+  font-size: 13.5px;
+  color: rgba(250, 250, 250, 0.58);
+}
+.landing .lp-nav-sheet a:hover {
+  background: rgba(250, 250, 250, 0.08);
+  color: #ffffff;
+}
+
+/* a nav saiu do fluxo: o hero abre espaço para ela */
+.landing.has-frame .hero {
+  padding-top: 150px;
+}
+
+@media (max-width: 1200px) {
+  .landing .lp-nav {
+    max-width: 880px;
+  }
+  .landing .lp-nav-brand span:last-child {
+    display: none;
+  }
+  .landing .lp-nav-link {
+    padding: 8px 11px;
+  }
+}
+@media (max-width: 940px) {
   .landing .lp-nav-links {
     display: none;
   }
@@ -214,12 +401,37 @@
     display: grid;
   }
 }
-@media (max-width: 560px) {
+@media (max-width: 850px) {
+  .landing .lp-nav {
+    top: 0;
+    left: 0;
+    width: 100%;
+    max-width: none;
+    transform: none;
+    border-radius: 0 0 28px 28px;
+    overflow: hidden;
+  }
+  .landing .lp-nav-bar {
+    height: 66px;
+    padding: 0 12px 0 16px;
+  }
+  .landing .lp-nav-brand span:last-child {
+    display: inline;
+  }
+  .landing.has-frame .hero {
+    padding-top: 104px;
+  }
+}
+@media (max-width: 600px) {
   .landing .lp-nav-signin {
     display: none;
   }
-  .landing .lp-nav-brand span:last-child {
-    display: none;
+  .landing .lp-nav-cta-label {
+    padding: 0 13px;
+    font-size: 13px;
+  }
+  .landing .lp-nav-actions {
+    gap: 10px;
   }
 }
 
@@ -256,7 +468,12 @@
 @media (max-width: 600px) {
   .landing .grid-field {
     opacity: 0.65;
-    -webkit-mask-image: linear-gradient(to bottom, #000 30%, rgba(0, 0, 0, 0.6) 70%, transparent 98%);
+    -webkit-mask-image: linear-gradient(
+      to bottom,
+      #000 30%,
+      rgba(0, 0, 0, 0.6) 70%,
+      transparent 98%
+    );
     mask-image: linear-gradient(to bottom, #000 30%, rgba(0, 0, 0, 0.6) 70%, transparent 98%);
   }
 }
@@ -331,7 +548,7 @@
    HERO
    ============================================================ */
 .landing .hero {
-  /* o respiro de baixo separa a faixa de números do marquee seguinte */
+  /* o respiro de baixo separa a faixa de números da faixa animada seguinte */
   padding: 72px 0 84px;
   position: relative;
   overflow: hidden;
@@ -711,48 +928,48 @@
   color: var(--ink-3);
   font-weight: 600;
 }
-  .landing .chip-v {
+.landing .chip-v {
   display: block;
   font-size: 12px;
   font-weight: 650;
   color: #0c0c0d;
   line-height: 1.2;
-  }
+}
 
-  .landing .chip-k {
+.landing .chip-k {
   color: rgba(12, 12, 13, 0.62);
-  }
+}
 
-  .landing .chat {
+.landing .chat {
   background: rgba(255, 255, 255, 0.86);
   border-color: rgba(12, 12, 13, 0.12);
   color: #0c0c0d;
   box-shadow: 0 12px 28px rgba(12, 12, 13, 0.14);
-  }
-  .landing .chat-q,
-  .landing .chat-q b,
-  .landing .chat-a {
+}
+.landing .chat-q,
+.landing .chat-q b,
+.landing .chat-a {
   color: #0c0c0d;
-  }
-  .landing .chat-a {
+}
+.landing .chat-a {
   border-top-color: rgba(12, 12, 13, 0.1);
-  }
-  .landing .chat-a-text {
+}
+.landing .chat-a-text {
   color: #0c0c0d;
-  }
-  .landing .pcard {
+}
+.landing .pcard {
   color: #0c0c0d;
-  }
-  .landing .pname {
+}
+.landing .pname {
   color: rgba(12, 12, 13, 0.62);
-  }
-  .landing .pprice,
-  .landing .ppin {
+}
+.landing .pprice,
+.landing .ppin {
   color: var(--accent-ink);
-  }
-  .landing .phone {
+}
+.landing .phone {
   color: #0c0c0d;
-  }
+}
 
 /* ============================================================
    STATS
@@ -766,12 +983,12 @@
   grid-template-columns: repeat(4, minmax(0, 1fr));
   align-items: stretch;
 }
-  .landing .stat {
-    min-height: 0;
-    padding: 26px 18px;
-    border-right: none;
-    border-bottom: 1px solid var(--line);
-  }
+.landing .stat {
+  min-height: 0;
+  padding: 26px 18px;
+  border-right: none;
+  border-bottom: 1px solid var(--line);
+}
 .landing .stat-d {
   max-width: 19em;
   min-height: 42px;
@@ -793,7 +1010,7 @@
 }
 .landing .stat-d {
   font-size: 13px;
-  color: var(--ink-3);
+  color: var(--ink-2);
   line-height: 1.5;
 }
 
@@ -1266,6 +1483,7 @@
   margin: 0 auto;
 }
 .landing .plan {
+  position: relative;
   background: var(--surface);
   border: 1px solid var(--line);
   border-radius: var(--r-lg);
@@ -1273,18 +1491,21 @@
   display: flex;
   flex-direction: column;
   min-height: 100%;
+  min-width: 0;
 }
 .landing .plan.pop {
-  position: relative;
   z-index: 2;
   border-color: var(--accent);
   background: var(--surface);
   padding: 32px 26px 30px;
-  transform: scale(1.045);
   box-shadow:
     0 0 0 1px var(--accent),
     0 28px 64px -24px rgba(109, 40, 217, 0.5),
     0 2px 10px rgba(12, 12, 13, 0.06);
+}
+.landing .plan.has-badge,
+.landing .plan.pop.has-badge {
+  padding-top: 48px;
 }
 .landing .plan.pop .plan-name {
   font-size: 16px;
@@ -1294,8 +1515,9 @@
 }
 .landing .plan-badge {
   position: absolute;
-  top: -10px;
+  top: 14px;
   left: 22px;
+  z-index: 3;
   background: var(--ink);
   color: #fff;
   font-size: 10.5px;
@@ -1556,6 +1778,109 @@
   color: var(--ink-3);
 }
 /* ============================================================
+   EFEITOS IMPORTADOS — chama no plano em destaque, shader no CTA final
+   e gradiente radial no rodapé
+   ============================================================ */
+
+/* --- plano em destaque: borda em chamas (FlameWrap) --- */
+/* cada plano ganhou um invólucro; ele precisa esticar como o card fazia */
+.landing .plans > div,
+.landing .plan-flame > div {
+  display: flex;
+  min-width: 0;
+}
+.landing .plans > div > .plan,
+.landing .plan-flame > div > .plan {
+  width: 100%;
+}
+.landing .plan-flame {
+  z-index: 2;
+  transition: transform 0.25s ease;
+}
+.landing .plan-flame:hover {
+  transform: translateY(-5px);
+}
+.landing .plan-flame .plan.pop,
+.landing .plan-flame .plan.pop:hover {
+  transform: none;
+  box-shadow: 0 24px 56px -28px rgba(109, 40, 217, 0.55);
+}
+
+/* --- CTA final: shader WebGL no lugar do glow estático --- */
+.landing .cta-band {
+  padding: 0;
+  background: #12081f;
+  border-color: rgba(255, 255, 255, 0.12);
+}
+/* o quadriculado animado dava lugar ao ruído do shader */
+.landing .cta-band::before {
+  display: none;
+}
+.landing .cta-inner {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 320px;
+  padding: 68px 48px;
+  text-align: center;
+}
+.landing .cta-inner h2 {
+  color: #ffffff;
+  margin-bottom: 12px;
+}
+.landing .cta-inner p {
+  color: rgba(255, 255, 255, 0.74);
+}
+.landing .cta-inner .btn-outline {
+  border-color: rgba(255, 255, 255, 0.28);
+  background: rgba(255, 255, 255, 0.07);
+  color: #ffffff;
+}
+.landing .cta-inner .btn-outline:hover {
+  border-color: rgba(255, 255, 255, 0.45);
+  background: rgba(255, 255, 255, 0.14);
+}
+
+/* --- rodapé sobre o radial-gradient --- */
+.landing footer.foot-dark {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  border-top: none;
+  /* o CTA já é um bloco escuro: o respiro antigo abria um vão branco grande */
+  margin-top: 56px;
+  padding: 76px 0 44px;
+  color: #ffffff;
+}
+.landing .foot-bg {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background: radial-gradient(125% 125% at 50% 10%, #000 40%, #63e 100%);
+}
+.landing .foot-dark .foot-brand p,
+.landing .foot-dark .foot-col a,
+.landing .foot-dark .foot-bot {
+  color: rgba(255, 255, 255, 0.66);
+}
+.landing .foot-dark .foot-col h4 {
+  color: rgba(255, 255, 255, 0.48);
+}
+.landing .foot-dark .foot-col a:hover {
+  color: #ffffff;
+}
+.landing .foot-dark .foot-bot {
+  border-top-color: rgba(255, 255, 255, 0.16);
+}
+
+@media (max-width: 700px) {
+  .landing .cta-inner {
+    padding: 52px 24px;
+  }
+}
+
+/* ============================================================
    REVEAL
    ============================================================ */
 .landing .rv {
@@ -1587,7 +1912,8 @@ html {
   position: fixed;
   top: 0;
   left: 0;
-  z-index: 70;
+  /* acima da moldura, senão a barra do topo a esconderia */
+  z-index: 95;
   height: 3px;
   width: 0;
   background: linear-gradient(90deg, var(--accent), #8b5cf6, #ff6b35);
@@ -1798,53 +2124,13 @@ html {
   animation-duration: 6.5s;
 }
 
-/* marquee infinito */
-.landing .marquee {
+/* faixa de recursos — texto correndo numa curva (TextLoop).
+   Sem fundo nem bordas: só a fita, com a malha da página passando por trás. */
+.landing .loop-band {
+  position: relative;
+  z-index: 1;
   overflow: hidden;
-  border-top: 1px solid var(--line);
-  background: var(--surface);
-  padding: 13px 0;
-  mask-image: linear-gradient(90deg, transparent, #000 10%, #000 90%, transparent);
-  -webkit-mask-image: linear-gradient(90deg, transparent, #000 10%, #000 90%, transparent);
-}
-.landing .marquee-track {
-  display: flex;
-  width: max-content;
-  animation: landing-marquee 30s linear infinite;
-  will-change: transform;
-}
-.landing .marquee-rev .marquee-track {
-  animation-direction: reverse;
-}
-.landing .marquee:hover .marquee-track {
-  animation-play-state: paused;
-}
-@keyframes landing-marquee {
-  to {
-    transform: translateX(-50%);
-  }
-}
-.landing .marquee-item {
-  display: inline-flex;
-  align-items: center;
-  gap: 10px;
-  padding-right: 36px;
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--ink-2);
-  white-space: nowrap;
-}
-.landing .marquee-item svg {
-  width: 14px;
-  height: 14px;
-  color: var(--accent);
-}
-.landing .marquee-sep {
-  width: 5px;
-  height: 5px;
-  border-radius: 50%;
-  background: var(--line);
-  flex: none;
+  background: transparent;
 }
 
 /* steps — hover lift + rotação do número */
@@ -1874,7 +2160,12 @@ html {
   position: absolute;
   inset: 0;
   pointer-events: none;
-  background: linear-gradient(115deg, transparent 32%, rgba(255, 255, 255, 0.55) 50%, transparent 68%);
+  background: linear-gradient(
+    115deg,
+    transparent 32%,
+    rgba(255, 255, 255, 0.55) 50%,
+    transparent 68%
+  );
   transform: translateX(-130%);
 }
 .landing .card:hover::after {
@@ -1921,8 +2212,7 @@ html {
 }
 .landing .plan.pop:hover {
   border-color: var(--accent);
-  /* preserva a escala do plano em destaque ao levantar */
-  transform: scale(1.045) translateY(-5px);
+  transform: translateY(-5px);
   box-shadow:
     0 0 0 1px var(--accent),
     0 36px 72px -24px rgba(109, 40, 217, 0.6),
@@ -2018,10 +2308,6 @@ html {
 @media (max-width: 600px) {
   .landing .hero .aurora {
     opacity: 0.25;
-  }
-  .landing .marquee-item {
-    font-size: 12px;
-    padding-right: 28px;
   }
 }
 
@@ -2155,10 +2441,12 @@ html {
     grid-template-columns: minmax(0, 460px);
     justify-content: center;
   }
-  .landing .plan.pop {
+  .landing .plan.pop,
+  .landing .plan-flame {
     transform: none;
   }
-  .landing .plan.pop:hover {
+  .landing .plan.pop:hover,
+  .landing .plan-flame:hover {
     transform: translateY(-5px);
   }
   .landing .split {
@@ -2317,36 +2605,12 @@ html.dark .landing .chip .chip-k {
   color: rgba(255, 255, 255, 0.66);
 }
 
-/* nav flutuante em vidro escuro */
-html.dark .landing .lp-nav-pill,
-html.dark .landing .lp-nav-sheet {
-  border-color: rgba(255, 255, 255, 0.14);
-  background-image: linear-gradient(160deg, rgba(255, 255, 255, 0.12), rgba(255, 255, 255, 0.05));
-  background-color: rgba(16, 14, 26, 0.82);
-  box-shadow:
-    inset 0 1px 0 0 rgba(255, 255, 255, 0.18),
-    var(--shadow-md);
+/* no escuro a moldura e a nav vão para o preto puro, como no template */
+html.dark .landing {
+  --frame: #000000;
 }
-html.dark .landing .lp-nav-sheet {
-  background-color: rgba(16, 14, 26, 0.97);
-}
-html.dark .landing .lp-nav-pill.is-scrolled {
-  box-shadow:
-    inset 0 1px 0 0 rgba(255, 255, 255, 0.18),
-    var(--shadow-lg);
-}
-html.dark .landing .lp-nav-link:hover,
-html.dark .landing .lp-nav-burger:hover,
-html.dark .landing .lp-nav-sheet a:hover {
-  background: rgba(255, 255, 255, 0.1);
-  color: var(--ink);
-}
-html.dark .landing .lp-nav-cta {
-  background: #ffffff;
-  color: #0c0c0d;
-}
-html.dark .landing .lp-nav-cta:hover {
-  background: #f2f2f5;
+html.dark .landing .lp-nav {
+  box-shadow: 0 20px 50px -28px rgba(0, 0, 0, 0.9);
 }
 
 /* demos vivas dos recursos: vidro dentro do card de vidro */
@@ -2377,6 +2641,9 @@ html.dark .landing .stats {
   background: rgba(255, 255, 255, 0.045);
   border-color: rgba(255, 255, 255, 0.1);
 }
+html.dark .landing .stat-d {
+  color: rgba(242, 242, 245, 0.78);
+}
 html.dark .landing .step,
 html.dark .landing .card,
 html.dark .landing .plan {
@@ -2395,10 +2662,6 @@ html.dark .landing .card:hover,
 html.dark .landing .plan:hover {
   border-color: rgba(255, 255, 255, 0.24);
 }
-html.dark .landing .cta-band {
-  background: rgba(255, 255, 255, 0.05);
-  border-color: rgba(255, 255, 255, 0.12);
-}
 html.dark .landing .step::before,
 html.dark .landing .card::before,
 html.dark .landing .plan::before {
@@ -2407,7 +2670,12 @@ html.dark .landing .plan::before {
 
 /* shine dos cards mais suave no dark */
 html.dark .landing .card::after {
-  background: linear-gradient(115deg, transparent 32%, rgba(255, 255, 255, 0.1) 50%, transparent 68%);
+  background: linear-gradient(
+    115deg,
+    transparent 32%,
+    rgba(255, 255, 255, 0.1) 50%,
+    transparent 68%
+  );
 }
 
 /* cartão de segurança — fundo mais claro que o page, texto claro se mantém */

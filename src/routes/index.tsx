@@ -18,10 +18,14 @@ import {
   Zap,
 } from "lucide-react";
 import { LandingNav } from "@/components/live/LandingNav";
+import { SiteFrame } from "@/components/live/SiteFrame";
 import { GridField } from "@/components/live/GridField";
 import { PitchAiLogo } from "@/components/live/PitchAiLogo";
 import { StepPhone, type StepPhoneState } from "@/components/live/StepPhone";
 import { ChatDemo, VoiceDemo } from "@/components/live/FeatureDemos";
+import { TextLoop } from "@/components/live/TextLoop";
+import { FlameWrap } from "@/components/ui/flame-wrap";
+import { Velaris } from "@/components/ui/velaris";
 import { PITCHAI_PLANS } from "@/lib/live/plans";
 import "@/styles/landing.css";
 
@@ -152,14 +156,22 @@ const STEPS: Array<{
   },
 ];
 
-const MARQUEE_ITEMS = [
-  { icon: Zap, label: "Respostas em menos de 2s" },
-  { icon: Mic, label: "Voz neural em PT-BR" },
-  { icon: Pin, label: "Auto-fixar vitrine" },
-  { icon: Shield, label: "Antiviolação ativa" },
-  { icon: MessageSquare, label: "Chat atendido 24/7" },
-  { icon: Volume2, label: "Alerta de venda" },
+/* a faixa de recursos virou texto correndo numa curva (TextLoop): sem ícones,
+   os rótulos entram como uma frase única separada por ponto médio */
+const LOOP_ITEMS = [
+  "Respostas em menos de 2s",
+  "Voz neural em PT-BR",
+  "Auto-fixar vitrine",
+  "Antiviolação ativa",
+  "Chat atendido 24/7",
+  "Alerta de venda",
 ];
+
+/* roxo da marca (#8b5cf6) no formato [r, g, b] 0-1 que o shader do FlameWrap espera */
+const FLAME_COLOR: [number, number, number] = [0.545, 0.361, 0.965];
+
+/* paleta do shader do CTA final: roxo da marca desmaiando para o quase-preto */
+const CTA_COLORS = ["#6d28d9", "#8b5cf6", "#4c1d95", "#12081f"];
 
 const FAQ = [
   {
@@ -188,19 +200,48 @@ function brl(cents: number): string {
   return (cents / 100).toFixed(2).replace(".", ",");
 }
 
-function Marquee({ rev = false }: { rev?: boolean }) {
-  const items = [...MARQUEE_ITEMS, ...MARQUEE_ITEMS];
+/**
+ * O TextLoop desenha num viewBox de 1200 de largura e o SVG é escalado para
+ * caber na tela. O fator desfaz essa escala: as medidas sobem quando a tela
+ * estreita e descem quando ela alarga, então a fita sai com a mesma altura e o
+ * mesmo corpo de texto em qualquer viewport.
+ */
+function useLoopScale() {
+  const [scale, setScale] = useState(1);
+  useEffect(() => {
+    const read = () => setScale(Math.min(3.2, Math.max(0.45, 1200 / (window.innerWidth || 1200))));
+    read();
+    window.addEventListener("resize", read);
+    return () => window.removeEventListener("resize", read);
+  }, []);
+  return scale;
+}
+
+/** corpo de letra desejado na tela, em px */
+const LOOP_TARGET_PX = 20;
+
+function FeatureLoop({ rev = false }: { rev?: boolean }) {
+  const k = useLoopScale();
+  const fontSize = LOOP_TARGET_PX * k;
+  // as demais medidas acompanham o corpo de letra escolhido
+  const r = fontSize / 25;
   return (
-    <div className={`marquee${rev ? " marquee-rev" : ""}`} aria-hidden="true">
-      <div className="marquee-track">
-        {items.map((it, i) => (
-          <span className="marquee-item" key={i}>
-            <it.icon />
-            {it.label}
-            <span className="marquee-sep" />
-          </span>
-        ))}
-      </div>
+    <div className="loop-band">
+      <TextLoop
+        text={LOOP_ITEMS.join(" · ")}
+        shape="wave"
+        autoBand
+        speed={70 * k}
+        direction={rev ? "reverse" : "forward"}
+        separator="✦"
+        curviness={16 * r}
+        fontSize={fontSize}
+        fontWeight={700}
+        letterSpacing={0.8 * r}
+        ribbonWidth={54 * r}
+        ribbonColor="var(--accent)"
+        color="#ffffff"
+      />
     </div>
   );
 }
@@ -334,8 +375,9 @@ function Landing() {
   }, []);
 
   return (
-    <div className="landing">
+    <div className="landing has-frame">
       <GridField />
+      <SiteFrame />
       <div className="landing-progress" aria-hidden="true" />
       <LandingNav />
 
@@ -469,7 +511,7 @@ function Landing() {
         </div>
       </header>
 
-      <Marquee />
+      <FeatureLoop />
 
       {/* ============ COMO FUNCIONA ============ */}
       <section id="como" className="bordered">
@@ -563,8 +605,8 @@ function Landing() {
                 p.months === 1
                   ? "Cobrado mensalmente"
                   : `Equivale a R$ ${brl(Math.round(p.amountCents / p.months))}/mês`;
-              return (
-                <div className={`plan${p.highlight ? " pop" : ""}`} key={p.priceId}>
+              const card = (
+                <div className={`plan${p.highlight ? " pop" : ""}${p.badge ? " has-badge" : ""}`}>
                   {p.badge && <span className="plan-badge">{p.badge}</span>}
                   <div className="plan-name">{p.name}</div>
                   <div className="plan-desc">
@@ -624,6 +666,36 @@ function Landing() {
                   )}
                 </div>
               );
+
+              /* só o plano em destaque queima: a borda em chamas é o que separa
+                 ele dos outros dois na fileira */
+              if (!p.highlight) return <div key={p.priceId}>{card}</div>;
+              return (
+                <FlameWrap
+                  key={p.priceId}
+                  className="plan-flame"
+                  /* o card precisa continuar sendo DOM: capturado para dentro
+                     do canvas ele sai do fluxo do grid, ganha barra de rolagem
+                     própria e o preço passa a tremer no shimmer do shader */
+                  capture={false}
+                  color={FLAME_COLOR}
+                  radius={16}
+                  height={150}
+                  spread={12}
+                  intensity={0.7}
+                  speed={0.3}
+                  scale={0.8}
+                  sparks={1.4}
+                  sparkSize={0.3}
+                  rim={2.2}
+                  melt={3}
+                  distortion={7}
+                  smoke={1}
+                  ember={1.6}
+                >
+                  {card}
+                </FlameWrap>
+              );
             })}
           </div>
         </div>
@@ -674,40 +746,54 @@ function Landing() {
         </div>
       </section>
 
-      <Marquee rev />
+      <FeatureLoop rev />
 
       {/* ============ CTA FINAL ============ */}
       <section className="bordered">
         <div className="wrap">
           <div className="cta-band rv">
-            <div className="cta-glow" aria-hidden="true" />
-            <h2>
-              A próxima live pode ser a primeira
-              <br />
-              em que você só apresenta.
-            </h2>
-            <p>
-              Instale, cadastre seus produtos e deixe a Pitch AI cuidar do chat, da vitrine e da
-              narração.
-            </p>
-            <div className="cta-actions">
-              <Link to="/app" className="btn btn-primary btn-lg btn-glow">
-                Escolher meu plano
-              </Link>
-              <Link to="/planos" className="btn btn-outline btn-lg">
-                Ver planos
-              </Link>
-            </div>
+            {/* o shader substitui o glow estático: o bloco final vira uma peça
+                escura, com o gradiente vivo por trás do texto */}
+            <Velaris
+              className="cta-shader"
+              bg="#12081f"
+              colors={CTA_COLORS}
+              speed={1.2}
+              grain={0.25}
+              height="auto"
+            >
+              <div className="cta-inner">
+                <h2>
+                  A próxima live pode ser a primeira
+                  <br />
+                  em que você só apresenta.
+                </h2>
+                <p>
+                  Instale, cadastre seus produtos e deixe a Pitch AI cuidar do chat, da vitrine e da
+                  narração.
+                </p>
+                <div className="cta-actions">
+                  <Link to="/app" className="btn btn-primary btn-lg btn-glow">
+                    Escolher meu plano
+                  </Link>
+                  <Link to="/planos" className="btn btn-outline btn-lg">
+                    Ver planos
+                  </Link>
+                </div>
+              </div>
+            </Velaris>
           </div>
         </div>
       </section>
 
       {/* ============ FOOTER ============ */}
-      <footer>
+      <footer className="foot-dark">
+        {/* radial-gradient do snippet: preto no centro-alto abrindo em roxo */}
+        <div className="foot-bg" aria-hidden="true" />
         <div className="wrap">
           <div className="foot">
             <div className="foot-brand">
-              <PitchAiLogo size="sm" variant="dark" />
+              <PitchAiLogo size="sm" variant="white" />
               <p>Automação de live commerce para vendedores do TikTok Shop no Brasil.</p>
             </div>
             <div className="foot-cols">

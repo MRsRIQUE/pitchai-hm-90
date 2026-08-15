@@ -12,35 +12,28 @@ import { Plus, Trash2, ShoppingBag, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { useLiveStore } from "@/stores/useLiveStore";
 import { useShallow } from "zustand/react/shallow";
-import { newProduct, type Product, type LiveConfig } from "@/lib/live/config";
+import { newProduct, vitrineItemsToNewProducts, type Product } from "@/lib/live/config";
 import { useVitrineSync } from "@/hooks/live/useVitrineSync";
-import { safeFetch } from "@/lib/api";
 
 export interface ProductsSectionProps {
   compact?: boolean;
 }
 
 export function ProductsSection({ compact = false }: ProductsSectionProps) {
-  const { config, vitrineItems, vitrineStatus, vitrineAt, loading, errors, updateConfig } =
-    useLiveStore(
-      useShallow((state) => ({
-        config: state.config,
-        vitrineItems: state.vitrineItems,
-        vitrineStatus: state.vitrineStatus,
-        vitrineAt: state.vitrineAt,
-        loading: state.loading,
-        errors: state.errors,
-        updateConfig: state.actions.updateConfig,
-      })),
-    );
+  const { config, vitrineItems, vitrineStatus, vitrineAt, loading, updateConfig } = useLiveStore(
+    useShallow((state) => ({
+      config: state.config,
+      vitrineItems: state.vitrineItems,
+      vitrineStatus: state.vitrineStatus,
+      vitrineAt: state.vitrineAt,
+      loading: state.loading,
+      updateConfig: state.actions.updateConfig,
+    })),
+  );
 
-  const { syncVitrine } = useVitrineSync({
-    autoSync: true,
-    syncInterval: 20000,
-    onError: (error) => {
-      toast.error(`Erro ao sincronizar vitrine: ${error}`);
-    },
-  });
+  // O ciclo automático é do LiveDashboard, que já monta este componente.
+  // Ligar autoSync aqui também dobrava as leituras do Firestore a cada 20s.
+  const { syncVitrine } = useVitrineSync({ autoSync: false });
 
   const [editingId, setEditingId] = useState<string | null>(null);
   const [importing, setImporting] = useState(false);
@@ -55,16 +48,34 @@ export function ProductsSection({ compact = false }: ProductsSectionProps) {
   const editing = config.produtos.find((p) => p.id === editingId) ?? null;
   const activeProduct = config.produtos.find((p) => p.active) ?? null;
 
-  // Sincroniza com a vitrine
+  // Sincroniza com a vitrine e traz os itens para a lista de produtos.
   const handleImportVitrine = async () => {
     setImporting(true);
     try {
-      await syncVitrine();
-      toast.success("Vitrine sincronizada com sucesso");
-    } catch (error) {
-      toast.error(
-        `Falha ao sincronizar: ${error instanceof Error ? error.message : String(error)}`,
-      );
+      const outcome = await syncVitrine();
+
+      if (!outcome.ok) {
+        // Colidir com o ciclo automático de 20s não é falha — avisar em
+        // vermelho aqui fazia parecer que a vitrine tinha quebrado.
+        if (outcome.busy) toast.info("Já estava sincronizando — tente de novo em alguns segundos");
+        else toast.error(`Falha ao sincronizar: ${outcome.error}`);
+        return;
+      }
+
+      if (outcome.items.length === 0) {
+        toast.info("Vitrine sincronizada, mas nenhum produto veio do TikTok");
+        return;
+      }
+
+      const novos = vitrineItemsToNewProducts(config.produtos, outcome.items);
+
+      if (novos.length === 0) {
+        toast.info("Nenhum produto novo — todos já estavam na sua lista");
+        return;
+      }
+
+      updateConfig((c) => ({ ...c, produtos: [...c.produtos, ...novos] }));
+      toast.success(`${novos.length} produto(s) importado(s) da vitrine`);
     } finally {
       setImporting(false);
     }
@@ -92,16 +103,7 @@ export function ProductsSection({ compact = false }: ProductsSectionProps) {
         return;
       }
 
-      const existentes = new Set(config.produtos.map((p) => p.name.toLowerCase().trim()));
-      const novos = scraped
-        .filter((s) => s?.name && !existentes.has(String(s.name).toLowerCase().trim()))
-        .map((s) => ({
-          id: crypto.randomUUID(),
-          name: String(s.name),
-          price: s.price ?? "",
-          description: s.description ?? "",
-          active: false,
-        }));
+      const novos = vitrineItemsToNewProducts(config.produtos, scraped);
 
       if (novos.length === 0) {
         toast.info("Nenhum produto novo — todos já existiam");
@@ -154,15 +156,36 @@ export function ProductsSection({ compact = false }: ProductsSectionProps) {
     }
   };
 
-  // Mensagem de status da vitrine
+  /**
+   * Mensagem de status da vitrine.
+   *
+   * A lista renderizada abaixo vem de `config.produtos` (catálogo do usuário),
+   * mas o status vinha só de `vitrineStatus`, que é calculado em cima dos itens
+   * que a extensão raspou da vitrine (`produtos[].fromVitrine` no doc
+   * compartilhado). Como produto importado ou criado à mão não carrega essa
+   * marca, o painel listava os produtos e, do lado, avisava que não havia
+   * nenhum. Agora o aviso de "sem produtos" só sai quando as duas fontes estão
+   * vazias de verdade.
+   */
+  const totalProdutos = config.produtos.length;
+  const totalVitrine = vitrineItems.length;
+
   const getVitrineStatusMessage = () => {
+    if (totalProdutos === 0 && totalVitrine === 0) {
+      return vitrineStatus === "vazia"
+        ? "Nenhum produto ainda. Abra o Gerenciador de LIVE do TikTok com a extensão Pitch AI ativa, ou cadastre um produto aqui."
+        : "Importe a vitrine do TikTok pela extensão, ou adicione manualmente.";
+    }
+
+    const catalogo = `${totalProdutos} produto${totalProdutos === 1 ? "" : "s"} no seu catálogo`;
+
     if (vitrineStatus === "ok" && vitrineAt) {
-      return `Vitrine sincronizada em ${new Date(vitrineAt).toLocaleTimeString("pt-BR")}.`;
+      return `${catalogo} · vitrine do TikTok sincronizada às ${new Date(vitrineAt).toLocaleTimeString("pt-BR")}.`;
     }
     if (vitrineStatus === "vazia") {
-      return "Abra o Gerenciador de LIVE do TikTok com a extensão Pitch AI ativa para a vitrine aparecer aqui.";
+      return `${catalogo} · a vitrine do TikTok não trouxe itens novos.`;
     }
-    return "Importe a vitrine do TikTok pela extensão, ou adicione manualmente.";
+    return `${catalogo} · sincronize a vitrine do TikTok para trazer o resto.`;
   };
 
   if (compact) {

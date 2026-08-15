@@ -35,6 +35,7 @@ import { getFirebaseAuth, googleProvider } from "@/lib/firebase";
 import { ensureAccountProfile } from "@/lib/account-profile";
 import { ensureMyLiveConfig, pushMyLiveConfig, regenerateSyncToken } from "@/lib/live/sync";
 import { loadConfig } from "@/lib/live/config";
+import { copyToClipboard } from "@/lib/clipboard";
 import { toast } from "sonner";
 
 export function SyncTokenCard() {
@@ -252,8 +253,9 @@ export function SyncTokenCard() {
 
   async function copyToken() {
     if (!token) return;
-    await navigator.clipboard.writeText(token);
-    toast.success("Token copiado — cole na extensão");
+    const copied = await copyToClipboard(token);
+    if (copied) toast.success("Token copiado — cole na extensão");
+    else toast.error("Não consegui copiar — selecione o token e copie manualmente");
   }
 
   async function pushNow() {

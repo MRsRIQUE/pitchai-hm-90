@@ -21,6 +21,13 @@ dist-ssr
 .wrangler/
 .dev.vars
 
+# Ferramentas de agente / execução local
+.claude/
+.maestri/
+.playwright-cli/
+test-results/
+output/
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json

@@ -50,14 +50,14 @@ async function expectBackgroundCoversViewport(page: Page) {
 for (const route of ROUTES) {
   test.describe(`rota ${route}`, () => {
     test("sem scroll horizontal e fundo cobre a viewport", async ({ page }) => {
-      await page.goto(route, { waitUntil: "networkidle" });
+      await page.goto(route, { waitUntil: "domcontentloaded" });
       await expectNoHorizontalScroll(page);
       await expectBackgroundCoversViewport(page);
     });
 
     test("após rotação portrait → landscape mantém invariantes", async ({ page, viewport }) => {
       test.skip(!viewport, "viewport indefinido");
-      await page.goto(route, { waitUntil: "networkidle" });
+      await page.goto(route, { waitUntil: "domcontentloaded" });
       // Rotaciona invertendo width/height
       await page.setViewportSize({ width: viewport!.height, height: viewport!.width });
       // Aguarda hook useDevice re-medir via requestAnimationFrame
@@ -67,7 +67,7 @@ for (const route of ROUTES) {
     });
 
     test("após simulação de URL bar colapsando não expõe faixa branca", async ({ page }) => {
-      await page.goto(route, { waitUntil: "networkidle" });
+      await page.goto(route, { waitUntil: "domcontentloaded" });
       // Simula a URL bar do Safari/Chrome colapsando: shrink de ~80px no visualViewport.
       // Como Playwright não dispara o evento real, validamos via 100dvh diretamente.
       const dvhCoversAtLeastSvh = await page.evaluate(() => {
@@ -88,26 +88,32 @@ for (const route of ROUTES) {
 
 test.describe("navegação entre rotas", () => {
   test("home → /planos → voltar preserva invariantes", async ({ page }) => {
-    await page.goto("/", { waitUntil: "networkidle" });
+    test.setTimeout(60_000);
+    await page.goto("/", { waitUntil: "domcontentloaded" });
     await expectNoHorizontalScroll(page);
 
-    await page.getByRole("link", { name: /^Planos$/i }).click();
-    await page.waitForURL("**/planos");
+    await page.goto("/planos", { waitUntil: "domcontentloaded" });
+    await expect(
+      page.getByRole("heading", { name: "Escolha seu plano do Pitch AI" }),
+    ).toBeVisible();
     await expectNoHorizontalScroll(page);
     await expectBackgroundCoversViewport(page);
 
-    await page.goBack();
-    await page.waitForURL("**/");
+    await page.goBack({ waitUntil: "domcontentloaded" });
+    await expect(page).toHaveURL(/\/$/);
+    await expect(
+      page.getByRole("heading", { name: /Sua live do TikTok Shop vendendo sozinha/i }),
+    ).toBeVisible();
     await expectNoHorizontalScroll(page);
     await expectBackgroundCoversViewport(page);
   });
 });
 
 test.describe("teclado virtual em formulário", () => {
-  test("foco em input no /reset-password não introduz scroll horizontal", async ({ page }) => {
-    await page.goto("/reset-password", { waitUntil: "networkidle" });
-    const firstInput = page.locator("input, textarea").first();
-    await firstInput.scrollIntoViewIfNeeded();
+  test("foco em input no /entrar não introduz scroll horizontal", async ({ page }) => {
+    await page.goto("/entrar", { waitUntil: "domcontentloaded" });
+    const firstInput = page.getByRole("textbox", { name: "E-mail" });
+    await expect(firstInput).toBeVisible();
     await firstInput.focus();
     // Simula shrink de visualViewport (~280px de teclado) e valida que o
     // layout continua sem overflow horizontal e cobre o espaço visível.

@@ -108,12 +108,105 @@ export async function pushMyLiveConfig(config: LiveConfig): Promise<void> {
 export type VitrineItem = { name: string; price?: string; description?: string };
 
 /**
- * Puxa os produtos que a extensão leu da vitrine do TikTok e sincronizou.
+ * Chaves que a barra injetada na live (extensão) liga/desliga em tempo real e
+ * que o painel web precisa espelhar. São booleanos simples, sempre o último
+ * clique vence — quem clicou por último (barra ou painel) manda.
+ */
+export const LIVE_CONTROL_KEYS = [
+  "protecaoGeral",
+  "violacao",
+  "autoMod",
+  "respostasIA",
+  "revisarAntesDeEnviar",
+] as const;
+
+export type LiveControlKey = (typeof LIVE_CONTROL_KEYS)[number];
+export type LiveControls = Partial<Record<LiveControlKey, boolean>>;
+
+/**
+ * Janela em que ignoramos o que vem do servidor logo depois de um clique local.
+ * Sem isso, uma leitura que já estava em voo quando o usuário clicou volta com
+ * o valor antigo e o botão "pula" sozinho de volta. Tem que ser menor que o
+ * intervalo do auto-sync (20s) para o servidor voltar a mandar logo em seguida.
+ */
+const CONTROL_ECHO_WINDOW_MS = 8_000;
+
+let lastLocalControlWriteAt = 0;
+
+/** Marca que o painel acabou de escrever um controle (ver janela acima). */
+export function markLocalControlWrite() {
+  lastLocalControlWriteAt = Date.now();
+}
+
+/** true enquanto vale ignorar os controles vindos do servidor. */
+export function isWithinControlEchoWindow(): boolean {
+  return Date.now() - lastLocalControlWriteAt < CONTROL_ECHO_WINDOW_MS;
+}
+
+/** Lê só os booleanos de controle de um objeto de config remoto. */
+export function extractLiveControls(remote: unknown): LiveControls {
+  const source = (remote ?? {}) as Record<string, unknown>;
+  const controls: LiveControls = {};
+  for (const key of LIVE_CONTROL_KEYS) {
+    if (typeof source[key] === "boolean") controls[key] = source[key] as boolean;
+  }
+  return controls;
+}
+
+/**
+ * Grava APENAS os campos informados dentro de `config` no doc compartilhado.
+ *
+ * Nunca mande a config inteira daqui: o painel costuma estar com um estado
+ * local mais velho que o da barra da live, e um push completo apagaria o que a
+ * extensão acabou de ligar. O `merge: true` do SDK cliente faz merge profundo,
+ * então só os campos listados aqui são tocados.
+ */
+export async function pushLiveConfigFields(fields: Partial<LiveConfig>): Promise<boolean> {
+  const entries = Object.entries(fields).filter(([, v]) => v !== undefined);
+  if (entries.length === 0) return true;
+
+  const uid = (await currentUser())?.uid ?? null;
+  if (!uid) return false;
+  const existing = await ensureMyLiveConfig();
+  const token = existing?.sync_token;
+  if (!token) return false;
+
+  const db = getFirebaseDb();
+  await setDoc(
+    doc(db, "live_configs_by_token", token),
+    {
+      uid,
+      config: Object.fromEntries(entries),
+      updatedAt: new Date().toISOString(),
+    },
+    { merge: true },
+  );
+  return true;
+}
+
+/** Publica os liga/desliga da barra da live. Ver `LIVE_CONTROL_KEYS`. */
+export async function pushLiveControls(controls: LiveControls): Promise<boolean> {
+  const entries = Object.entries(controls).filter(([, v]) => typeof v === "boolean");
+  if (entries.length === 0) return true;
+
+  markLocalControlWrite();
+  try {
+    return await pushLiveConfigFields(Object.fromEntries(entries) as Partial<LiveConfig>);
+  } finally {
+    // Uma leitura pode ter começado antes do write terminar; renova a janela.
+    markLocalControlWrite();
+  }
+}
+
+/**
+ * Puxa o estado compartilhado com a extensão: os produtos que ela leu da
+ * vitrine do TikTok e os controles da barra da live (Proteção, Auto Mod...).
  * Retorna null quando o usuário não está logado ou ainda não há config no backend.
  */
 export async function pullVitrine(options?: { signal?: AbortSignal }): Promise<{
   items: VitrineItem[];
   updatedAt: string | null;
+  controls: LiveControls;
 } | null> {
   const { signal } = options || {};
 
@@ -143,6 +236,7 @@ export async function pullVitrine(options?: { signal?: AbortSignal }): Promise<{
     return {
       items,
       updatedAt: data.updatedAt ?? null,
+      controls: extractLiveControls(remote),
     };
   } catch (error) {
     if (error instanceof Error && error.name === "AbortError") return null;

@@ -101,10 +101,10 @@ export function SimpleModeCard({
         />
         <Toggle
           icon={<Volume2 className="h-4 w-4 text-primary" />}
-          label={`Voz: ${voz?.label ?? "padrão"}`}
+          label="Avisar cada venda"
           checked={cfg.notificacoesVenda}
           onChange={(v) => setCfg((c) => ({ ...c, notificacoesVenda: v }))}
-          hint="avisa cada venda"
+          hint={`som + voz ${voz?.label ?? "padrão"}`}
         />
       </div>
 

@@ -29,6 +29,7 @@ import {
   ExtensionStatusBanner,
   fireSuccessConfetti,
 } from "@/components/live/ExtensionStatusBanner";
+import { copyToClipboard } from "@/lib/clipboard";
 
 interface QuickStartModalProps {
   open: boolean;
@@ -54,23 +55,30 @@ export function QuickStartModal({ open, onOpenChange, syncToken }: QuickStartMod
     return () => window.removeEventListener("pitchai-extension-detected", handler);
   }, []);
 
-  const handleLinkAccount = () => {
-    setAccountLinked(true);
-    if (syncToken) {
-      window.postMessage({ type: "PITCHAI_SYNC_TOKEN", token: syncToken }, "*");
-      navigator.clipboard.writeText(syncToken);
+  const handleLinkAccount = async () => {
+    if (!syncToken) {
+      toast.error("Sua chave de sincronização ainda não está pronta", {
+        description: "Aguarde alguns segundos e tente novamente.",
+      });
+      return;
     }
+
+    // Destino explícito: com "*" qualquer iframe ou script de terceiro na
+    // página receberia o token, que é a credencial usada pela extensão.
+    window.postMessage({ type: "PITCHAI_SYNC_TOKEN", token: syncToken }, window.location.origin);
+
+    const copied = await copyToClipboard(syncToken);
+
+    setAccountLinked(true);
     fireSuccessConfetti();
     toast.success("Conta do TikTok vinculada com sucesso! 🎉", {
-      description: "Seu robô Pitch AI está pronto para atuar na sua transmissão.",
+      description: copied
+        ? "Chave copiada. Seu robô Pitch AI está pronto para atuar na sua transmissão."
+        : "Seu robô Pitch AI está pronto. Não consegui copiar a chave — copie manualmente pelo painel.",
     });
   };
 
   const handleNextStep = () => {
-    if (step === 2) {
-      setAccountLinked(true);
-      fireSuccessConfetti();
-    }
     setStep((s) => s + 1);
   };
 
@@ -83,11 +91,17 @@ export function QuickStartModal({ open, onOpenChange, syncToken }: QuickStartMod
     });
   };
 
-  const copyChromeUrl = () => {
-    navigator.clipboard.writeText("chrome://extensions");
-    toast.success("Endereço 'chrome://extensions' copiado!", {
-      description: "Cole em uma nova aba do Chrome para abrir suas extensões.",
-    });
+  const copyChromeUrl = async () => {
+    const copied = await copyToClipboard("chrome://extensions");
+    if (copied) {
+      toast.success("Endereço 'chrome://extensions' copiado!", {
+        description: "Cole em uma nova aba do Chrome para abrir suas extensões.",
+      });
+    } else {
+      toast.error("Não consegui copiar", {
+        description: "Digite chrome://extensions na barra de endereços do Chrome.",
+      });
+    }
   };
 
   return (

@@ -1,4 +1,4 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -18,6 +18,7 @@ import {
   FileAudio,
 } from "lucide-react";
 import { toast } from "sonner";
+import { aiHeaders } from "@/lib/live/ai-headers";
 
 export function GeminiFeaturesPanel() {
   // Mode selection for AI prompt test
@@ -33,6 +34,7 @@ export function GeminiFeaturesPanel() {
   const [transcription, setTranscription] = useState("");
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
+  const micStreamRef = useRef<MediaStream | null>(null);
 
   // Live API Voice conversation state
   const [isLiveActive, setIsLiveActive] = useState(false);
@@ -41,6 +43,37 @@ export function GeminiFeaturesPanel() {
   );
   const [liveTranscript, setLiveTranscript] = useState<string[]>([]);
   const speechRecognitionRef = useRef<any>(null);
+  // Espelha isLiveActive para os callbacks do SpeechRecognition, que capturam
+  // o valor do render em que foram criados e ficariam sempre com `false`.
+  const isLiveActiveRef = useRef(false);
+
+  // Solta microfone, reconhecimento de voz e síntese ao sair da tela. Sem isto,
+  // navegar para outra rota deixava o microfone gravando indefinidamente.
+  useEffect(() => {
+    return () => {
+      isLiveActiveRef.current = false;
+
+      try {
+        if (mediaRecorderRef.current?.state === "recording") mediaRecorderRef.current.stop();
+      } catch {
+        /* recorder já encerrado */
+      }
+
+      micStreamRef.current?.getTracks().forEach((track) => track.stop());
+      micStreamRef.current = null;
+
+      try {
+        speechRecognitionRef.current?.stop();
+      } catch {
+        /* reconhecimento já encerrado */
+      }
+      speechRecognitionRef.current = null;
+
+      if (typeof window !== "undefined" && "speechSynthesis" in window) {
+        window.speechSynthesis.cancel();
+      }
+    };
+  }, []);
 
   // Handle Gemini Prompt Generation
   const handleGenerate = async () => {
@@ -53,7 +86,7 @@ export function GeminiFeaturesPanel() {
     try {
       const res = await fetch("/api/public/gemini/generate", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: await aiHeaders(),
         body: JSON.stringify({
           prompt,
           mode: modelMode,
@@ -79,6 +112,7 @@ export function GeminiFeaturesPanel() {
   const startRecording = async () => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      micStreamRef.current = stream;
       const mediaRecorder = new MediaRecorder(stream, { mimeType: "audio/webm" });
       mediaRecorderRef.current = mediaRecorder;
       audioChunksRef.current = [];
@@ -91,8 +125,11 @@ export function GeminiFeaturesPanel() {
 
       mediaRecorder.onstop = async () => {
         const audioBlob = new Blob(audioChunksRef.current, { type: "audio/webm" });
-        await sendAudioForTranscription(audioBlob);
+        // Libera o microfone antes de transcrever: o envio pode demorar e não
+        // há motivo para manter a luz do microfone acesa nesse meio-tempo.
         stream.getTracks().forEach((track) => track.stop());
+        micStreamRef.current = null;
+        await sendAudioForTranscription(audioBlob);
       };
 
       mediaRecorder.start();
@@ -113,23 +150,28 @@ export function GeminiFeaturesPanel() {
   const sendAudioForTranscription = async (blob: Blob) => {
     setTranscribing(true);
     try {
-      const reader = new FileReader();
-      reader.readAsDataURL(blob);
-      reader.onloadend = async () => {
-        const base64data = reader.result as string;
-        const res = await fetch("/api/public/gemini/transcribe", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            audioBase64: base64data,
-            mimeType: blob.type || "audio/webm",
-          }),
-        });
-        const data = await res.json();
-        if (!res.ok) throw new Error(data.message || "Falha na transcrição");
-        setTranscription(data.transcription || "Nenhum texto identificado.");
-        toast.success("Áudio transcrito com gemini-3.5-flash");
-      };
+      // O FileReader é assíncrono: sem esperar por ele, o `finally` desligava o
+      // indicador antes da transcrição começar e os erros escapavam do catch.
+      const base64data = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onloadend = () => resolve(reader.result as string);
+        reader.onerror = () => reject(new Error("Não consegui ler o áudio gravado"));
+        reader.readAsDataURL(blob);
+      });
+
+      const res = await fetch("/api/public/gemini/transcribe", {
+        method: "POST",
+        headers: await aiHeaders(),
+        body: JSON.stringify({
+          audioBase64: base64data,
+          mimeType: blob.type || "audio/webm",
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.message || "Falha na transcrição");
+
+      setTranscription(data.transcription || "Nenhum texto identificado.");
+      toast.success("Áudio transcrito");
     } catch (e: any) {
       toast.error(e?.message || "Erro ao transcrever áudio");
     } finally {
@@ -140,6 +182,7 @@ export function GeminiFeaturesPanel() {
   // Live Voice Conversation
   const toggleLiveVoice = () => {
     if (isLiveActive) {
+      isLiveActiveRef.current = false;
       if (speechRecognitionRef.current) {
         try {
           speechRecognitionRef.current.stop();
@@ -147,6 +190,7 @@ export function GeminiFeaturesPanel() {
           /* ignore stop error */
         }
       }
+      if ("speechSynthesis" in window) window.speechSynthesis.cancel();
       setIsLiveActive(false);
       setLiveStatus("disconnected");
       toast.info("Sessão de voz em tempo real encerrada");
@@ -168,13 +212,13 @@ export function GeminiFeaturesPanel() {
     recognition.lang = "pt-BR";
 
     recognition.onstart = () => {
+      isLiveActiveRef.current = true;
       setIsLiveActive(true);
       setLiveStatus("connected");
-      toast.success("Sessão de voz iniciada (gemini-3.1-flash-live-preview)");
-      setLiveTranscript((prev) => [
-        ...prev,
-        "🎙 Live API (gemini-3.1-flash-live-preview) conectada. Pode falar!",
-      ]);
+      toast.success("Sessão de voz iniciada");
+      // O reconhecimento de fala é do próprio navegador; a IA entra depois,
+      // para responder o texto reconhecido.
+      setLiveTranscript((prev) => [...prev, "🎙 Microfone conectado. Pode falar!"]);
     };
 
     recognition.onresult = async (event: any) => {
@@ -186,13 +230,14 @@ export function GeminiFeaturesPanel() {
       try {
         const res = await fetch("/api/public/gemini/generate", {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: await aiHeaders(),
           body: JSON.stringify({
             prompt: `Responda de forma rápida, fluida e natural como assistente de voz em 1 frase curta: "${spokenText}"`,
             mode: "fast",
           }),
         });
         const data = await res.json();
+        if (!res.ok) throw new Error(data.message || "Falha na resposta de voz");
         if (data.text) {
           setLiveTranscript((prev) => [...prev, `Gemini Live: "${data.text}"`]);
           // Speak output using Web Speech TTS
@@ -208,12 +253,15 @@ export function GeminiFeaturesPanel() {
     };
 
     recognition.onerror = () => {
+      isLiveActiveRef.current = false;
       setLiveStatus("disconnected");
       setIsLiveActive(false);
     };
 
     recognition.onend = () => {
-      if (isLiveActive) {
+      // Lê do ref: o estado capturado aqui é o do momento da criação (false),
+      // então a sessão nunca se reconectava sozinha.
+      if (isLiveActiveRef.current) {
         try {
           recognition.start();
         } catch {
@@ -249,9 +297,9 @@ export function GeminiFeaturesPanel() {
             <div>
               <h3 className="font-semibold text-sm">Conversas por Voz em Tempo Real</h3>
               <span className="flex items-center gap-1 text-xs text-muted-foreground">
-                Live API ·{" "}
+                Voz do navegador + IA ·{" "}
                 <Badge variant="outline" className="text-[10px]">
-                  gemini-3.1-flash-live-preview
+                  gemini-3.1-flash-lite
                 </Badge>
               </span>
             </div>

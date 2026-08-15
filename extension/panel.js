@@ -75,29 +75,43 @@
     return salt;
   }
 
-  async function getStorageKey(seed) {
-    try {
-      const enc = new TextEncoder();
-      const extensionId = chrome.runtime?.id || "pitchai";
-      const keySeed = seed || `pitchai-extension:${extensionId}`;
-      const salt = await getOrCreateSalt();
-      const keyMaterial = await crypto.subtle.importKey(
-        "raw",
-        enc.encode(keySeed),
-        { name: "PBKDF2" },
-        false,
-        ["deriveKey"],
-      );
-      return await crypto.subtle.deriveKey(
-        { name: "PBKDF2", salt, iterations: PBKDF2_ITERATIONS, hash: "SHA-256" },
-        keyMaterial,
-        { name: "AES-GCM", length: 256 },
-        false,
-        ["encrypt", "decrypt"],
-      );
-    } catch {
-      return null;
-    }
+  // PBKDF2 com 600k iterações custa ~300ms. Sem cache, cada save fazia duas
+  // derivações (ler + gravar) e o clique no toggle parecia travado.
+  const cryptoKeyCache = new Map();
+
+  function getStorageKey(seed) {
+    const extensionId = chrome.runtime?.id || "pitchai";
+    const keySeed = seed || `pitchai-extension:${extensionId}`;
+    const cached = cryptoKeyCache.get(keySeed);
+    if (cached) return cached;
+    const pending = (async () => {
+      try {
+        const enc = new TextEncoder();
+        const salt = await getOrCreateSalt();
+        const keyMaterial = await crypto.subtle.importKey(
+          "raw",
+          enc.encode(keySeed),
+          { name: "PBKDF2" },
+          false,
+          ["deriveKey"],
+        );
+        return await crypto.subtle.deriveKey(
+          { name: "PBKDF2", salt, iterations: PBKDF2_ITERATIONS, hash: "SHA-256" },
+          keyMaterial,
+          { name: "AES-GCM", length: 256 },
+          false,
+          ["encrypt", "decrypt"],
+        );
+      } catch {
+        return null;
+      }
+    })();
+    cryptoKeyCache.set(keySeed, pending);
+    // Não guarda falha no cache: se a derivação falhou, tenta de novo depois.
+    pending.then((k) => {
+      if (!k) cryptoKeyCache.delete(keySeed);
+    });
+    return pending;
   }
 
   async function encryptConfigObj(obj) {
@@ -177,7 +191,9 @@
     },
 
     vozContextos: { default: null, greeting: null, offer: null, farewell: null },
-    filtros: { blacklist: [], whitelist: [] },
+    // usarListaPadrao começa LIGADO: a live nasce protegida sem o vendedor
+    // precisar digitar palavrão por palavrão (lista em blocklist.js).
+    filtros: { blacklist: [], whitelist: [], usarListaPadrao: true },
     produtos: [],
     demo: { enabled: false, velocidade: 1, comChat: true, comVendas: true, comViolacao: false },
     syncToken: "",
@@ -207,7 +223,15 @@
         pushToTalk: { ...DEFAULTS.voz.pushToTalk, ...(stored.voz?.pushToTalk || {}) },
       },
       vozContextos: { ...DEFAULTS.vozContextos, ...(stored.vozContextos || {}) },
-      filtros: { ...DEFAULTS.filtros, ...(stored.filtros || {}) },
+      filtros: {
+        ...DEFAULTS.filtros,
+        ...(stored.filtros || {}),
+        blacklist: Array.isArray(stored.filtros?.blacklist) ? stored.filtros.blacklist : [],
+        whitelist: Array.isArray(stored.filtros?.whitelist) ? stored.filtros.whitelist : [],
+        // Só fica desligada se o usuário desligou de propósito; config antiga
+        // (sem a chave) continua protegida.
+        usarListaPadrao: stored.filtros?.usarListaPadrao !== false,
+      },
       demo: { ...DEFAULTS.demo, ...(stored.demo || {}) },
       produtos: Array.isArray(stored.produtos) ? stored.produtos : [],
     };
@@ -222,18 +246,64 @@
     );
   }
   /**
-   * Gravação incremental: relê o storage e mescla só o que o painel mudou.
-   * Sem isso, o loop de raspagem (a cada 2s) sobrescreve as marcações do painel.
+   * Gravação incremental de verdade.
+   *
+   * Antes o save regravava a config INTEIRA que o painel tinha em memória
+   * (`{ ...stored, ...cfg }`). Se a barra da live tivesse acabado de mudar algo
+   * — o botão Proteção, por exemplo — o próximo save do painel revertia a
+   * mudança. Agora só os caminhos que o painel mexeu (`"voz.speed"`,
+   * `"filtros.blacklist"`, `"produtos"`…) são aplicados por cima do que está
+   * no storage naquele instante.
+   *
+   * @param {string|string[]} paths caminho(s) alterado(s) pelo painel
    */
-  function save(cfg, opts) {
-    chrome.storage.local.get([KEY], async (r) => {
-      const dec = await decryptConfigObj(r[KEY]);
-      const stored = normalizeConfig(dec);
-      const merged = normalizeConfig({ ...stored, ...cfg });
-      if (!opts?.products && Array.isArray(stored.produtos)) merged.produtos = stored.produtos;
-      const enc = await encryptConfigObj(merged);
-      chrome.storage.local.set({ [KEY]: enc });
+  const pendingSave = new Map();
+  let saveTimer = null;
+  // Última config que o próprio painel gravou. O eco desse save volta pelo
+  // onChanged; comparar o conteúdo (em vez de usar uma janela de tempo) evita
+  // re-renderizar por cima do que o usuário está digitando sem perder uma
+  // mudança que a barra faça logo em seguida.
+  let lastSelfPayload = "";
+
+  const cloneValue = (v) => (v && typeof v === "object" ? JSON.parse(JSON.stringify(v)) : v);
+
+  function save(paths) {
+    // Compat: alguma chamada antiga no formato save(cfg) grava tudo.
+    if (paths && typeof paths === "object" && !Array.isArray(paths)) return saveAll();
+    const list = Array.isArray(paths) ? paths : [paths];
+    // O valor é capturado AGORA (e não no flush) para não perder o que o
+    // usuário digitou caso a barra grave algo no meio do caminho.
+    list.forEach((p) => {
+      if (typeof p === "string" && p) pendingSave.set(p, cloneValue(get(cfg, p)));
     });
+    if (!pendingSave.size) return;
+    clearTimeout(saveTimer);
+    saveTimer = setTimeout(flushSave, 120);
+  }
+
+  async function flushSave() {
+    if (!pendingSave.size) return;
+    const patch = Array.from(pendingSave.entries());
+    pendingSave.clear();
+    const r = await new Promise((res) => chrome.storage.local.get([KEY], res));
+    const stored = normalizeConfig(await decryptConfigObj(r[KEY]));
+    patch.forEach(([path, value]) => {
+      if (value !== undefined) set(stored, path, value);
+    });
+    await writeConfig(stored);
+  }
+
+  /** Grava a config inteira. Só para o "⬇ Sincronizar", que troca tudo mesmo. */
+  async function saveAll() {
+    clearTimeout(saveTimer);
+    pendingSave.clear();
+    await writeConfig(normalizeConfig(cfg));
+  }
+
+  async function writeConfig(obj) {
+    lastSelfPayload = JSON.stringify(obj);
+    const enc = await encryptConfigObj(obj);
+    chrome.storage.local.set({ [KEY]: enc });
   }
 
   const BAD_PRODUCT_RX =
@@ -247,19 +317,31 @@
       .replace(/\s+/g, " ")
       .trim();
   }
+  // Quantos produtos a última limpeza descartou só por causa do nome curto.
+  // O usuário precisa saber disso: sem o aviso o item "some" da lista sem motivo.
+  let shortNameDrops = 0;
+
   function cleanupProducts() {
     const before = cfg.produtos?.length || 0;
     const seen = new Set();
+    let curtos = 0;
     cfg.produtos = (cfg.produtos || []).filter((p) => {
       const key = productKey(p.name);
-      if (!key || key.length < 4 || BAD_PRODUCT_RX.test(p.name || "")) return false;
+      if (BAD_PRODUCT_RX.test(p.name || "")) return false;
+      // O auto-fixar acha o produto pesquisando pelo nome na vitrine do TikTok;
+      // com menos de 4 letras a busca casa com qualquer coisa.
+      if (!key || key.length < 4) {
+        if (String(p?.name || "").trim()) curtos += 1;
+        return false;
+      }
       if (p.demo && !cfg.demo?.enabled) return false;
       if (seen.has(key)) return false;
       seen.add(key);
       return true;
     });
+    shortNameDrops = curtos;
     if (!cfg.produtos.some((p) => p.active) && cfg.produtos[0]) cfg.produtos[0].active = true;
-    if (cfg.produtos.length !== before) save(cfg, { products: true });
+    if (cfg.produtos.length !== before) save("produtos");
   }
   function sendDemoCommand(action) {
     chrome.storage.local.set({ "pitchai.demo.cmd": { action, ts: Date.now() } });
@@ -281,6 +363,75 @@
         sel.appendChild(o);
       });
     });
+  }
+
+  // ---------- Lista padrão de palavras bloqueadas (blocklist.js) ----------
+  const BLOCKLIST = typeof window !== "undefined" ? window.PitchAIBlocklist : null;
+  const CAT_LABELS = {
+    palavroes: "Palavrões e ofensas",
+    odio: "Discurso de ódio",
+    sexual: "Conteúdo sexual",
+    risco_tiktok: "Risco de punição no TikTok",
+  };
+
+  /** Termos da lista padrão, sem duplicar (as categorias podem se repetir). */
+  function defaultTerms() {
+    const todas = BLOCKLIST?.TODAS;
+    return Array.isArray(todas) ? Array.from(new Set(todas)) : [];
+  }
+
+  /** Resumo por categoria + lista completa em modo leitura. */
+  function renderBlocklistInfo() {
+    const totalEl = document.getElementById("pnl-bl-total");
+    const catsEl = document.getElementById("pnl-bl-cats");
+    const fullEl = document.getElementById("pnl-bl-full");
+    if (!catsEl && !totalEl && !fullEl) return;
+
+    const categorias = BLOCKLIST?.CATEGORIAS || {};
+    const nomes = Object.keys(categorias);
+
+    if (totalEl) totalEl.textContent = String(defaultTerms().length);
+
+    if (catsEl) {
+      catsEl.innerHTML = "";
+      nomes.forEach((k) => {
+        const box = document.createElement("div");
+        box.className = "pnl-bl-cat";
+        const label = document.createElement("span");
+        label.textContent = CAT_LABELS[k] || k;
+        const count = document.createElement("b");
+        count.textContent = `${(categorias[k] || []).length} termos`;
+        box.append(label, count);
+        catsEl.appendChild(box);
+      });
+      if (!nomes.length) {
+        const warn = document.createElement("p");
+        warn.className = "pnl-sub";
+        warn.textContent = "Não consegui carregar a lista padrão (blocklist.js).";
+        catsEl.appendChild(warn);
+      }
+    }
+
+    if (fullEl && !fullEl.dataset.filled) {
+      fullEl.innerHTML = "";
+      nomes.forEach((k) => {
+        const group = document.createElement("div");
+        group.className = "pnl-bl-group";
+        const title = document.createElement("h4");
+        title.textContent = `${CAT_LABELS[k] || k} · ${(categorias[k] || []).length}`;
+        const terms = document.createElement("div");
+        terms.className = "pnl-bl-terms";
+        (categorias[k] || []).forEach((t) => {
+          const chip = document.createElement("span");
+          chip.className = "pnl-bl-term";
+          chip.textContent = t;
+          terms.appendChild(chip);
+        });
+        group.append(title, terms);
+        fullEl.appendChild(group);
+      });
+      if (nomes.length) fullEl.dataset.filled = "1";
+    }
   }
 
   function render() {
@@ -308,6 +459,7 @@
       sel.value = v?.id || "";
     });
 
+    renderBlocklistInfo();
     renderProducts();
     renderAutofixPicker();
   }
@@ -321,16 +473,64 @@
     cfg.autoFixar.names = rodizio().map((p) => p.name);
   }
 
-  function renderAutofixPicker() {
-    const sel = document.getElementById("pnl-autofix-pick");
+  /**
+   * Produtos que podem ir para o <select> do auto-fixar: o TikTok só encontra o
+   * produto pelo nome, então nomes com menos de 4 letras são inúteis na busca.
+   * Isso NÃO quer dizer que não há produtos — a lista completa continua válida.
+   */
+  function pickableProducts() {
+    return (cfg.produtos || []).filter((p) => p?.name && productKey(p.name).length >= 4);
+  }
+
+  // Timer que devolve o hint ao resumo real depois de uma mensagem temporária
+  // ("✓ vitrine atualizada…"). Fica no escopo do módulo porque o auto-scrape do
+  // boot chama reloadCatalog antes do corpo do DOMContentLoaded terminar.
+  let hintTimer = null;
+
+  /**
+   * O hint precisa refletir `cfg.produtos` (a mesma fonte da lista de produtos).
+   * Antes ele saía do filtro de nome curto e do `return` antecipado quando o
+   * <select> não existia no HTML — por isso o painel dizia "nenhum produto lido"
+   * com a lista cheia logo abaixo.
+   */
+  function renderAutofixHint() {
     const hint = document.getElementById("pnl-autofix-hint");
+    if (!hint) return;
+    const total = (cfg.produtos || []).length;
+    const noRodizio = rodizio();
+    // Descartados na limpeza + os que ainda estão na lista mas o TikTok não acha.
+    const curtos = shortNameDrops + (total - pickableProducts().length);
+    const avisoCurtos = curtos
+      ? ` ${curtos} item(ns) com nome curto demais para o TikTok localizar foram deixados de fora — o nome precisa de pelo menos 4 letras.`
+      : "";
+
+    if (!total) {
+      hint.textContent =
+        "Nenhum produto lido ainda. Abra a live e toque em 🔄 para ler a vitrine." + avisoCurtos;
+      return;
+    }
+    const msg = noRodizio.length
+      ? `${total} produto(s) na vitrine · rodízio com ${noRodizio.length}: ${noRodizio
+          .map((p) => p.name)
+          .join(", ")}`
+      : `${total} produto(s) na vitrine. Nenhum marcado no rodízio — a IA vai alternar todos.`;
+    hint.textContent = msg + avisoCurtos;
+  }
+
+  function renderAutofixPicker() {
+    renderAutofixHint();
+    const sel = document.getElementById("pnl-autofix-pick");
     if (!sel) return;
-    const list = (cfg.produtos || []).filter((p) => p?.name && productKey(p.name).length >= 4);
+    const list = pickableProducts();
     const current = cfg.autoFixar?.query || "";
     sel.innerHTML = "";
     const none = document.createElement("option");
     none.value = "";
-    none.textContent = list.length ? "— escolher produto —" : "— nenhum produto lido ainda —";
+    none.textContent = list.length
+      ? "— escolher produto —"
+      : (cfg.produtos || []).length
+        ? "— nenhum produto com nome pesquisável —"
+        : "— nenhum produto lido ainda —";
     sel.appendChild(none);
     list.forEach((p) => {
       const o = document.createElement("option");
@@ -342,16 +542,6 @@
       (p) => p.name === current || p.id === current || cfg.autoFixar?.ids?.includes(p.id),
     );
     sel.value = currentProduct?.id || "";
-    if (hint) {
-      const sel2 = rodizio();
-      if (!list.length) {
-        hint.textContent = "Abra a live e toque em 🔄 para ler a vitrine automaticamente.";
-      } else if (sel2.length) {
-        hint.textContent = `Rodízio: ${sel2.length} produto(s) — ${sel2.map((p) => p.name).join(", ")}`;
-      } else {
-        hint.textContent = `${list.length} produto(s) lidos. Nenhum marcado — vai rodar todos.`;
-      }
-    }
   }
 
   function renderProducts() {
@@ -389,7 +579,7 @@
         else ids.delete(prod.id);
         cfg.autoFixar.ids = Array.from(ids);
         syncRodizioNames();
-        save(cfg);
+        save(["autoFixar.ids", "autoFixar.names"]);
         renderAutofixPicker();
       };
       const txt = document.createElement("span");
@@ -401,7 +591,8 @@
       input.oninput = () => {
         cfg.produtos[i].name = input.value;
         syncRodizioNames();
-        save(cfg, { products: true });
+        save(["produtos", "autoFixar.names"]);
+        renderAutofixHint();
       };
       const del = document.createElement("button");
       del.className = "pnl-btn ghost";
@@ -410,7 +601,7 @@
         cfg.autoFixar.ids = cfg.autoFixar.ids.filter((id) => id !== prod.id);
         cfg.produtos.splice(i, 1);
         syncRodizioNames();
-        save(cfg, { products: true });
+        save(["produtos", "autoFixar.ids", "autoFixar.names"]);
         render();
       };
       row.append(wrap, input, del);
@@ -461,12 +652,14 @@
     // ---------- Auto-scrape no boot ----------
     // Puxa a vitrine automaticamente quando o painel abre, sem o usuário precisar clicar.
     // Só dispara se já não houver produtos (evita re-raspagem desnecessária).
+    // Sem `await`: a leitura pode levar até 9s e antes disso o painel inteiro
+    // ficava sem responder aos cliques (os listeners abaixo ainda não existiam).
     if (!cfg.produtos || cfg.produtos.length === 0) {
       const hint = document.getElementById("pnl-autofix-hint");
       if (hint) hint.textContent = "Lendo vitrine…";
-      try {
-        await reloadCatalog(null);
-      } catch {}
+      Promise.resolve()
+        .then(() => reloadCatalog(null))
+        .catch(() => {});
     }
 
     document.querySelectorAll("[data-key]").forEach((el) => {
@@ -474,7 +667,7 @@
       if (el.classList.contains("pnl-toggle")) {
         el.addEventListener("click", () => {
           set(cfg, key, !get(cfg, key));
-          save(cfg);
+          save(key);
           el.classList.toggle("on");
         });
       } else if (el.tagName === "SELECT") {
@@ -482,14 +675,14 @@
           const raw = el.value;
           const num = Number(raw);
           set(cfg, key, raw !== "" && !Number.isNaN(num) ? num : raw);
-          save(cfg);
+          save(key);
         });
       } else if (el.tagName === "INPUT") {
         el.addEventListener("input", () => {
           const numeric = el.type === "number" || el.type === "range";
           const v = numeric ? +el.value : el.value;
           set(cfg, key, v);
-          save(cfg);
+          save(key);
         });
       }
     });
@@ -507,12 +700,22 @@
         cfg.autoFixar.ids = Array.from(ids);
       }
       syncRodizioNames();
-      save(cfg);
+      save(["autoFixar.query", "autoFixar.ids", "autoFixar.names"]);
       const inp = document.querySelector('input[data-key="autoFixar.query"]');
       if (inp) inp.value = name;
       renderProducts();
       renderAutofixPicker();
     });
+    /**
+     * Espera a barra da live gravar a vitrine.
+     *
+     * O listener antigo lia `changes[KEY].newValue` cru — que é o blob
+     * criptografado `{__enc,__iv}`. `normalizeConfig` desse blob devolvia a
+     * config toda vazia (produtos: []), e depois de 1,2s isso era aceito como
+     * resultado: o painel perdia produtos e token da memória e escrevia
+     * "Nenhum produto encontrado" mesmo com a vitrine cheia no storage.
+     * Agora sempre descriptografamos antes de olhar.
+     */
     function waitForCatalogUpdate(beforeCount) {
       return new Promise((resolve) => {
         const start = Date.now();
@@ -526,10 +729,9 @@
           } catch {}
           resolve(updated || null);
         };
-        const listener = (changes) => {
-          const updated = changes[KEY]?.newValue;
-          if (!updated) return;
-          const normalized = normalizeConfig(updated);
+        const listener = async (changes) => {
+          if (done || !changes[KEY]?.newValue) return;
+          const normalized = normalizeConfig(await decryptConfigObj(changes[KEY].newValue));
           if ((normalized.produtos || []).length > beforeCount || Date.now() - start > 1200) {
             finish(normalized);
           }
@@ -550,6 +752,7 @@
       const hint = document.getElementById("pnl-autofix-hint");
       const before = (cfg.produtos || []).length;
       const label = btn?.textContent;
+      clearTimeout(hintTimer);
       if (btn) {
         btn.disabled = true;
         btn.textContent = "Lendo vitrine…";
@@ -565,6 +768,8 @@
         btn.textContent = label;
       }
       if (hint) {
+        // "Nenhum produto" só quando cfg.produtos está realmente vazio; o
+        // timeout da leitura não apaga o que já estava salvo.
         if (!after) {
           hint.textContent = "Nenhum produto encontrado — abra a página da live e tente de novo.";
         } else if (after > before) {
@@ -572,6 +777,9 @@
         } else {
           hint.textContent = `✓ vitrine atualizada — ${after} produto(s).`;
         }
+        // Depois de 6s volta para o resumo real (rodízio, nomes curtos etc.).
+        clearTimeout(hintTimer);
+        hintTimer = setTimeout(renderAutofixHint, 6000);
       }
     }
     document
@@ -603,17 +811,17 @@
 
     document.getElementById("pnl-voice").addEventListener("change", (e) => {
       cfg.voz.id = e.target.value;
-      save(cfg);
+      save("voz.id");
     });
     document.getElementById("pnl-speed").addEventListener("input", (e) => {
       cfg.voz.speed = +e.target.value;
       document.getElementById("pnl-speed-val").textContent = cfg.voz.speed.toFixed(2) + "x";
-      save(cfg);
+      save("voz.speed");
     });
     document.getElementById("pnl-gain").addEventListener("input", (e) => {
       cfg.voz.gain = +e.target.value;
       document.getElementById("pnl-gain-val").textContent = cfg.voz.gain.toFixed(2) + "x";
-      save(cfg);
+      save("voz.gain");
     });
 
     // ---------- Studio da live ----------
@@ -738,18 +946,50 @@
         const k = sel.getAttribute("data-vc");
         cfg.vozContextos = cfg.vozContextos || {};
         cfg.vozContextos[k] = sel.value ? { id: sel.value, speed: cfg.voz.speed || 1 } : null;
-        save(cfg);
+        save(`vozContextos.${k}`);
       });
     });
 
     const syncTextarea = (id, path) => {
       document.getElementById(id).addEventListener("input", (e) => {
         set(cfg, path, parseLines(e.target.value));
-        save(cfg);
+        save(path);
       });
     };
     syncTextarea("pnl-blacklist", "filtros.blacklist");
     syncTextarea("pnl-whitelist", "filtros.whitelist");
+
+    // ---------- Lista padrão: ver tudo / copiar para o filtro do usuário ----------
+    const blShow = document.getElementById("pnl-bl-show");
+    const blFull = document.getElementById("pnl-bl-full");
+    const blMsg = document.getElementById("pnl-bl-msg");
+    blShow?.addEventListener("click", () => {
+      if (!blFull) return;
+      const open = blFull.hasAttribute("hidden");
+      if (open) blFull.removeAttribute("hidden");
+      else blFull.setAttribute("hidden", "");
+      blShow.setAttribute("aria-expanded", String(open));
+      blShow.textContent = open ? "▴ Esconder a lista" : "👁 Ver a lista completa";
+    });
+    document.getElementById("pnl-bl-copy")?.addEventListener("click", () => {
+      const padrao = defaultTerms();
+      if (!padrao.length) {
+        if (blMsg) blMsg.textContent = "Não consegui carregar a lista padrão.";
+        return;
+      }
+      const atual = Array.isArray(cfg.filtros?.blacklist) ? cfg.filtros.blacklist : [];
+      const jaTem = new Set(atual.map((t) => String(t).trim().toLowerCase()));
+      const novos = padrao.filter((t) => !jaTem.has(String(t).trim().toLowerCase()));
+      cfg.filtros.blacklist = atual.concat(novos);
+      save("filtros.blacklist");
+      const box = document.getElementById("pnl-blacklist");
+      if (box) box.value = cfg.filtros.blacklist.join("\n");
+      if (blMsg) {
+        blMsg.textContent = novos.length
+          ? `✓ ${novos.length} termo(s) copiado(s) para o seu filtro. Para remover algum de verdade, desligue a proteção padrão acima — senão ele continua bloqueado pela lista de fábrica.`
+          : "Sua lista já tinha todos os termos padrão.";
+      }
+    });
 
     // --- Diagnóstico de detecção ---
     const MAP_STATUS_KEY = "pitchai.dommap.status";
@@ -952,7 +1192,7 @@
         price: "",
         active: cfg.produtos.length === 0,
       });
-      save(cfg, { products: true });
+      save("produtos");
       render();
     });
     document.getElementById("pnl-web").addEventListener("click", () => {
@@ -1024,7 +1264,7 @@
     let verifyTimer;
     tokenInput.addEventListener("input", () => {
       cfg.syncToken = tokenInput.value.trim();
-      save(cfg);
+      save("syncToken");
       clearTimeout(verifyTimer);
       verifyTimer = setTimeout(renderCreds, 450);
     });
@@ -1051,8 +1291,8 @@
         });
         const data = await r.json();
         if (!r.ok) return setStatus(data?.error || "Não foi possível baixar", "err");
-        cfg = { ...DEFAULTS, ...(data.config || {}), syncToken: cfg.syncToken };
-        save(cfg);
+        cfg = normalizeConfig({ ...(data.config || {}), syncToken: cfg.syncToken });
+        await saveAll();
         render();
         tokenInput.value = cfg.syncToken;
         setStatus("Configurações baixadas com sucesso", "ok");
@@ -1078,15 +1318,23 @@
       }
     });
 
+    // Reflete na UI o que a barra da live mudou (ex.: botão Proteção, vitrine
+    // lida, revisão ligada). Gravações do próprio painel são ignoradas para não
+    // re-renderizar por cima do que o usuário está digitando.
     chrome.storage.onChanged.addListener(async (changes) => {
-      if (changes[KEY]?.newValue) {
-        const decrypted = await decryptConfigObj(changes[KEY].newValue);
-        cfg = normalizeConfig(decrypted);
-        render();
-        if (document.activeElement !== tokenInput) tokenInput.value = cfg.syncToken || "";
-        clearTimeout(verifyTimer);
-        verifyTimer = setTimeout(renderCreds, 450);
-      }
+      if (!changes[KEY]?.newValue) return;
+      const decrypted = await decryptConfigObj(changes[KEY].newValue);
+      const next = normalizeConfig(decrypted);
+      const isEcho = JSON.stringify(next) === lastSelfPayload;
+      cfg = next;
+      // Reaplica o que ainda não foi gravado (debounce em voo) para não perder
+      // digitação se a barra gravar no meio do caminho.
+      pendingSave.forEach((value, path) => set(cfg, path, value));
+      if (isEcho) return;
+      render();
+      if (document.activeElement !== tokenInput) tokenInput.value = cfg.syncToken || "";
+      clearTimeout(verifyTimer);
+      verifyTimer = setTimeout(renderCreds, 450);
     });
 
     // Onboarding do primeiro uso — mostra o guia só uma vez por instalação.

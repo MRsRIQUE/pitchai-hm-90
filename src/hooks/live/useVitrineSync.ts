@@ -4,9 +4,13 @@
  */
 import { useEffect, useRef, useCallback } from "react";
 import { useLiveStore } from "@/stores/useLiveStore";
-import { pullVitrine } from "@/lib/live/sync";
+import {
+  pullVitrine,
+  isWithinControlEchoWindow,
+  type LiveControlKey,
+  type LiveControls,
+} from "@/lib/live/sync";
 import { validateVitrineResponse } from "@/lib/validations/vitrine";
-import { safeFetch } from "@/lib/api";
 import { withRetry } from "@/lib/api/withRetry";
 
 export interface VitrineSyncOptions {
@@ -20,9 +24,22 @@ export interface VitrineSyncOptions {
   onError?: (error: string) => void;
 }
 
+/**
+ * Resultado de uma sincronização. `syncVitrine` não rejeita — ela relata.
+ * Quem chama precisa disso para não anunciar sucesso quando a sincronização
+ * falhou (o auto-sync interno simplesmente ignora o retorno).
+ */
+export type VitrineSyncOutcome =
+  | { ok: true; items: any[]; updatedAt: string | null }
+  /**
+   * `busy` marca a colisão com uma sincronização já em andamento. Não é falha
+   * de rede nem vitrine vazia — quem chama não deve gritar erro por isso.
+   */
+  | { ok: false; error: string; busy?: boolean };
+
 export interface VitrineSyncResult {
-  /** Sincroniza a vitrine manualmente */
-  syncVitrine: () => Promise<void>;
+  /** Sincroniza a vitrine manualmente e informa se deu certo */
+  syncVitrine: () => Promise<VitrineSyncOutcome>;
   /** Cancela a sincronização automática */
   cancelSync: () => void;
   /** Reinicia a sincronização automática */
@@ -34,7 +51,7 @@ export interface VitrineSyncResult {
 export function useVitrineSync(options: VitrineSyncOptions = {}): VitrineSyncResult {
   const { syncInterval = 20000, autoSync = true, onSuccess, onError } = options;
 
-  const { setVitrine, setLoading, setError } = useLiveStore((state) => state.actions);
+  const { setVitrine, setLoading, setError, updateConfig } = useLiveStore((state) => state.actions);
 
   // Refs para controle de execução
   const syncIntervalRef = useRef<NodeJS.Timeout | null>(null);
@@ -53,12 +70,34 @@ export function useVitrineSync(options: VitrineSyncOptions = {}): VitrineSyncRes
     onErrorRef.current = onError;
   }, [onSuccess, onError]);
 
+  /**
+   * Espelha no painel os controles que a barra da live acabou de mudar
+   * (Proteção, Auto Mod, Respostas IA...). Só grava o que realmente divergiu,
+   * para não reescrever a config — e nunca durante a janela de eco, senão uma
+   * leitura antiga desfaz o clique que o usuário acabou de dar aqui.
+   */
+  const applyRemoteControls = useCallback(
+    (controls: LiveControls | undefined) => {
+      if (!controls || isWithinControlEchoWindow()) return;
+
+      const atual = useLiveStore.getState().config;
+      const diff: LiveControls = {};
+      for (const [key, value] of Object.entries(controls) as [LiveControlKey, boolean][]) {
+        if (atual[key] !== value) diff[key] = value;
+      }
+      if (Object.keys(diff).length === 0) return;
+
+      updateConfig((c) => ({ ...c, ...diff }));
+    },
+    [updateConfig],
+  );
+
   // Função principal de sincronização
-  const syncVitrine = useCallback(async () => {
+  const syncVitrine = useCallback(async (): Promise<VitrineSyncOutcome> => {
     // Evita sincronizações simultâneas
     if (isSyncingRef.current) {
       console.log("[useVitrineSync] Sincronização já em andamento, pulando...");
-      return;
+      return { ok: false, error: "Sincronização já em andamento", busy: true };
     }
 
     // Cancela requisição anterior se ainda estiver pendente
@@ -96,7 +135,9 @@ export function useVitrineSync(options: VitrineSyncOptions = {}): VitrineSyncRes
             updatedAt: res.updatedAt,
           });
 
-          return validated;
+          // Os controles ficam fora do schema da vitrine de propósito: são o
+          // estado da barra da live, não produtos.
+          return { ...validated, controls: res.controls };
         },
         {
           maxRetries: 3,
@@ -118,10 +159,13 @@ export function useVitrineSync(options: VitrineSyncOptions = {}): VitrineSyncRes
           result.items.length === 0 ? "vazia" : "ok",
           result.updatedAt ?? null,
         );
+        applyRemoteControls(result.controls);
         onSuccessRef.current?.(result.items, result.updatedAt ?? null);
       }
+
+      return { ok: true, items: result.items, updatedAt: result.updatedAt ?? null };
     } catch (error) {
-      if (!isMountedRef.current) return;
+      if (!isMountedRef.current) return { ok: false, error: "Componente desmontado" };
 
       let errorMessage = "Falha ao sincronizar vitrine";
 
@@ -136,13 +180,15 @@ export function useVitrineSync(options: VitrineSyncOptions = {}): VitrineSyncRes
       console.error("[useVitrineSync] Erro na sincronização:", error);
       setError("vitrine", errorMessage);
       onErrorRef.current?.(errorMessage);
+
+      return { ok: false, error: errorMessage };
     } finally {
       isSyncingRef.current = false;
       if (isMountedRef.current) {
         setLoading("vitrine", false);
       }
     }
-  }, [setVitrine, setLoading, setError]);
+  }, [setVitrine, setLoading, setError, applyRemoteControls]);
 
   // Função para cancelar sincronização
   const cancelSync = useCallback(() => {

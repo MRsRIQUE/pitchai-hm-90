@@ -19,6 +19,7 @@ const outZip = path.join(rootDir, "public", "pitchai-extension.zip");
 // Arquivos distribuídos — exatamente os referenciados pelo manifest.json
 const FILES = [
   "manifest.json",
+  "blocklist.js",
   "content.js",
   "dom-map.js",
   "hook.js",

@@ -1,6 +1,6 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useState } from "react";
-import { Check, Sparkles, Volume2, VolumeX, ExternalLink, Lock, ShieldCheck } from "lucide-react";
+import { Check, Sparkles, Volume2, VolumeX, Lock, ShieldCheck } from "lucide-react";
 import { SiteNav } from "@/components/live/SiteNav";
 import { useUserSubscription } from "@/hooks/useUserSubscription";
 import {
@@ -154,18 +154,17 @@ function PlanosPage() {
               </div>
 
               <div className="mt-8">
-                <a
-                  href={`/comprar?plan=${encodeURIComponent(p.priceId)}`}
-                  target="_blank"
-                  rel="noopener noreferrer"
+                <Link
+                  to="/comprar"
+                  search={{ plan: p.priceId }}
                   className={`w-full py-3.5 px-4 rounded-xl font-bold text-sm text-center flex items-center justify-center gap-2 transition-all shadow-md ${
                     p.highlight
                       ? "bg-[#7C3AED] hover:bg-[#6D28D9] text-white hover:shadow-purple-500/25"
                       : "bg-white/10 hover:bg-white/20 text-white"
                   }`}
                 >
-                  Assinar Plano {p.name} <ExternalLink className="w-4 h-4 opacity-80" />
-                </a>
+                  Assinar Plano {p.name}
+                </Link>
               </div>
             </div>
           ))}

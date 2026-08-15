@@ -1,0 +1,27 @@
+.text-loop {
+  position: relative;
+  width: 100%;
+  overflow: hidden;
+}
+
+.text-loop-svg {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+/* quando `height` é passada, o SVG preenche a faixa e o excesso vertical é
+   cortado — é o que mantém a onda centrada numa tira baixa */
+.text-loop.is-fixed,
+.text-loop.is-fixed .text-loop-svg {
+  height: 100%;
+}
+
+.text-loop-text {
+  user-select: none;
+}
+
+.text-loop-measure {
+  visibility: hidden;
+  pointer-events: none;
+}

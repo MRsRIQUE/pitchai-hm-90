@@ -39,6 +39,7 @@ import {
   ArrowRight,
   Bot,
   CheckCircle2,
+  Eye,
   Flame,
   Sun,
   Moon,
@@ -56,7 +57,7 @@ import {
 } from "@/lib/live/config";
 import { VOICES, type VoiceId } from "@/lib/live/voices";
 import { playSaleSound, unlockSaleSound } from "@/lib/live/sale-sound";
-import { pullVitrine, pollSalesCount } from "@/lib/live/sync";
+import { pollSalesCount } from "@/lib/live/sync";
 
 import { MobileBottomNav } from "../MobileBottomNav";
 import { LiveStudioCard } from "../LiveStudioCard";
@@ -82,7 +83,9 @@ import { useShallow } from "zustand/react/shallow";
 import { ProductsSection } from "./ProductsSection";
 import { AiConfigSection } from "./AiConfigSection";
 import { VoiceSettings } from "./VoiceSettings";
+import { WordFilterSection } from "./WordFilterSection";
 import { useVitrineSync } from "@/hooks/live/useVitrineSync";
+import { useSyncedUpdateConfig } from "@/hooks/live/useLiveControls";
 import { useSyncToken } from "@/hooks/useSyncToken";
 
 type ThemeStyle = "dark-modern" | "clean-light" | "vibrant-tech";
@@ -143,16 +146,22 @@ export function LiveDashboard() {
 
 function LiveDashboardContent() {
   // Usando a store global
-  const { config, loading, errors, updateConfig, setLoading, setError } = useLiveStore(
+  const { config, loading, errors, updateConfigRaw, setLoading, setError } = useLiveStore(
     useShallow((state) => ({
       config: state.config,
       loading: state.loading,
       errors: state.errors,
-      updateConfig: state.actions.updateConfig,
+      updateConfigRaw: state.actions.updateConfig,
       setLoading: state.actions.setLoading,
       setError: state.actions.setError,
     })),
   );
+
+  // Tudo que o usuário clica passa por aqui: salva local E publica no doc
+  // compartilhado as chaves que a barra da live também controla. O
+  // `updateConfigRaw` fica só para carregar do localStorage — se ele publicasse,
+  // o estado velho do painel sobrescreveria o que a extensão acabou de ligar.
+  const updateConfig = useSyncedUpdateConfig();
 
   // Sync token da extensão (users/{uid}.syncToken)
   const syncToken = useSyncToken();
@@ -161,9 +170,14 @@ function LiveDashboardContent() {
   const { syncVitrine } = useVitrineSync({
     autoSync: true,
     syncInterval: 20000,
+    // Sem toast aqui: este ciclo roda sozinho a cada 20s e um erro persistente
+    // (usuário sem extensão pareada, por exemplo) viraria um pop-up a cada 20s
+    // por cima de um painel que está mostrando os produtos normalmente.
+    // O erro fica registrado na store e o caminho manual (botão "Importar")
+    // continua avisando na hora.
     onError: (error) => {
       setError("vitrine", error);
-      toast.error(`Erro ao sincronizar vitrine: ${error}`);
+      console.warn("[LiveDashboard] auto-sync da vitrine falhou:", error);
     },
   });
 
@@ -194,9 +208,9 @@ function LiveDashboardContent() {
   useEffect(() => {
     const cfg = loadConfig();
     if (cfg) {
-      updateConfig(() => cfg);
+      updateConfigRaw(() => cfg);
     }
-  }, [updateConfig]);
+  }, [updateConfigRaw]);
 
   // Salva configuração sempre que mudar
   useEffect(() => {
@@ -256,15 +270,22 @@ function LiveDashboardContent() {
     if (!silent) setLoading("vitrine", true);
 
     try {
-      await syncVitrine();
-      if (!silent) {
-        toast.success("Vitrine sincronizada");
-      }
-    } catch (e) {
-      if (!silent) {
-        toast.error("Falha ao sincronizar vitrine", {
-          description: e instanceof Error ? e.message : "Erro desconhecido",
-        });
+      // `syncVitrine` relata pelo retorno, nunca rejeita — sem checar o
+      // `outcome` o painel anunciava "Vitrine sincronizada" mesmo quando a
+      // sincronização tinha falhado.
+      const outcome = await syncVitrine();
+      if (silent) return;
+
+      if (outcome.ok) {
+        toast.success(
+          outcome.items.length > 0
+            ? `Vitrine sincronizada — ${outcome.items.length} item(ns)`
+            : "Vitrine sincronizada, mas nenhum produto veio do TikTok",
+        );
+      } else if (outcome.busy) {
+        toast.info("Já estava sincronizando — aguarde alguns segundos");
+      } else {
+        toast.error("Falha ao sincronizar vitrine", { description: outcome.error });
       }
     } finally {
       if (!silent) setLoading("vitrine", false);
@@ -688,6 +709,9 @@ function LiveDashboardContent() {
                 </div>
               </Card>
 
+              {/* Filtro de palavras */}
+              <WordFilterSection />
+
               {/* Chaves da live */}
               <div id="sec-chaves" className="scroll-mt-24 pt-2">
                 <h4 className="mb-3 font-display text-sm font-semibold">
@@ -823,6 +847,28 @@ function LiveDashboardContent() {
                             ? ` (${activeProduct.name})`
                             : " — nenhum produto marcado como ativo"}
                           .
+                        </p>
+                      </div>
+                    </div>
+                  </Card>
+
+                  {/* Revisar antes de falar */}
+                  <Card className="p-4">
+                    <div className="flex items-start gap-3">
+                      <div className="mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-secondary/15 text-secondary ring-1 ring-inset ring-secondary/25">
+                        <Eye className="h-[18px] w-[18px]" strokeWidth={2.2} />
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center justify-between gap-3">
+                          <h4 className="font-semibold">Confirmar respostas antes de falar</h4>
+                          <Switch
+                            checked={config.revisarAntesDeEnviar}
+                            onCheckedChange={(v) => update("revisarAntesDeEnviar", v)}
+                          />
+                        </div>
+                        <p className="mt-1 text-sm text-muted-foreground">
+                          Antes de a IA falar, você vê a resposta e aprova. Bom para os primeiros
+                          dias de live.
                         </p>
                       </div>
                     </div>

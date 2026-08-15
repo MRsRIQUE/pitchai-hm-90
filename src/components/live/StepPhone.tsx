@@ -8,6 +8,8 @@
    do TikTok dentro da ilustração, e ela não muda com o tema.
    ============================================================ */
 
+import { Check } from "lucide-react";
+
 export type StepPhoneState = "setup" | "live" | "selling";
 
 export function StepPhone({ state }: { state: StepPhoneState }) {
@@ -53,8 +55,8 @@ function SetupState() {
               <span className="block text-[10px] font-bold text-[#5b21b6]">{r.price}</span>
             </span>
             {r.done ? (
-              <span className="grid h-[18px] w-[18px] flex-none place-items-center rounded-full bg-[#0b5f3d] text-[10px] text-white">
-                ✓
+              <span className="grid h-6 w-6 flex-none place-items-center rounded-full bg-[#0b5f3d] text-[10px] text-white">
+                <Check className="h-3 w-3" strokeWidth={3} />
               </span>
             ) : (
               <span className="h-[18px] w-[18px] flex-none rounded-full border-2 border-dashed border-black/15" />

@@ -8,6 +8,7 @@ import { getFirebaseAuth } from "@/lib/firebase";
 import { requireAuthBeforeLoad } from "@/lib/auth-guard";
 import { getMyReferralSummary } from "@/lib/referrals.functions";
 import { SiteNav } from "@/components/live/SiteNav";
+import { copyToClipboard } from "@/lib/clipboard";
 
 export const Route = createFileRoute("/indique")({
   beforeLoad: requireAuthBeforeLoad,
@@ -100,9 +101,10 @@ function IndiquePage() {
                 className="flex-1 rounded-lg border border-white/10 bg-black/40 px-3 py-2 font-mono text-sm text-white outline-none"
               />
               <button
-                onClick={() => {
-                  navigator.clipboard?.writeText(link);
-                  toast.success("Link copiado!");
+                onClick={async () => {
+                  const copied = await copyToClipboard(link);
+                  if (copied) toast.success("Link copiado!");
+                  else toast.error("Não consegui copiar — selecione o link e copie manualmente");
                 }}
                 className="rounded-lg bg-[#7C3AED] px-4 py-2 text-sm font-semibold hover:bg-[#6D28D9]"
               >

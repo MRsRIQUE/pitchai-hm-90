@@ -34,6 +34,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { useLiveStore } from "@/stores/useLiveStore";
+import { useSyncedUpdateConfig } from "@/hooks/live/useLiveControls";
 import type { LiveConfig } from "@/lib/live/config";
 
 type Timeframe = "live" | "today" | "24h" | "7d";
@@ -67,7 +68,9 @@ interface ActivityLog {
 
 export function AiAutomationsDashboard() {
   const cfg = useLiveStore((state) => state.config);
-  const { updateConfig } = useLiveStore((state) => state.actions);
+  // Updater sincronizado: os cards daqui ligam/desligam Proteção e Respostas
+  // IA, que a barra da live também controla — precisa publicar, não só salvar.
+  const updateConfig = useSyncedUpdateConfig();
   const [timeframe, setTimeframe] = useState<Timeframe>("24h");
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedCategory, setSelectedCategory] = useState<string>("all");

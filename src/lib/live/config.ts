@@ -65,6 +65,12 @@ export type LiveConfig = {
   filtros: {
     blacklist: string[]; // palavras banidas — bloqueia mensagem
     whitelist: string[]; // se não-vazio, só responde se bater
+    /**
+     * Soma a lista padrão do Pitch AI (palavrões, ódio, sexual e termos que
+     * derrubam a live) à blacklist do usuário. Ligado por padrão para a live
+     * nunca ir ao ar desprotegida — ver `@/lib/live/blocklist`.
+     */
+    usarListaPadrao: boolean;
   };
 
   /** Seletores custom (fallback antes dos heurísticos). */
@@ -115,7 +121,7 @@ export const DEFAULT_CONFIG: LiveConfig = {
     pushToTalk: { enabled: false, key: "Space" },
   },
   vozContextos: { default: null, greeting: null, offer: null, farewell: null },
-  filtros: { blacklist: [], whitelist: [] },
+  filtros: { blacklist: [], whitelist: [], usarListaPadrao: true },
   selectors: { chatContainer: [], productCard: [] },
   revisarAntesDeEnviar: false,
   produtos: [],
@@ -137,7 +143,13 @@ export function loadConfig(): LiveConfig {
       ...parsed,
       aiContext: { ...DEFAULT_AI_CONTEXT, ...(parsed.aiContext ?? {}) },
       vozContextos: { ...DEFAULT_CONFIG.vozContextos, ...(parsed.vozContextos ?? {}) },
-      filtros: { ...DEFAULT_CONFIG.filtros, ...(parsed.filtros ?? {}) },
+      filtros: {
+        ...DEFAULT_CONFIG.filtros,
+        ...(parsed.filtros ?? {}),
+        // Config salva antes da lista padrão existir não tem a chave — nesse
+        // caso a proteção entra ligada, que é o padrão seguro.
+        usarListaPadrao: parsed.filtros?.usarListaPadrao ?? DEFAULT_CONFIG.filtros.usarListaPadrao,
+      },
       selectors: { ...DEFAULT_CONFIG.selectors, ...(parsed.selectors ?? {}) },
       somVenda: { ...DEFAULT_CONFIG.somVenda, ...(parsed.somVenda ?? {}) },
     };
@@ -159,6 +171,28 @@ export function newProduct(): Product {
     price: "",
     active: true,
   };
+}
+
+/**
+ * Converte itens vindos da vitrine do TikTok em produtos, descartando os que já
+ * existem na lista. O nome (sem espaços e sem diferenciar maiúsculas) é o que
+ * identifica a duplicata — mesma regra usada na importação pelo catálogo.
+ */
+export function vitrineItemsToNewProducts(
+  produtosAtuais: Product[],
+  items: { name?: string; price?: string; description?: string }[],
+): Product[] {
+  const existentes = new Set(produtosAtuais.map((p) => p.name.toLowerCase().trim()));
+
+  return items
+    .filter((item) => item?.name && !existentes.has(String(item.name).toLowerCase().trim()))
+    .map((item) => ({
+      id: crypto.randomUUID(),
+      name: String(item.name),
+      price: item.price ?? "",
+      description: item.description ?? "",
+      active: false,
+    }));
 }
 
 /** Classifica uma frase por contexto para escolher a voz certa. */

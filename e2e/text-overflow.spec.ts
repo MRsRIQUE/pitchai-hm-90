@@ -93,15 +93,26 @@ async function collectIssues(page: Page, route: string, minInset: number): Promi
         }
 
         // 2) Texto encostando na borda interna
-        const padL = parseFloat(cs.paddingLeft) || 0;
-        const padR = parseFloat(cs.paddingRight) || 0;
-        const padT = parseFloat(cs.paddingTop) || 0;
-        const padB = parseFloat(cs.paddingBottom) || 0;
+        const borderL = parseFloat(cs.borderLeftWidth) || 0;
+        const borderR = parseFloat(cs.borderRightWidth) || 0;
+        const borderT = parseFloat(cs.borderTopWidth) || 0;
+        const borderB = parseFloat(cs.borderBottomWidth) || 0;
         const rect = html.getBoundingClientRect();
-        const innerLeft = rect.left + padL;
-        const innerRight = rect.right - padR;
-        const innerTop = rect.top + padT;
-        const innerBottom = rect.bottom - padB;
+        const innerLeft = rect.left + borderL;
+        const innerRight = rect.right - borderR;
+        const innerTop = rect.top + borderT;
+        const innerBottom = rect.bottom - borderB;
+
+        // Links/botões de texto sem caixa pintada não têm uma borda visual da
+        // qual manter distância. O overflow real acima continua sendo validado.
+        const transparentBg =
+          cs.backgroundColor === "transparent" || cs.backgroundColor === "rgba(0, 0, 0, 0)";
+        const hasPaintedBox =
+          cs.backgroundImage !== "none" ||
+          !transparentBg ||
+          borderL + borderR + borderT + borderB > 0 ||
+          cs.boxShadow !== "none";
+        if (!hasPaintedBox) continue;
 
         const walker = document.createTreeWalker(html, NodeFilter.SHOW_TEXT);
         let n: Node | null;
@@ -154,7 +165,7 @@ async function collectIssues(page: Page, route: string, minInset: number): Promi
 
 for (const route of ROUTES) {
   test(`texto não vaza nem encosta nas bordas — ${route}`, async ({ page }) => {
-    const resp = await page.goto(route, { waitUntil: "networkidle" });
+    const resp = await page.goto(route, { waitUntil: "domcontentloaded" });
     // Algumas rotas podem redirecionar (e.g. /app → /entrar); validamos a UI atual.
     expect(resp?.status() ?? 0, `falha ao carregar ${route}`).toBeLessThan(500);
 

@@ -13,6 +13,7 @@ import {
 import { toast } from "sonner";
 import { Link } from "@tanstack/react-router";
 import confetti from "canvas-confetti";
+import { copyToClipboard } from "@/lib/clipboard";
 
 export function fireSuccessConfetti() {
   try {
@@ -28,12 +29,15 @@ export function fireSuccessConfetti() {
 }
 
 export function ExtensionStatusBanner({ syncToken }: { syncToken?: string }) {
-  const [installed, setInstalled] = useState<boolean>(() => {
-    return typeof window !== "undefined" && Boolean((window as any).pitchAiExtensionInstalled);
-  });
+  // Começa em false para o HTML do servidor bater com o do cliente; a detecção
+  // real acontece no efeito abaixo (ler window aqui causa erro de hidratação).
+  const [installed, setInstalled] = useState<boolean>(false);
   const [synced, setSynced] = useState<boolean>(false);
 
   useEffect(() => {
+    // Já instalada quando a tela abriu: reflete sem comemorar.
+    if ((window as any).pitchAiExtensionInstalled) setInstalled(true);
+
     function handleDetected() {
       setInstalled(true);
       fireSuccessConfetti();
@@ -72,14 +76,20 @@ export function ExtensionStatusBanner({ syncToken }: { syncToken?: string }) {
     };
   }, []);
 
-  const handleCopyChromeUrl = () => {
-    navigator.clipboard.writeText("chrome://extensions");
-    toast.success("Endereço 'chrome://extensions' copiado!", {
-      description: "Abra uma nova aba no Chrome, cole na barra de endereço e pressione Enter.",
-    });
+  const handleCopyChromeUrl = async () => {
+    const copied = await copyToClipboard("chrome://extensions");
+    if (copied) {
+      toast.success("Endereço 'chrome://extensions' copiado!", {
+        description: "Abra uma nova aba no Chrome, cole na barra de endereço e pressione Enter.",
+      });
+    } else {
+      toast.error("Não consegui copiar", {
+        description: "Digite chrome://extensions na barra de endereços do Chrome.",
+      });
+    }
   };
 
-  const handleAutoSync = () => {
+  const handleAutoSync = async () => {
     if (!syncToken) {
       toast.error("Você precisa estar conectado para obter seu código de sincronização.");
       return;
@@ -87,11 +97,14 @@ export function ExtensionStatusBanner({ syncToken }: { syncToken?: string }) {
 
     // Target = própria origin (não "*" — evita broadcast para iframes de terceiros).
     window.postMessage({ type: "PITCHAI_SYNC_TOKEN", token: syncToken }, window.location.origin);
-    navigator.clipboard.writeText(syncToken);
-    fireSuccessConfetti();
+    const copied = await copyToClipboard(syncToken);
 
-    toast.success("Conta sincronizada com sucesso! 🎉", {
-      description: "Sua extensão foi autorizada e o código de conexão foi copiado.",
+    // Sucesso de verdade é quando a extensão responde PITCHAI_SYNC_TOKEN_SUCCESS
+    // (tratado no efeito acima). Aqui só confirmamos o envio.
+    toast.info("Pedido de conexão enviado para a extensão…", {
+      description: copied
+        ? "O código também foi copiado, caso precise colar manualmente."
+        : "Se a extensão não responder, copie o código pelo painel e cole nela.",
     });
   };
 
@@ -120,14 +133,14 @@ export function ExtensionStatusBanner({ syncToken }: { syncToken?: string }) {
               {installed ? (
                 <>
                   <span className="break-words">Extensão do Pitch AI Instalada</span>
-                  <span className="rounded-full bg-emerald-500/20 px-2 py-0.5 text-[10px] font-extrabold text-emerald-300 border border-emerald-500/30 shrink-0">
+                  <span className="rounded-full bg-emerald-500/20 px-2 py-1 text-[10px] font-extrabold text-emerald-300 border border-emerald-500/30 shrink-0">
                     Ativa
                   </span>
                 </>
               ) : (
                 <>
                   <span className="break-words">Extensão Acompanhante não Detectada</span>
-                  <span className="rounded-full bg-amber-500/20 px-2 py-0.5 text-[10px] font-extrabold text-amber-300 border border-amber-500/30 shrink-0">
+                  <span className="rounded-full bg-amber-500/20 px-2 py-1 text-[10px] font-extrabold text-amber-300 border border-amber-500/30 shrink-0">
                     Pendente
                   </span>
                 </>

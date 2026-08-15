@@ -40,12 +40,15 @@ export interface UseUserSubscriptionResult {
   error: Error | null;
   /** ID do usuário autenticado atual */
   userId: string | null;
+  /** E-mail do usuário autenticado — é por ele que o pagamento é identificado */
+  userEmail: string | null;
   /** Re-executa a verificação no banco manualmente */
   refetch: () => Promise<void>;
 }
 
 export function useUserSubscription(): UseUserSubscriptionResult {
   const [userId, setUserId] = useState<string | null>(null);
+  const [userEmail, setUserEmail] = useState<string | null>(null);
   const [subscription, setSubscription] = useState<UserSubscriptionData | null>(null);
   const [compedAccess, setCompedAccess] = useState<CompedAccessRecord | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
@@ -91,6 +94,7 @@ export function useUserSubscription(): UseUserSubscriptionResult {
     const unsub = onAuthStateChanged(fbAuth, (user) => {
       const uid = user?.uid ?? null;
       setUserId(uid);
+      setUserEmail(user?.email ?? null);
       if (uid) {
         fetchSubscription(uid);
       } else {
@@ -195,6 +199,7 @@ export function useUserSubscription(): UseUserSubscriptionResult {
     loading,
     error,
     userId,
+    userEmail,
     refetch,
   };
 }

@@ -44,7 +44,15 @@ export function VoiceSettings({
   );
 
   const audioRef = useRef<HTMLAudioElement | null>(null);
+  const audioUrlRef = useRef<string | null>(null);
   const [testingVoice, setTestingVoice] = useState(false);
+
+  // Libera o áudio da última amostra ao sair da tela.
+  useEffect(() => {
+    return () => {
+      if (audioUrlRef.current) URL.revokeObjectURL(audioUrlRef.current);
+    };
+  }, []);
 
   // Função para atualizar configuração de voz
   const updateVoiceConfig = (updater: Partial<typeof config.voz>) => {
@@ -60,6 +68,7 @@ export function VoiceSettings({
     try {
       const headers = await aiHeaders();
 
+      // O endpoint responde áudio (audio/wav no Gemini, audio/mpeg no fallback), não JSON.
       const result = await safeFetch<Blob>("/api/tts/preview", {
         method: "POST",
         headers,
@@ -68,18 +77,18 @@ export function VoiceSettings({
           voice: config.voz.id,
           speed: config.voz.speed,
         }),
-        onError: (msg) => {
-          toast.error(msg);
-        },
+        responseType: "blob",
+        timeout: 30000,
         showToast: true,
       });
 
-      if (!result) {
-        toast.error("Falha ao gerar áudio");
-        return;
-      }
+      // safeFetch já mostrou o motivo da falha.
+      if (!result) return;
 
       const url = URL.createObjectURL(result);
+      if (audioUrlRef.current) URL.revokeObjectURL(audioUrlRef.current);
+      audioUrlRef.current = url;
+
       if (audioRef.current) {
         audioRef.current.pause();
         audioRef.current.src = url;
