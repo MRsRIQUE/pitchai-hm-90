@@ -3454,6 +3454,7 @@
     catalogQueuedDeep: false,
     catalogLastDeepAt: 0,
     pinTimer: null,
+    pinBusy: false,
     pinIdx: 0,
     nextPinAt: 0,
     saleObserver: null,
@@ -3792,7 +3793,7 @@
   }
 
   /** Localiza o produto e deixa a linha virtualizada visível para o clique real. */
-  async function locateProductCard(name) {
+  async function locateProductCard(name, expectedPid = "") {
     const sector = await regionNode("products");
     let list = (await mapNode("products")) || sector;
     if (sector && list) {
@@ -3808,6 +3809,7 @@
       return matchCard(
         Array.from(cards).filter((card) => card.isConnected),
         name,
+        expectedPid,
       );
     };
     let found = atCurrentPosition();
@@ -3826,11 +3828,11 @@
       scroller.scrollTop = start;
       await sleep(80);
     }
-    return matchCard(await productCards(), name);
+    return matchCard(await productCards(), name, expectedPid);
   }
 
   /** Acha o card do produto pelo nome normalizado (tolerante a truncamento). */
-  function matchCard(cards, name) {
+  function matchCard(cards, name, expectedPid = "") {
     const key = normKey(name);
     if (!key) return null;
     const words = key
@@ -3841,6 +3843,7 @@
     let bestHits = 0;
     for (const c of cards) {
       const parsed = parseProductCard(c);
+      if (expectedPid && parsed?.pid && String(parsed.pid) === String(expectedPid)) return c;
       const t = normKey(`${parsed?.name || ""} ${c.textContent || ""}`);
       if (!t) continue;
       if (t.includes(key)) return c;
@@ -3850,11 +3853,12 @@
         best = c;
       }
     }
-    return bestHits >= Math.max(1, Math.ceil(words.length / 2)) ? best : null;
+    const requiredHits = words.length <= 1 ? 2 : Math.max(2, Math.ceil(words.length * 0.75));
+    return bestHits >= requiredHits ? best : null;
   }
 
   async function pinProduct(alvo) {
-    const card = await locateProductCard(alvo.name || "");
+    const card = await locateProductCard(alvo.name || "", alvo.pid || "");
     if (!card) return { ok: false, reason: "card não encontrado na vitrine" };
     if (isPinnedCard(card)) {
       return { ok: true, reason: "já estava fixado" };
@@ -3863,7 +3867,9 @@
     // Repete uma única vez, mas somente após confirmar que o card continua no
     // estado "Fixar"; assim nunca alterna de volta um produto já fixado.
     for (let clickAttempt = 0; clickAttempt < 2; clickAttempt++) {
-      const currentCard = card.isConnected ? card : await locateProductCard(alvo.name || "");
+      const currentCard = card.isConnected
+        ? card
+        : await locateProductCard(alvo.name || "", alvo.pid || "");
       if (currentCard && isPinnedCard(currentCard)) return { ok: true, reason: "fixado" };
       const btn = currentCard && findPinButton(currentCard);
       if (!btn) return { ok: false, reason: "botão de fixar não encontrado" };
@@ -3873,7 +3879,7 @@
         await sleep(250);
         const current = currentCard.isConnected
           ? currentCard
-          : await locateProductCard(alvo.name || "");
+          : await locateProductCard(alvo.name || "", alvo.pid || "");
         if (current && isPinnedCard(current)) return { ok: true, reason: "fixado" };
       }
     }
@@ -3947,6 +3953,8 @@
     if (!produtos.length) {
       return { ok: false, reason: "nenhum produto selecionado para fixar" };
     }
+    if (auto.pinBusy) return { ok: false, reason: "fixação anterior ainda em andamento" };
+    auto.pinBusy = true;
 
     const alvo = produtos[auto.pinIdx % produtos.length];
     auto.pinIdx++;
@@ -3972,7 +3980,7 @@
     if (res.ok || demo.isOn()) {
       await updateConfig((f) => {
         f.produtos = (f.produtos || []).map((p) => ({ ...p, active: p.id === alvo.id }));
-      });
+      }).catch(() => {});
     } else {
       try {
         DM()?.invalidate?.("products");
@@ -3986,6 +3994,7 @@
           : `Destaque só no roteiro (${res.reason}): ${alvo.name}`,
       ts: Date.now(),
     });
+    auto.pinBusy = false;
     return res;
   }
 

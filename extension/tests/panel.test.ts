@@ -43,4 +43,11 @@ describe("painel distribuído", () => {
     expect(contentSource).toContain("if (!current.responderNoChat || extSecurity.isLocked)");
     expect(contentSource).not.toContain("chatState.sentReplies.delete(normalizedReplyText(value))");
   });
+
+  it("evita corrida e seleção aproximada no autofixar", () => {
+    expect(contentSource).toContain("pinBusy: false");
+    expect(contentSource).toContain("if (auto.pinBusy) return");
+    expect(contentSource).toContain('alvo.pid || ""');
+    expect(contentSource).toContain("requiredHits");
+  });
 });
