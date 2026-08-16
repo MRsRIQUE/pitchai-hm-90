@@ -1464,21 +1464,25 @@
    * Rola a lista e coleta em CADA posição. Listas React virtualizadas removem
    * os itens anteriores do DOM, portanto coletar apenas no final perdia produtos.
    */
-  async function materializeList(list, collectAtPosition) {
-    if (!list) return { passes: 0, complete: false };
+  /** Sobe até 4 níveis procurando o container que realmente tem barra de rolagem. */
+  function getScroller(list) {
     let scroller = list;
-    let foundScrollable = false;
     for (let i = 0; i < 4 && scroller; i++) {
       try {
         const st = getComputedStyle(scroller);
         if (/auto|scroll/.test(st.overflowY) && scroller.scrollHeight > scroller.clientHeight + 40) {
-          foundScrollable = true;
-          break;
+          return scroller;
         }
       } catch {}
       scroller = scroller.parentElement;
     }
-    if (!scroller || !foundScrollable) {
+    return null;
+  }
+
+  async function materializeList(list, collectAtPosition) {
+    if (!list) return { passes: 0, complete: false };
+    const scroller = getScroller(list);
+    if (!scroller) {
       collectAtPosition?.(list);
       return { passes: 1, complete: true };
     }
@@ -1860,6 +1864,7 @@
     seen: new Map(),
     queue: [],
     busy: false,
+    listening: false,
     lastReplyAt: 0,
     history: [],
     observer: null,
@@ -2242,6 +2247,13 @@
     }
     chatState.queue = [];
     chatState.node = null;
+    // Se uma resposta estava em andamento quando desligamos, `busy` ficava preso
+    // em true — ao religar a IA, processQueue() abortava logo no início e a IA
+    // nunca mais respondia. Zeramos o estado para a fila voltar a rodar.
+    chatState.busy = false;
+    // Mantém o flag de escuta coerente para qualquer stop direto (encerrar live,
+    // parar automações): assim o próximo "ligar" sempre reinicia o motor.
+    chatState.listening = false;
 
     stopPitchLoop();
     stopHealthCheck();
@@ -2897,11 +2909,13 @@
     return false;
   }
 
-  async function productCards() {
+  async function productCards({ scroll = true } = {}) {
     const set = new Set();
     const list = await mapNode("products");
     if (list) {
-      await materializeList(list);
+      // O pin não precisa varrer a vitrine toda: `scroll:false` lê só o que já
+      // está renderizado, sem sacudir a tela do streamer a cada rodízio.
+      if (scroll) await materializeList(list);
       collectProductCards(list, set);
     }
     if (set.size < 2) {
@@ -2954,13 +2968,49 @@
     return bestHits >= Math.max(1, Math.ceil(words.length / 2)) ? best : null;
   }
 
+  /**
+   * Localiza o card do produto alvo. Primeiro tenta com o que já está na tela
+   * (sem rolar). Só se não achar é que rola em passos — e PARA assim que o card
+   * aparece, em vez de varrer a vitrine inteira e "se perder".
+   */
+  async function findCardForTarget(alvo) {
+    const name = alvo.name || "";
+    let cards = await productCards({ scroll: false });
+    let card = matchCard(cards, name);
+    if (card) return card;
+
+    const list = await mapNode("products");
+    const scroller = list ? getScroller(list) : null;
+    if (!scroller) return null;
+
+    const step = Math.max(160, Math.floor(scroller.clientHeight * 0.72));
+    const maxY = Math.max(0, scroller.scrollHeight - scroller.clientHeight);
+    for (let i = 0, y = 0; i < 40; i++) {
+      scroller.scrollTop = Math.min(y, maxY);
+      await sleep(120);
+      cards = await productCards({ scroll: false });
+      card = matchCard(cards, name);
+      if (card) return card; // achou → para de rolar aqui mesmo
+      const bottom = scroller.scrollTop + scroller.clientHeight;
+      if (bottom >= scroller.scrollHeight - 4) break;
+      y = Math.max(y + step, scroller.scrollTop + step);
+    }
+    return null;
+  }
+
   async function pinProduct(alvo) {
-    const cards = await productCards();
-    const card = matchCard(cards, alvo.name || "");
+    const card = await findCardForTarget(alvo);
     if (!card) return { ok: false, reason: "card não encontrado na vitrine" };
     if (PINNED_RX.test((card.textContent || "").toLowerCase())) {
       return { ok: true, reason: "já estava fixado" };
     }
+    // Traz o card para a área visível e só então reconsulta o botão — evita
+    // clicar num nó que a virtualização do React já removeu (clique perdido).
+    try {
+      card.scrollIntoView({ block: "center" });
+    } catch {}
+    await sleep(150);
+    if (!card.isConnected) return { ok: false, reason: "card saiu da vitrine" };
     const btn = findPinButton(card);
     if (!btn) return { ok: false, reason: "botão de fixar não encontrado" };
     realClick(btn);
@@ -4017,6 +4067,45 @@
       listenBtn.classList.toggle("primary", on);
       listenBtn.textContent = on ? LISTEN_ON_LABEL : LISTEN_OFF_LABEL;
     };
+
+    // Liga/desliga a escuta do chat de forma IDEMPOTENTE. A barra, o painel web
+    // (via storage) e o boot chamam este mesmo caminho — antes, o painel só
+    // trocava o visual do botão sem iniciar/parar o motor, então religar a IA
+    // pelo painel nunca voltava a funcionar.
+    let _listenRetry = null;
+    const setListening = (on) => {
+      applyListenUi(on); // mantém o visual em sincronia mesmo em eco
+      if (on === chatState.listening) return; // já está no estado desejado
+      chatState.listening = on;
+      if (_listenRetry) {
+        clearInterval(_listenRetry);
+        _listenRetry = null;
+      }
+      if (on) {
+        sessionStart();
+        startChatListener()
+          .then((ok) => {
+            if (ok || !chatState.listening) return;
+            let tries = 0;
+            _listenRetry = setInterval(async () => {
+              if (!chatState.listening) {
+                clearInterval(_listenRetry);
+                _listenRetry = null;
+                return;
+              }
+              if ((await startChatListener()) || ++tries > 30) {
+                clearInterval(_listenRetry);
+                _listenRetry = null;
+              }
+            }, 1000);
+          })
+          .catch(() => {});
+      } else {
+        stopChatListener();
+        sessionEnd();
+      }
+    };
+
     listenBtn.addEventListener("click", async () => {
       const on = !listenBtn.classList.contains("primary");
       applyListenUi(on); // feedback imediato
@@ -4025,19 +4114,7 @@
         fresh.respostasIA = on;
         return fresh;
       }).catch(() => {});
-      if (on) {
-        sessionStart();
-        const ok = await startChatListener();
-        if (!ok) {
-          let tries = 0;
-          const iv = setInterval(async () => {
-            if ((await startChatListener()) || ++tries > 20) clearInterval(iv);
-          }, 1000);
-        }
-      } else {
-        stopChatListener();
-        sessionEnd();
-      }
+      setListening(on);
     });
 
     const reviewBtn = el(
@@ -4154,11 +4231,7 @@
     document.body.appendChild(header);
 
     if (cfg.respostasIA) {
-      sessionStart();
-      let tries = 0;
-      const iv = setInterval(async () => {
-        if ((await startChatListener()) || ++tries > 30) clearInterval(iv);
-      }, 1000);
+      setListening(true);
     }
 
     const frame = el("div", { class: "pitchai-panel-frame", id: "pitchai-frame" });
@@ -4187,7 +4260,10 @@
       if (storedConfig) {
         const c = normalizeConfig(await decryptConfigObj(storedConfig));
         master.classList.toggle("on", !!c.protecaoGeral);
-        applyListenUi(!!c.respostasIA);
+        // Antes só trocava o visual (applyListenUi); agora inicia/para o motor
+        // de fato quando a IA é ligada/desligada pelo painel web. Idempotente:
+        // o eco da própria gravação da barra não dispara start/stop duplicado.
+        setListening(!!c.respostasIA);
         const wants = !!c.demo?.enabled;
         // ignora o eco da nossa própria gravação (senão start/stop roda duas vezes)
         if (wants !== demo.isOn() && Date.now() - _demoSelfWrite > 1500) {
