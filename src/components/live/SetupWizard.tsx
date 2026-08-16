@@ -52,15 +52,32 @@ export function SetupWizard({
           speed: cfg.voz.speed,
         }),
       });
-      if (!res.ok) throw new Error(await res.text());
-      const audio = new Audio(URL.createObjectURL(await res.blob()));
+      if (!res.ok) {
+        const raw = await res.text();
+        let message = raw || `Falha no serviço de voz (${res.status})`;
+        try {
+          const parsed = JSON.parse(raw) as { message?: string };
+          if (parsed.message) message = parsed.message;
+        } catch {
+          // Mantém o corpo textual quando o servidor não devolve JSON.
+        }
+        throw new Error(message);
+      }
+      const audioUrl = URL.createObjectURL(await res.blob());
+      const audio = new Audio(audioUrl);
+      audio.addEventListener("ended", () => URL.revokeObjectURL(audioUrl), { once: true });
+      audio.addEventListener("error", () => URL.revokeObjectURL(audioUrl), { once: true });
       await audio.play();
       setAudioOk(true);
       toast.success("Áudio funcionando");
-    } catch {
+    } catch (error) {
       setAudioOk(false);
-      toast.error("Não consegui tocar a voz", {
-        description: "Confira o volume do computador e tente de novo.",
+      const message = error instanceof Error ? error.message : "Erro desconhecido";
+      toast.error("Não foi possível testar a voz", {
+        description:
+          error instanceof DOMException && error.name === "NotAllowedError"
+            ? "O Chrome bloqueou a reprodução. Clique novamente em Testar voz."
+            : message,
       });
     } finally {
       setTesting(false);
