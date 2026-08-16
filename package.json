@@ -7,7 +7,7 @@
     "dev": "vite dev --port 3000 --host 0.0.0.0",
     "start": "node .output/server/index.mjs",
     "build": "vite build --mode production",
-    "postbuild": "node scripts/build-postprocess.js",
+    "postbuild": "node scripts/pack-extension.mjs && node scripts/build-postprocess.js",
     "build:dev": "vite build --mode development",
     "preview": "vite preview",
     "lint": "eslint .",
