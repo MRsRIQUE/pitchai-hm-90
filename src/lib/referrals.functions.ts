@@ -19,6 +19,8 @@ export type ReferralCommission = {
 
 export type ReferralSummary = {
   code: string;
+  active: boolean;
+  activatedAt: string | null;
   totalIndicados: number;
   totalAssinantes: number;
   totalPendenteCents: number;
@@ -32,6 +34,7 @@ export const getMyReferralSummary = createServerFn({ method: "GET" })
     const userId = context.userId;
     const firestore = { mode: "server" as const, userToken: context.firebaseToken };
     const code = await ensureReferralCode(userId, context.firebaseToken);
+    const referralDoc = await fsGet(`users/${userId}/referral/main`, firestore);
 
     const claims = await fsQuery("referral_claims", {
       where: [
@@ -60,6 +63,8 @@ export const getMyReferralSummary = createServerFn({ method: "GET" })
 
     return {
       code,
+      active: referralDoc?.data?.active === true || referralDoc?.data?.active === undefined,
+      activatedAt: (referralDoc?.data?.activatedAt as string) ?? null,
       totalIndicados: claims.length,
       // Um indicado só vira assinante quando há uma comissão registrada para ele.
       totalAssinantes: new Set(commissions.map((c) => c.data.refereeUid as string).filter(Boolean))
@@ -72,6 +77,25 @@ export const getMyReferralSummary = createServerFn({ method: "GET" })
         .reduce((s, c) => s + c.amount_cents, 0),
       commissions: mappedCommissions,
     };
+  });
+
+export const activateReferralProgram = createServerFn({ method: "POST" })
+  .middleware([requireFirebaseAuth])
+  .handler(async ({ context }): Promise<{ ok: true; activatedAt: string }> => {
+    const firestore = { mode: "server" as const, userToken: context.firebaseToken };
+    const code = await ensureReferralCode(context.userId, context.firebaseToken);
+    const activatedAt = new Date().toISOString();
+    await fsSet(
+      `users/${context.userId}/referral/main`,
+      { code, active: true, activatedAt },
+      firestore,
+    );
+    await fsSet(
+      `referral_codes/${code}`,
+      { uid: context.userId, active: true, activatedAt },
+      firestore,
+    );
+    return { ok: true, activatedAt };
   });
 
 export const claimReferral = createServerFn({ method: "POST" })

@@ -1,12 +1,12 @@
 ﻿import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { toast } from "sonner";
 import { onAuthStateChanged } from "firebase/auth";
 import { getFirebaseAuth } from "@/lib/firebase";
 import { requireAuthBeforeLoad } from "@/lib/auth-guard";
-import { getMyReferralSummary } from "@/lib/referrals.functions";
+import { activateReferralProgram, getMyReferralSummary } from "@/lib/referrals.functions";
 import { SiteNav } from "@/components/live/SiteNav";
 import { copyToClipboard } from "@/lib/clipboard";
 
@@ -48,12 +48,23 @@ function IndiquePage() {
   }, []);
 
   const fetchSummary = useServerFn(getMyReferralSummary);
-  const { data, isLoading, error } = useQuery({
+  const activateProgram = useServerFn(activateReferralProgram);
+  const query = useQuery({
     queryKey: ["referrals", "summary"],
     queryFn: () => fetchSummary({}),
     enabled: authed === true,
   });
+  const { data, isLoading, error } = query;
+  const activation = useMutation({
+    mutationFn: () => activateProgram({}),
+    onSuccess: () => {
+      void query.refetch();
+      toast.success("Programa de afiliados ativado!");
+    },
+    onError: () => toast.error("Não foi possível ativar agora. Tente novamente."),
+  });
   const [filter, setFilter] = useState<"todas" | "pendente" | "pago" | "cancelado">("todas");
+  const [termsAccepted, setTermsAccepted] = useState(false);
 
   if (authed === false) {
     return (
@@ -97,7 +108,37 @@ function IndiquePage() {
           </p>
         )}
 
-        {data && (
+        {data && !data.active && (
+          <div className="mt-6 rounded-xl border border-[#FFB020]/30 bg-[#FFB020]/10 p-4">
+            <p className="font-semibold text-[#FFD166]">Quer participar do programa?</p>
+            <p className="mt-1 text-sm text-white/70">
+              Ative seu cadastro para liberar seu link exclusivo e começar a receber 60% das
+              assinaturas indicadas.
+            </p>
+            <label className="mt-3 flex items-start gap-2 text-xs text-white/60">
+              <input
+                type="checkbox"
+                checked={termsAccepted}
+                onChange={(event) => setTermsAccepted(event.currentTarget.checked)}
+                className="mt-0.5 accent-[#7C3AED]"
+              />
+              <span>
+                Aceito participar do Programa de Afiliados e receber comissões conforme as regras do
+                Pitch AI.
+              </span>
+            </label>
+            <button
+              type="button"
+              onClick={() => activation.mutate()}
+              disabled={activation.isPending || !termsAccepted}
+              className="mt-3 rounded-lg bg-[#7C3AED] px-4 py-2 text-sm font-semibold disabled:opacity-60"
+            >
+              {activation.isPending ? "Ativando…" : "Quero participar"}
+            </button>
+          </div>
+        )}
+
+        {data?.active && (
           <div className="mt-6 space-y-3">
             <div className="flex flex-col gap-2 sm:flex-row">
               <input

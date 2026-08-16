@@ -55,7 +55,7 @@ export async function ensureReferralCode(userId: string, userToken: string): Pro
     throw new Error("Não foi possível reservar um código de indicação único.");
   }
   if (!codeAlreadyOwned) {
-    await fsSet(`referral_codes/${code}`, { uid: userId }, auth);
+    await fsSet(`referral_codes/${code}`, { uid: userId, active: false }, auth);
   }
   await fsSet(`users/${userId}/referral/main`, { code, createdAt: new Date().toISOString() }, auth);
   return code;
@@ -64,6 +64,7 @@ export async function ensureReferralCode(userId: string, userToken: string): Pro
 /** Resolve um código de indicação para o dono. */
 export async function resolveReferralCode(code: string): Promise<string | null> {
   const doc = await fsGet(`referral_codes/${code}`, { mode: "public" });
+  if (doc?.data?.active === false) return null;
   return (doc?.data?.uid as string) ?? null;
 }
 
