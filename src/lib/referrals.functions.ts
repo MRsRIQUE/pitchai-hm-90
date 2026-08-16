@@ -61,7 +61,9 @@ export const getMyReferralSummary = createServerFn({ method: "GET" })
     return {
       code,
       totalIndicados: claims.length,
-      totalAssinantes: claims.length,
+      // Um indicado só vira assinante quando há uma comissão registrada para ele.
+      totalAssinantes: new Set(commissions.map((c) => c.data.refereeUid as string).filter(Boolean))
+        .size,
       totalPendenteCents: mappedCommissions
         .filter((c) => c.status === "pendente")
         .reduce((s, c) => s + c.amount_cents, 0),

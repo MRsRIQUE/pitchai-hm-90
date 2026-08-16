@@ -53,6 +53,7 @@ function IndiquePage() {
     queryFn: () => fetchSummary({}),
     enabled: authed === true,
   });
+  const [filter, setFilter] = useState<"todas" | "pendente" | "pago" | "cancelado">("todas");
 
   if (authed === false) {
     return (
@@ -77,7 +78,12 @@ function IndiquePage() {
   return (
     <Shell>
       <section className="rounded-2xl border border-white/10 bg-gradient-to-br from-[#7C3AED]/25 to-[#FF6B35]/10 p-6">
-        <h1 className="text-2xl font-bold">Indique e ganhe 60%</h1>
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <h1 className="text-2xl font-bold">Programa de afiliados</h1>
+          <span className="rounded-full border border-[#00E676]/30 bg-[#00E676]/10 px-3 py-1 text-xs font-semibold text-[#00E676]">
+            60% por renovação
+          </span>
+        </div>
         <p className="mt-2 max-w-xl text-sm text-white/70">
           Compartilhe seu link. Quando alguém assinar o Pitch AI por ele, você recebe{" "}
           <b className="text-[#00E676]">60% do valor pago</b> — a cada ciclo, enquanto a assinatura
@@ -110,6 +116,28 @@ function IndiquePage() {
               >
                 Copiar link
               </button>
+              <button
+                type="button"
+                onClick={async () => {
+                  if (navigator.share) {
+                    try {
+                      await navigator.share({
+                        title: "Pitch AI",
+                        text: "Conheça o Pitch AI",
+                        url: link,
+                      });
+                    } catch {
+                      // O usuário pode fechar o diálogo nativo sem erro visível.
+                    }
+                  } else {
+                    const copied = await copyToClipboard(link);
+                    if (copied) toast.success("Link copiado!");
+                  }
+                }}
+                className="rounded-lg border border-white/10 bg-white/5 px-4 py-2 text-center text-sm hover:bg-white/10"
+              >
+                Compartilhar
+              </button>
               <a
                 href={`https://wa.me/?text=${encodeURIComponent(`Automatize sua live do TikTok Shop com IA: ${link}`)}`}
                 target="_blank"
@@ -136,7 +164,21 @@ function IndiquePage() {
           </div>
 
           <section className="rounded-2xl border border-white/10 bg-white/[0.03] p-5">
-            <h2 className="font-semibold">Minhas comissões</h2>
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <h2 className="font-semibold">Minhas comissões</h2>
+              <div className="flex gap-1 rounded-lg bg-black/20 p-1 text-xs">
+                {(["todas", "pendente", "pago", "cancelado"] as const).map((value) => (
+                  <button
+                    key={value}
+                    type="button"
+                    onClick={() => setFilter(value)}
+                    className={`rounded px-2 py-1 ${filter === value ? "bg-[#7C3AED] text-white" : "text-white/50 hover:text-white"}`}
+                  >
+                    {value === "todas" ? "Todas" : value[0].toUpperCase() + value.slice(1)}
+                  </button>
+                ))}
+              </div>
+            </div>
             {data.commissions.length === 0 ? (
               <p className="py-6 text-center text-sm text-white/50">
                 Nenhuma comissão ainda. Compartilhe seu link para começar.
@@ -154,35 +196,44 @@ function IndiquePage() {
                     </tr>
                   </thead>
                   <tbody>
-                    {data.commissions.map((c) => (
-                      <tr key={c.id} className="border-b border-white/5">
-                        <td className="py-2 pr-2 text-white/60">
-                          {new Date(c.created_at).toLocaleDateString("pt-BR")}
-                        </td>
-                        <td className="py-2 pr-2 uppercase">{c.plan ?? "—"}</td>
-                        <td className="py-2 pr-2 text-right font-mono text-white/60">
-                          {brl(c.base_cents)}
-                        </td>
-                        <td className="py-2 pr-2 text-right font-mono text-[#00E676]">
-                          {brl(c.amount_cents)}
-                        </td>
-                        <td className="py-2 text-right">
-                          <span
-                            className={
-                              c.status === "pago"
-                                ? "rounded bg-[#00E676]/15 px-2 py-0.5 text-xs text-[#00E676]"
-                                : "rounded bg-[#FF6B35]/15 px-2 py-0.5 text-xs text-[#FF6B35]"
-                            }
-                          >
-                            {c.status}
-                          </span>
-                        </td>
-                      </tr>
-                    ))}
+                    {data.commissions
+                      .filter((c) => filter === "todas" || c.status === filter)
+                      .map((c) => (
+                        <tr key={c.id} className="border-b border-white/5">
+                          <td className="py-2 pr-2 text-white/60">
+                            {new Date(c.created_at).toLocaleDateString("pt-BR")}
+                          </td>
+                          <td className="py-2 pr-2 uppercase">{c.plan ?? "—"}</td>
+                          <td className="py-2 pr-2 text-right font-mono text-white/60">
+                            {brl(c.base_cents)}
+                          </td>
+                          <td className="py-2 pr-2 text-right font-mono text-[#00E676]">
+                            {brl(c.amount_cents)}
+                          </td>
+                          <td className="py-2 text-right">
+                            <span
+                              className={
+                                c.status === "pago"
+                                  ? "rounded bg-[#00E676]/15 px-2 py-0.5 text-xs text-[#00E676]"
+                                  : "rounded bg-[#FF6B35]/15 px-2 py-0.5 text-xs text-[#FF6B35]"
+                              }
+                            >
+                              {c.status}
+                            </span>
+                          </td>
+                        </tr>
+                      ))}
                   </tbody>
                 </table>
               </div>
             )}
+            {data.commissions.length > 0 &&
+              data.commissions.filter((c) => filter === "todas" || c.status === filter).length ===
+                0 && (
+                <p className="py-6 text-center text-sm text-white/50">
+                  Nenhuma comissão neste filtro.
+                </p>
+              )}
             <p className="mt-4 text-xs text-white/40">
               Os pagamentos são feitos manualmente via PIX pela equipe Pitch AI após a confirmação
               do pagamento do indicado.

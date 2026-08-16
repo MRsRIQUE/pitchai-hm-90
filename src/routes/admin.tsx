@@ -438,6 +438,9 @@ function ErrorState({ error }: { error: unknown }) {
 
 /* ---------- Indicações ---------- */
 function IndicacoesTab() {
+  const [statusFilter, setStatusFilter] = useState<"todos" | "pendente" | "pago" | "cancelado">(
+    "todos",
+  );
   const qc = useQueryClient();
   const query = useInfiniteQuery({
     queryKey: ["admin", "commissions", "pages"],
@@ -453,6 +456,7 @@ function IndicacoesTab() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ["admin", "commissions"] }),
   });
 
+  const visibleItems = items.filter((c) => statusFilter === "todos" || c.status === statusFilter);
   const pend = items.filter((c) => c.status === "pendente");
   const pago = items.filter((c) => c.status === "pago");
   const sum = (arr: AdminCommission[]) => arr.reduce((s, c) => s + c.amount_cents, 0) / 100;
@@ -467,7 +471,7 @@ function IndicacoesTab() {
       </div>
 
       <Card
-        title="Comissões de indicação"
+        title="Programa de afiliados · comissões"
         hint="Marque como pago depois de enviar o PIX ao indicador."
       >
         {error ? (
@@ -480,6 +484,18 @@ function IndicacoesTab() {
           </p>
         ) : (
           <div className="overflow-x-auto">
+            <div className="mb-3 flex gap-1 rounded-lg bg-black/20 p-1 text-xs w-fit">
+              {(["todos", "pendente", "pago", "cancelado"] as const).map((value) => (
+                <button
+                  key={value}
+                  type="button"
+                  onClick={() => setStatusFilter(value)}
+                  className={`rounded px-2 py-1 ${statusFilter === value ? "bg-[#7C3AED] text-white" : "text-white/50 hover:text-white"}`}
+                >
+                  {value === "todos" ? "Todos" : value[0].toUpperCase() + value.slice(1)}
+                </button>
+              ))}
+            </div>
             <table className="w-full text-sm">
               <thead>
                 <tr className="text-white/50 text-left border-b border-white/10">
@@ -494,7 +510,7 @@ function IndicacoesTab() {
                 </tr>
               </thead>
               <tbody>
-                {items.map((c) => (
+                {visibleItems.map((c) => (
                   <tr key={c.id} className="border-b border-white/5">
                     <td className="py-2 pr-2 text-white/60">
                       {new Date(c.created_at).toLocaleDateString("pt-BR")}
@@ -531,6 +547,11 @@ function IndicacoesTab() {
                 ))}
               </tbody>
             </table>
+            {visibleItems.length === 0 && (
+              <p className="py-6 text-center text-sm text-white/50">
+                Nenhuma comissão neste filtro.
+              </p>
+            )}
           </div>
         )}
         {query.hasNextPage && (

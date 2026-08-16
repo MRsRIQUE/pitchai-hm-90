@@ -677,8 +677,8 @@ function mapCommission(d: { id: string; data: Record<string, unknown> }): AdminC
     base_cents: (d.data.base_cents as number) ?? 0,
     amount_cents: (d.data.amount_cents as number) ?? 0,
     status: (d.data.status as string) ?? "pendente",
-    created_at: (d.data.createdAt as string) ?? "",
-    paid_at: (d.data.paidAt as string) ?? null,
+    created_at: (d.data.createdAt as string) ?? (d.data.created_at as string) ?? "",
+    paid_at: (d.data.paidAt as string) ?? (d.data.paid_at as string) ?? null,
   };
 }
 
@@ -719,7 +719,9 @@ const getCommissionsPage = createServerFn({ method: "POST" })
     return {
       items: pageDocs.map(mapCommission),
       nextCursor: hasMore
-        ? ((pageDocs.at(-1)?.data.createdAt as string | undefined) ?? null)
+        ? ((pageDocs.at(-1)?.data.createdAt as string | undefined) ??
+          (pageDocs.at(-1)?.data.created_at as string | undefined) ??
+          null)
         : null,
     };
   });

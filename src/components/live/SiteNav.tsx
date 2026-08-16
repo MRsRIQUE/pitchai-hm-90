@@ -6,7 +6,7 @@ import { useTheme } from "@/lib/use-theme";
 const LINKS = [
   { to: "/planos", label: "Planos" },
   { to: "/quentes", label: "Produtos quentes" },
-  { to: "/indique", label: "Indique e ganhe" },
+  { to: "/indique", label: "Programa de afiliados" },
   { to: "/lives", label: "Minhas lives" },
   { to: "/download", label: "Download" },
 ] as const;

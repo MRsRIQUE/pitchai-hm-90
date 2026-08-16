@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { type StripeEnv, verifyWebhook } from "@/lib/stripe.server";
 import { entitlementPlanId, findPitchaiPlan } from "@/lib/live/plans";
-import { fsSet, fsQuery, setSubscription } from "@/lib/firebase.server";
+import { fsGet, fsSet, fsQuery, setSubscription } from "@/lib/firebase.server";
 
 function planFromSub(sub: any): string {
   const item = sub.items?.data?.[0];
@@ -76,9 +76,12 @@ async function registerReferralCommission(args: {
   const rate = 0.6;
   // Gera um ID único mesmo se `periodEnd` vier null (caso de `customer.subscription.created`).
   // Antes usava `${subscriptionId}:${periodEnd ?? "current"}` que colidia em reenvios do webhook.
-  const invoiceId = `${subscriptionId}:${periodEnd ?? "init_" + Date.now()}`;
+  const invoiceId = `${subscriptionId}:${periodEnd ?? "initial"}`;
 
   try {
+    const existing = await fsGet(`referral_commissions/${invoiceId}`, { mode: "server" });
+    // Webhooks podem ser reenviados. Nunca reabra uma comissão já paga.
+    if (existing?.data?.status === "pago") return;
     await fsSet(
       `referral_commissions/${invoiceId}`,
       {
@@ -91,8 +94,10 @@ async function registerReferralCommission(args: {
         rate,
         amount_cents: Math.round(baseCents * rate),
         status: "pendente",
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
+        // Campos canônicos usados pelas consultas do afiliado e do Admin.
+        // Mantemos o formato camelCase para que o índice createdAt funcione.
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
       },
       { mode: "server" },
     );
@@ -117,7 +122,7 @@ async function revokePendingCommissions(userId: string): Promise<void> {
       pending.map((c) =>
         fsSet(
           `referral_commissions/${c.id}`,
-          { status: "cancelado", updated_at: new Date().toISOString() },
+          { status: "cancelado", updatedAt: new Date().toISOString() },
           { mode: "server" },
         ),
       ),
