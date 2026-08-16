@@ -3,8 +3,11 @@ import { onAuthStateChanged } from "firebase/auth";
 import { doc, getDoc, onSnapshot } from "firebase/firestore";
 import { getFirebaseAuth, getFirebaseDb } from "@/lib/firebase";
 import {
+  COMPED_LABEL,
+  compedGrantedUntil as compedUntil,
   hasActiveCompedAccess,
   hasPaidAccess,
+  planDisplayName,
   PRICE_TO_PLAN,
   PlanTier,
   type CompedAccessRecord,
@@ -28,6 +31,12 @@ export interface UseUserSubscriptionResult {
   isComped: boolean;
   /** Categoria do plano ('free' | 'pro' | 'max') */
   planTier: PlanTier;
+  /** Origem do acesso: assinatura paga, cortesia ou nenhum */
+  source: "paid" | "comped" | "none";
+  /** Nome legível do plano/categoria atual (ex.: "Cortesia", "Trimestral", "Sem plano") */
+  planName: string;
+  /** Data de validade da cortesia (camelCase do comped_access ou snake_case do legado) */
+  compedGrantedUntil: string | null;
   /** Se o recurso de voz e áudio da IA em tempo real está liberado */
   allowAudio: boolean;
   /** Se as ferramentas de chat da IA estão ativas */
@@ -162,17 +171,31 @@ export function useUserSubscription(): UseUserSubscriptionResult {
     }
   }, [userId, fetchSubscription]);
 
-  // Regras de negócio calculadas em tempo real
-  const paidSubscriptionActive = hasPaidAccess(subscription);
-  const compedActive = hasActiveCompedAccess(compedAccess);
+  // Regras de negócio calculadas em tempo real.
+  // Cortesia pode viver em dois lugares: comped_access/{uid} (atual) ou, legado,
+  // no próprio doc de assinatura com status "comped".
+  const legacyComped = subscription?.status === "comped";
+  const paidSubscriptionActive = hasPaidAccess(subscription) && !legacyComped;
+  const compedActive =
+    hasActiveCompedAccess(compedAccess) || (legacyComped && hasPaidAccess(subscription));
   const isPaidActive = paidSubscriptionActive || compedActive;
 
-  const isComped = !paidSubscriptionActive && compedActive;
+  const isComped = compedActive && !paidSubscriptionActive;
 
   const rawPlan = isComped
-    ? compedAccess?.plan || "pitchai_trimestral"
+    ? compedAccess?.plan || subscription?.plan || "pitchai_trimestral"
     : subscription?.plan || "free";
   const planTier: PlanTier = isPaidActive ? PRICE_TO_PLAN[rawPlan] || "pro" : "free";
+
+  const source: "paid" | "comped" | "none" = paidSubscriptionActive
+    ? "paid"
+    : compedActive
+      ? "comped"
+      : "none";
+  const planName = source === "comped" ? COMPED_LABEL : planDisplayName(rawPlan);
+  const compedGrantedUntil = isComped
+    ? (compedUntil(compedAccess) ?? subscription?.granted_until ?? null)
+    : null;
 
   // Liberação de Áudio/Voz da IA:
   // - Liberado se for Cortesia (comped) ou se o plano do usuário aceitar áudio (Trimestral, Anual ou Max)
@@ -193,6 +216,9 @@ export function useUserSubscription(): UseUserSubscriptionResult {
     isPaidActive,
     isComped,
     planTier,
+    source,
+    planName,
+    compedGrantedUntil,
     allowAudio,
     allowChat,
     allowLiveAssist,

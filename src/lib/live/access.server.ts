@@ -2,6 +2,7 @@ import { fsGet, getSubscription, type FirestoreAuthMode } from "@/lib/firebase.s
 import {
   hasActiveCompedAccess,
   hasPaidAccess,
+  compedGrantedUntil,
   type CompedAccessRecord,
   type PlanTier,
   PRICE_TO_PLAN,
@@ -38,6 +39,32 @@ export async function resolveUserAccess(
     getCompedAccess(userId, options).catch(() => null),
   ]);
 
+  // 1) Cortesia atual: doc dedicado em comped_access/{uid}.
+  if (hasActiveCompedAccess(comped)) {
+    const plan = comped?.plan || "pitchai_trimestral";
+    return {
+      active: true,
+      source: "comped",
+      plan,
+      tier: PRICE_TO_PLAN[plan] || "pro",
+      expiresAt: compedGrantedUntil(comped),
+    };
+  }
+
+  // 2) Cortesia legado: gravada no próprio doc de assinatura com status "comped".
+  //    Não é pagamento — não pode ser rotulada como "paid" na UI.
+  if (subscription?.status === "comped") {
+    const plan = subscription?.plan || "pitchai_trimestral";
+    return {
+      active: hasPaidAccess(subscription),
+      source: "comped",
+      plan,
+      tier: PRICE_TO_PLAN[plan] || "pro",
+      expiresAt: subscription?.granted_until || null,
+    };
+  }
+
+  // 3) Assinatura paga.
   if (hasPaidAccess(subscription)) {
     const plan = subscription?.plan || "pitchai_mensal";
     return {
@@ -46,17 +73,6 @@ export async function resolveUserAccess(
       plan,
       tier: PRICE_TO_PLAN[plan] || "pro",
       expiresAt: subscription?.current_period_end || subscription?.granted_until || null,
-    };
-  }
-
-  if (hasActiveCompedAccess(comped)) {
-    const plan = comped?.plan || "pitchai_trimestral";
-    return {
-      active: true,
-      source: "comped",
-      plan,
-      tier: PRICE_TO_PLAN[plan] || "pro",
-      expiresAt: comped?.grantedUntil || null,
     };
   }
 

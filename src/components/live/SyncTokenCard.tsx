@@ -33,6 +33,7 @@ import { getFirebaseAuth, googleProvider } from "@/lib/firebase";
 import { ensureAccountProfile } from "@/lib/account-profile";
 import { ensureMyLiveConfig, pushMyLiveConfig, regenerateSyncToken } from "@/lib/live/sync";
 import { loadConfig } from "@/lib/live/config";
+import { planDisplayName } from "@/lib/live/plans";
 import { copyToClipboard } from "@/lib/clipboard";
 import { toast } from "sonner";
 
@@ -55,6 +56,7 @@ export function SyncTokenCard() {
   const [connectionError, setConnectionError] = useState<string | null>(null);
   const [tokenInfo, setTokenInfo] = useState<{
     plan?: string;
+    planName?: string;
     remainingChat?: number;
     remainingTts?: number;
     chatLimit?: number;
@@ -75,6 +77,7 @@ export function SyncTokenCard() {
       if (res.ok) {
         setTokenInfo({
           plan: data.plan || "free",
+          planName: data.planName || planDisplayName(data.plan),
           remainingChat: data.remainingChat ?? 0,
           remainingTts: data.remainingTts ?? 0,
           chatLimit: data.chatLimit ?? 100,
@@ -495,7 +498,7 @@ export function SyncTokenCard() {
                   ) : (
                     <ShieldCheck className="h-2.5 w-2.5 mr-1" />
                   )}
-                  Plano {tokenInfo.plan}
+                  {tokenInfo.planName || planDisplayName(tokenInfo.plan)}
                 </Badge>
               )}
             </div>

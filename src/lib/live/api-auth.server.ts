@@ -10,7 +10,7 @@ import {
   isAdmin,
 } from "@/lib/firebase.server";
 import { verifyFirebaseIdToken } from "@/lib/firebase.server";
-import { PRICE_TO_PLAN, type PlanTier } from "@/lib/live/plans";
+import { COMPED_LABEL, PRICE_TO_PLAN, planDisplayName, type PlanTier } from "@/lib/live/plans";
 import { resolveUserAccess } from "@/lib/live/access.server";
 import {
   getUpgradeOffer,
@@ -138,6 +138,8 @@ export interface GuardResult {
   message?: string;
   userId?: string;
   plan?: string;
+  planName?: string;
+  source?: "paid" | "comped" | "none";
   remaining?: number;
   tier?: PlanTier;
   tokenUsed?: number;
@@ -271,6 +273,8 @@ async function authorizeUser(userId: string): Promise<GuardResult> {
     ok: true,
     userId,
     plan,
+    planName: access.source === "comped" ? COMPED_LABEL : planDisplayName(plan),
+    source: access.source,
     tier: PRICE_TO_PLAN[plan] || "pro",
   };
 }
@@ -456,6 +460,7 @@ export async function getSyncTokenStatus(token: string) {
       reason: paymentRequired ? "payment_required" : "invalid_token",
       userId: access.userId,
       plan: "free",
+      planName: "Sem plano",
       remainingChat: 0,
       remainingTts: 0,
       chatLimit: 0,
@@ -466,6 +471,7 @@ export async function getSyncTokenStatus(token: string) {
 
   const userId = access.userId;
   const plan = access.plan || "free";
+  const planName = access.source === "comped" ? COMPED_LABEL : planDisplayName(plan);
 
   const { chat: chatLimit, tts: ttsLimit, allowAudio } = planLimits(plan);
   const day = new Date().toISOString().split("T")[0];
@@ -490,6 +496,7 @@ export async function getSyncTokenStatus(token: string) {
       reason: "quota_unavailable",
       userId,
       plan,
+      planName,
       message: "Não foi possível confirmar sua franquia de tokens. Tente novamente em instantes.",
     };
   }
@@ -508,6 +515,7 @@ export async function getSyncTokenStatus(token: string) {
       reason: "quota_exceeded",
       userId,
       plan,
+      planName,
       remainingChat,
       remainingTts,
       chatLimit,
@@ -533,6 +541,7 @@ export async function getSyncTokenStatus(token: string) {
     reason: null,
     userId,
     plan,
+    planName,
     remainingChat,
     remainingTts,
     chatLimit,

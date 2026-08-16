@@ -11,6 +11,8 @@ export type CompedAccessRecord = {
   plan?: string | null;
   status?: string | null;
   grantedUntil?: string | null;
+  /** Legado: algumas cortesias antigas foram gravadas com snake_case. */
+  granted_until?: string | null;
   note?: string | null;
 };
 
@@ -150,8 +152,41 @@ export function hasPaidAccess(
   return isFutureDate(sub.current_period_end) || isFutureDate(sub.granted_until);
 }
 
+/** Nome legível do plano. "free"/"gratuito" não são planos — é "sem plano". */
+export function planDisplayName(plan?: string | null): string {
+  if (!plan) return "Sem plano";
+  const names: Record<string, string> = {
+    pitchai_mensal: "Mensal",
+    mensal: "Mensal",
+    pitchai_trimestral: "Trimestral",
+    trimestral: "Trimestral",
+    pitchai_anual: "Anual",
+    anual: "Anual",
+    pitchai_trimestral_teste_1real: "Trimestral",
+    pitchai_pro_monthly: "Pro Mensal",
+    pitchai_pro_yearly: "Pro Anual",
+    pitchai_max_monthly: "Max Mensal",
+    pitchai_max_yearly: "Max Anual",
+    pro: "Pro",
+    max: "Max",
+    free: "Sem plano",
+    gratuito: "Sem plano",
+  };
+  return names[plan] ?? plan;
+}
+
+/** Nome exibido quando o acesso é cortesia — categoria própria, não um "plano". */
+export const COMPED_LABEL = "Cortesia";
+
+/** Valor de validade da cortesia, aceitando camelCase (atual) e snake_case (legado). */
+export function compedGrantedUntil(comped?: CompedAccessRecord | null): string | null {
+  return comped?.grantedUntil ?? comped?.granted_until ?? null;
+}
+
 export function hasActiveCompedAccess(comped?: CompedAccessRecord | null): boolean {
-  if (!comped || comped.status !== "comped" || !comped.grantedUntil) return false;
-  const timestamp = Date.parse(comped.grantedUntil);
+  if (!comped || comped.status !== "comped") return false;
+  const until = compedGrantedUntil(comped);
+  if (!until) return false;
+  const timestamp = Date.parse(until);
   return Number.isFinite(timestamp) && timestamp > Date.now();
 }

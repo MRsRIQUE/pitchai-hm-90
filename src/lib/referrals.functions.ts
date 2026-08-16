@@ -36,11 +36,12 @@ export const getMyReferralSummary = createServerFn({ method: "GET" })
     const code = await ensureReferralCode(userId, context.firebaseToken);
     const referralDoc = await fsGet(`users/${userId}/referral/main`, firestore);
 
+    // Todo vínculo é gravado como "claimed" no momento do uso; não há outro
+    // status. O filtro extra por status exigia um índice composto
+    // (referrerUid + status) que não está implantado e derrubava a consulta
+    // inteira com "requires an index", quebrando a página de indicações.
     const claims = await fsQuery("referral_claims", {
-      where: [
-        { field: "referrerUid", op: "EQUAL", value: userId },
-        { field: "status", op: "EQUAL", value: "claimed" },
-      ],
+      where: [{ field: "referrerUid", op: "EQUAL", value: userId }],
       ...firestore,
     });
 

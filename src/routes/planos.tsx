@@ -52,7 +52,7 @@ const PLANO_SEM_VOZ = PITCHAI_PLANS.find((p) => !p.allowAudio);
 const PLANOS_COM_VOZ = PITCHAI_PLANS.filter((p) => p.allowAudio);
 
 function PlanosPage() {
-  const { subscription: sub, isComped, userId, userEmail } = useUserSubscription();
+  const { isComped, compedGrantedUntil, userId, userEmail } = useUserSubscription();
 
   async function handleSignOut() {
     try {
@@ -97,14 +97,14 @@ function PlanosPage() {
             </div>
           )}
 
-          {isComped && sub?.granted_until && (
+          {isComped && compedGrantedUntil && (
             <div className="site-page-meta">
               <div className="badge" style={{ marginBottom: 0 }}>
                 <b>
                   <Sparkles style={{ width: 11, height: 11 }} /> Cortesia
                 </b>
                 <span>
-                  Acesso liberado até {new Date(sub.granted_until).toLocaleDateString("pt-BR")}
+                  Acesso liberado até {new Date(compedGrantedUntil).toLocaleDateString("pt-BR")}
                 </span>
               </div>
             </div>
