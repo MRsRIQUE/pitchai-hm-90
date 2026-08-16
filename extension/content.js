@@ -847,6 +847,7 @@
     vozContextos: { default: null, greeting: null, offer: null, farewell: null },
     filtros: { blacklist: [], whitelist: [], usarListaPadrao: true },
     revisarAntesDeEnviar: false,
+    pitchBank: { enabled: true, variants: 12, ttlMinutes: 60, minIntervalSec: 45, maxIntervalSec: 75, cacheReplies: true },
     produtos: [],
     aiContext: {},
     ultimoRoteiro: "",
@@ -876,6 +877,7 @@
       },
       vozContextos: { ...DEFAULTS.vozContextos, ...(stored.vozContextos || {}) },
       filtros: { ...DEFAULTS.filtros, ...(stored.filtros || {}) },
+      pitchBank: { ...DEFAULTS.pitchBank, ...(stored.pitchBank || {}) },
       somVenda: { ...DEFAULTS.somVenda, ...(stored.somVenda || {}) },
       demo: { ...DEFAULTS.demo, ...(stored.demo || {}) },
       produtos: Array.isArray(stored.produtos) ? stored.produtos : [],
@@ -1964,44 +1966,124 @@
     }
   }
 
-  async function speakText(text, cfg) {
+  const TTS_CACHE_NAME = "pitchai-tts-hourly-v1";
+  const ttsMemoryCache = new Map();
+
+  function stableHash(value) {
+    let hash = 2166136261;
+    const input = String(value || "");
+    for (let i = 0; i < input.length; i++) {
+      hash ^= input.charCodeAt(i);
+      hash = Math.imul(hash, 16777619);
+    }
+    return (hash >>> 0).toString(36);
+  }
+
+  function ttsCacheKey(text, voice) {
+    return stableHash(`${voice.id}|${voice.speed}|${String(text).trim()}`);
+  }
+
+  async function readTtsCache(key, ttlMs) {
+    const memory = ttsMemoryCache.get(key);
+    if (memory && Date.now() - memory.at < ttlMs) return memory.blob;
+    if (memory) ttsMemoryCache.delete(key);
+    if (typeof caches === "undefined") return null;
+    try {
+      const cache = await caches.open(TTS_CACHE_NAME);
+      const request = new Request(`${API_BASE}/__pitchai_tts_cache__/${key}`);
+      const response = await cache.match(request);
+      if (!response) return null;
+      const createdAt = Number(response.headers.get("x-pitchai-created-at")) || 0;
+      if (Date.now() - createdAt >= ttlMs) {
+        await cache.delete(request);
+        return null;
+      }
+      const blob = await response.blob();
+      ttsMemoryCache.set(key, { blob, at: createdAt });
+      return blob;
+    } catch {
+      return null;
+    }
+  }
+
+  async function writeTtsCache(key, blob) {
+    const at = Date.now();
+    ttsMemoryCache.set(key, { blob, at });
+    if (ttsMemoryCache.size > 40) {
+      const oldest = ttsMemoryCache.keys().next().value;
+      if (oldest) ttsMemoryCache.delete(oldest);
+    }
+    if (typeof caches === "undefined") return;
+    try {
+      const cache = await caches.open(TTS_CACHE_NAME);
+      await cache.put(
+        new Request(`${API_BASE}/__pitchai_tts_cache__/${key}`),
+        new Response(blob, {
+          headers: {
+            "Content-Type": blob.type || "audio/wav",
+            "x-pitchai-created-at": String(at),
+          },
+        }),
+      );
+    } catch {}
+  }
+
+  async function speakText(text, cfg, options = {}) {
     if (extSecurity.isLocked) return false;
     const ctx = classifyContext(text);
     const voice = resolveVoice(cfg, ctx);
+    const ttlMs =
+      Math.max(30, Math.min(180, Number(cfg?.pitchBank?.ttlMinutes) || 60)) * 60 * 1000;
+    const cacheKey = ttsCacheKey(text, voice);
     activity.setNowSpeaking({ text, ctx });
     const startedAt = Date.now();
     let spoken = false;
+    let fromCache = false;
+    let objectUrl = "";
     try {
-      const authHeaders = await signRequest(cfg.syncToken, "tts_speak");
-      const r = await fetch(`${API_BASE}/api/public/tts/speak`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          ...authHeaders,
-        },
-        body: JSON.stringify({ text, voice: voice.id, speed: voice.speed }),
-      });
-      if (!r.ok) {
-        const detail = await r.text().catch(() => "");
-        throw new Error(`voz ${r.status}${detail ? ` · ${detail.slice(0, 100)}` : ""}`);
+      let blob = options.useCache ? await readTtsCache(cacheKey, ttlMs) : null;
+      fromCache = !!blob;
+      if (!blob) {
+        const authHeaders = await signRequest(cfg.syncToken, "tts_speak");
+        const r = await fetch(`${API_BASE}/api/public/tts/speak`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            ...authHeaders,
+          },
+          body: JSON.stringify({ text, voice: voice.id, speed: voice.speed }),
+          signal: options.signal,
+        });
+        if (!r.ok) {
+          const detail = await r.text().catch(() => "");
+          throw new Error(`voz ${r.status}${detail ? ` · ${detail.slice(0, 100)}` : ""}`);
+        }
+        blob = await r.blob();
+        if (options.useCache) await writeTtsCache(cacheKey, blob);
       }
-      const blob = await r.blob();
-      spoken = await playAudio(URL.createObjectURL(blob), cfg);
+      if (options.isCancelled?.()) throw new DOMException("cancelado", "AbortError");
+      objectUrl = URL.createObjectURL(blob);
+      spoken = await playAudio(objectUrl, cfg);
       if (!spoken) throw new Error("o navegador não iniciou a reprodução da voz");
       await waitForAudioEnd();
+      if (options.signal?.aborted || options.isCancelled?.()) spoken = false;
     } catch (error) {
-      activity.log({
-        type: "error",
-        text: `Falha ao falar resposta: ${String(error?.message || error).slice(0, 140)}`,
-        ts: Date.now(),
-      });
+      if (error?.name !== "AbortError") {
+        activity.log({
+          type: "error",
+          text: `Falha ao falar resposta: ${String(error?.message || error).slice(0, 140)}`,
+          ts: Date.now(),
+        });
+      }
+    } finally {
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
     }
     activity.setNowSpeaking(null);
     if (!spoken) return false;
     // OpenAI tts-1: ~$0.015 / 1k chars. Cost stored in cents (USD ~= BRL for estimate).
     const chars = (text || "").length;
     const seconds = Math.max(1, Math.round((Date.now() - startedAt) / 1000));
-    const costCents = Math.round((chars / 1000) * 1.5); // ~1.5 cents/1k chars
+    const costCents = fromCache ? 0 : Math.round((chars / 1000) * 1.5); // cache não sintetiza de novo
     sessionEvent({ kind: "tts", tts_seconds: seconds, estimated_cost_cents: costCents });
     // If active product, mark it as pitched (once)
     const ativo = (cfg.produtos || []).find((p) => p.active);
@@ -2023,6 +2105,12 @@
     serverBackoffUntil: 0,
     pitchProductId: null,
     pitchTimer: null,
+    pitchRunId: 0,
+    pitchBusy: false,
+    pitchAudioActive: false,
+    pitchAbort: null,
+    pitchBanks: new Map(),
+    replyCache: new Map(),
     lastMsgAt: 0,
     detectVia: null,
     healthTimer: null,
@@ -2037,6 +2125,51 @@
   const CHAT_DEDUPE_MS = 45000;
   const SENT_REPLY_TTL_MS = 120000;
   const MAX_CHAT_QUEUE = 20;
+  const PITCH_BANK_STORAGE_KEY = "pitchai.pitchBanks.v1";
+  const REPLY_CACHE_TTL_MS = 60 * 60 * 1000;
+  const STANDALONE_FAQ_RX =
+    /\b(pre[cç]o|valor|quanto|frete|entrega|prazo|cupom|desconto|estoque|tamanho|medida|cor|material|garantia|troca|devolu|como usa|como usar|funciona|serve|parcel|pagamento|link|onde compra)\b/i;
+
+  function normalizedReplyQuestion(text) {
+    return String(text || "")
+      .toLowerCase()
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .replace(/[^a-z0-9 ]/g, " ")
+      .replace(/\s+/g, " ")
+      .trim();
+  }
+
+  function replyCacheKey(cfg, text) {
+    if (cfg?.pitchBank?.cacheReplies === false || !STANDALONE_FAQ_RX.test(text || "")) return "";
+    const product = (cfg.produtos || []).find((p) => p.active) || cfg.produtos?.[0];
+    const question = normalizedReplyQuestion(text);
+    if (!question || question.length < 4) return "";
+    return stableHash(
+      `${product?.id || product?.name || "sem-produto"}|${question}|${JSON.stringify(cfg.aiContext || {})}`,
+    );
+  }
+
+  function getCachedReply(key) {
+    if (!key) return null;
+    const cached = chatState.replyCache.get(key);
+    if (!cached) return null;
+    if (Date.now() - cached.at >= REPLY_CACHE_TTL_MS) {
+      chatState.replyCache.delete(key);
+      return null;
+    }
+    return cached.data;
+  }
+
+  function setCachedReply(key, data) {
+    if (!key) return;
+    chatState.replyCache.set(key, { at: Date.now(), data });
+    while (chatState.replyCache.size > 100) {
+      const oldest = chatState.replyCache.keys().next().value;
+      if (!oldest) break;
+      chatState.replyCache.delete(oldest);
+    }
+  }
 
   function splitPitchLines(script) {
     if (!script) return [];
@@ -2046,7 +2179,7 @@
       .map((s) => s.trim())
       .filter((s) => s.length >= 12 && s.length <= 240);
   }
-  function getActivePitchLines(cfg) {
+  function getFallbackPitchLines(cfg) {
     const ativo = (cfg.produtos || []).find((p) => p.active);
     const byProd = ativo ? cfg.roteirosPorProduto?.[ativo.id] : "";
     const script = byProd || cfg.ultimoRoteiro || "";
@@ -2057,34 +2190,224 @@
     return splitPitchLines(script);
   }
 
-  async function pitchTick() {
-    if (extSecurity.isLocked) return;
+  function pitchBankSettings(cfg) {
+    const raw = cfg?.pitchBank || {};
+    const minIntervalSec = Math.max(20, Math.min(600, Number(raw.minIntervalSec) || 45));
+    return {
+      enabled: raw.enabled !== false,
+      variants: Math.max(10, Math.min(15, Math.round(Number(raw.variants) || 12))),
+      ttlMs: Math.max(30, Math.min(180, Number(raw.ttlMinutes) || 60)) * 60 * 1000,
+      minIntervalMs: minIntervalSec * 1000,
+      maxIntervalMs:
+        Math.max(minIntervalSec, Math.min(900, Number(raw.maxIntervalSec) || 75)) * 1000,
+    };
+  }
+
+  function pitchProductKey(cfg, product) {
+    return stableHash(
+      JSON.stringify({
+        id: product?.id || "",
+        name: product?.name || "",
+        price: product?.price || "",
+        description: product?.description || "",
+        context: cfg?.aiContext || {},
+      }),
+    );
+  }
+
+  function loadStoredPitchBanks() {
+    if (chatState.pitchBanks.size) return;
+    try {
+      const stored = JSON.parse(localStorage.getItem(PITCH_BANK_STORAGE_KEY) || "{}");
+      for (const [key, bank] of Object.entries(stored)) {
+        if (Array.isArray(bank?.lines) && Number(bank?.expiresAt) > Date.now()) {
+          chatState.pitchBanks.set(key, bank);
+        }
+      }
+    } catch {}
+  }
+
+  function saveStoredPitchBanks() {
+    try {
+      const current = {};
+      for (const [key, bank] of chatState.pitchBanks) {
+        if (Number(bank?.expiresAt) > Date.now()) current[key] = bank;
+      }
+      localStorage.setItem(PITCH_BANK_STORAGE_KEY, JSON.stringify(current));
+    } catch {}
+  }
+
+  function sanitizePitchLines(lines, limit) {
+    const seen = new Set();
+    const clean = [];
+    for (const value of Array.isArray(lines) ? lines : []) {
+      const line = String(value || "")
+        .replace(/[*_`#>]/g, "")
+        .trim()
+        .slice(0, 280);
+      const key = line
+        .toLowerCase()
+        .replace(/[^a-z0-9á-ú]+/gi, " ")
+        .trim();
+      if (line.length < 35 || !key || seen.has(key)) continue;
+      seen.add(key);
+      clean.push(line);
+      if (clean.length >= limit) break;
+    }
+    return clean;
+  }
+
+  async function getActivePitchLines(cfg, signal) {
+    const settings = pitchBankSettings(cfg);
+    const product = (cfg.produtos || []).find((p) => p.active) || cfg.produtos?.[0];
+    const fallback = getFallbackPitchLines(cfg);
+    if (!product || !settings.enabled) return fallback;
+
+    loadStoredPitchBanks();
+    const key = pitchProductKey(cfg, product);
+    const cached = chatState.pitchBanks.get(key);
+    if (cached && Number(cached.expiresAt) > Date.now()) {
+      return cached.lines?.length ? cached.lines : fallback;
+    }
+
+    try {
+      const authHeaders = await signRequest(cfg.syncToken, "chat_reply");
+      const response = await fetch(`${API_BASE}/api/public/pitch/bank`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...authHeaders },
+        body: JSON.stringify({
+          count: settings.variants,
+          product: {
+            name: product.name,
+            price: product.price,
+            description: product.description,
+          },
+          systemPrompt: buildSystemPrompt(cfg),
+        }),
+        signal,
+      });
+      if (!response.ok) throw new Error(`banco ${response.status}`);
+      const data = await response.json();
+      const lines = sanitizePitchLines(data.pitches, settings.variants);
+      if (lines.length < 5) throw new Error("banco incompleto");
+      const bank = { lines, expiresAt: Date.now() + settings.ttlMs };
+      chatState.pitchBanks.set(key, bank);
+      // Mantém uma live grande inteira em cache sem crescer para sempre.
+      while (chatState.pitchBanks.size > 20) {
+        const oldest = chatState.pitchBanks.keys().next().value;
+        if (!oldest) break;
+        chatState.pitchBanks.delete(oldest);
+      }
+      saveStoredPitchBanks();
+      if (data.tokenRemaining !== undefined) extSecurity.tokenRemaining = data.tokenRemaining;
+      activity.log({
+        type: "pitch",
+        text: `Banco econômico preparado: ${lines.length} variações para ${product.name}.`,
+        ts: Date.now(),
+      });
+      return lines;
+    } catch (error) {
+      if (error?.name !== "AbortError") {
+        // Evita martelar a API a cada ciclo quando ela estiver indisponível.
+        chatState.pitchBanks.set(key, {
+          lines: fallback,
+          expiresAt: Date.now() + Math.min(settings.ttlMs, 5 * 60 * 1000),
+        });
+        saveStoredPitchBanks();
+        activity.log({
+          type: "error",
+          text: `Banco econômico indisponível; usando roteiro salvo (${String(error?.message || error).slice(0, 80)}).`,
+          ts: Date.now(),
+        });
+      }
+      return fallback;
+    }
+  }
+
+  async function pitchTick(runId) {
+    if (extSecurity.isLocked || extSecurity.aiLocked) return "blocked";
     const cfg = await loadConfig();
-    if (!cfg.respostasIA) return;
-    if (isAudioBusy() || chatState.busy || chatState.queue.length) return;
-    if (Date.now() - chatState.lastReplyAt < PITCH_IDLE_MS) return;
-    const lines = getActivePitchLines(cfg);
-    if (!lines.length) return;
+    if (!cfg.respostasIA || !pitchBankSettings(cfg).enabled) return "disabled";
+    const liveState = await refreshLiveState();
+    if (liveState.known && !liveState.active && !demo.isOn()) return "idle";
+    if (isAudioBusy() || chatState.busy || chatState.queue.length) return "busy";
+    if (Date.now() - chatState.lastReplyAt < PITCH_IDLE_MS) return "busy";
+    const controller = new AbortController();
+    chatState.pitchAbort = controller;
+    const lines = await getActivePitchLines(cfg, controller.signal);
+    if (runId !== chatState.pitchRunId || controller.signal.aborted) return "cancelled";
+    if (isAudioBusy() || chatState.busy || chatState.queue.length) return "busy";
+    if (!lines.length) return "empty";
     const line = lines[chatState.pitchIdx % lines.length];
     chatState.pitchIdx++;
+    chatState.pitchIdx = chatState.pitchIdx % 1000000;
     chatState.lastReplyAt = Date.now();
     activity.log({ type: "pitch", text: line, ts: Date.now() });
-    await speakText(line, cfg);
+    chatState.pitchAudioActive = true;
+    try {
+      await speakText(line, cfg, {
+        useCache: true,
+        signal: controller.signal,
+        isCancelled: () => runId !== chatState.pitchRunId,
+      });
+    } finally {
+      chatState.pitchAudioActive = false;
+      if (chatState.pitchAbort === controller) chatState.pitchAbort = null;
+    }
+    return "played";
   }
+
+  function scheduleNextPitch(runId, delay) {
+    if (runId !== chatState.pitchRunId) return;
+    clearTimeout(chatState.pitchTimer);
+    chatState.pitchTimer = setTimeout(() => runPitchLoop(runId), delay);
+  }
+
+  async function runPitchLoop(runId) {
+    if (runId !== chatState.pitchRunId || chatState.pitchBusy) return;
+    chatState.pitchTimer = null;
+    chatState.pitchBusy = true;
+    let result = "empty";
+    try {
+      result = await pitchTick(runId);
+    } catch {
+      result = "error";
+    } finally {
+      chatState.pitchBusy = false;
+    }
+    if (runId !== chatState.pitchRunId || result === "disabled") return;
+    const cfg = await loadConfig();
+    const settings = pitchBankSettings(cfg);
+    const delay =
+      result === "busy"
+        ? 4000
+        : settings.minIntervalMs +
+          Math.random() * Math.max(0, settings.maxIntervalMs - settings.minIntervalMs);
+    scheduleNextPitch(runId, delay);
+  }
+
   function startPitchLoop() {
-    if (chatState.pitchTimer) return;
-    chatState.pitchTimer = setInterval(() => {
-      pitchTick().catch(() => {});
-    }, 4000);
+    if (chatState.pitchTimer || chatState.pitchBusy) return;
+    const runId = ++chatState.pitchRunId;
+    scheduleNextPitch(runId, 1200);
   }
+
   function stopPitchLoop() {
+    chatState.pitchRunId++;
     if (chatState.pitchTimer) {
-      clearInterval(chatState.pitchTimer);
+      clearTimeout(chatState.pitchTimer);
       chatState.pitchTimer = null;
     }
     try {
-      audioEl?.pause();
+      chatState.pitchAbort?.abort();
     } catch {}
+    chatState.pitchAbort = null;
+    if (chatState.pitchAudioActive) {
+      try {
+        audioEl?.pause();
+        monitorEl?.pause();
+      } catch {}
+    }
   }
 
   // ---------- Local filter (blacklist / whitelist) ----------
@@ -2368,6 +2691,28 @@
 
     try {
       if (cfg.respostasIA) await waitForAudioEnd();
+      const cacheKey = replyCacheKey(cfg, item.text);
+      const cachedReply = getCachedReply(cacheKey);
+      if (cachedReply) {
+        // Resposta FAQ repetida: entrega direto sem consumir tokens da IA.
+        chatState.history.push({
+          role: "user",
+          content: `${item.author ? item.author + ": " : ""}${item.text}`,
+        });
+        chatState.history.push({ role: "assistant", content: cachedReply });
+        chatState.history = chatState.history.slice(-8);
+        chatState.lastReplyAt = Date.now();
+        const delivered = await deliverReply(item, cachedReply, cfg);
+        if (!delivered) {
+          chatState.busy = false;
+          setTimeout(processQueue, 500);
+          return;
+        }
+        sessionEvent({ kind: "cache_hit" });
+        chatState.busy = false;
+        setTimeout(processQueue, MIN_INTERVAL_MS);
+        return;
+      }
       const systemPrompt = buildSystemPrompt(cfg);
       const authHeaders = await signRequest(cfg.syncToken, "chat_reply");
       const r = await fetch(`${API_BASE}/api/public/chat/reply`, {
@@ -2400,6 +2745,7 @@
         } else {
           const reply = (data.reply || "").trim();
           if (reply) {
+            setCachedReply(cacheKey, reply);
             chatState.history.push({
               role: "user",
               content: `${item.author ? item.author + ": " : ""}${item.text}`,
@@ -2884,7 +3230,7 @@
     async runPitch() {
       startPitchLoop();
       activity.log({ type: "pitch", text: "Pitch de demonstração iniciado.", ts: Date.now() });
-      await pitchTick().catch(() => {});
+      await pitchTick(chatState.pitchRunId).catch(() => {});
     },
 
     async startTour() {

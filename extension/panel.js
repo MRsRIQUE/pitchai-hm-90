@@ -176,6 +176,7 @@
     respostasIA: true,
     responderNoChat: false,
     revisarAntesDeEnviar: false,
+    pitchBank: { enabled: true, variants: 12, ttlMinutes: 60, minIntervalSec: 45, maxIntervalSec: 75, cacheReplies: true },
     protecaoGeral: false,
     violacao: true,
     autoMod: true,
