@@ -1106,7 +1106,8 @@
   }
 
   async function runCommand(command, payload) {
-    if (command === "status") return publicStatus(state.enabled ? "Fonte virtual ativa" : "Desligada");
+    if (command === "status")
+      return publicStatus(state.enabled ? "Fonte virtual ativa" : "Desligada");
     if (command === "refresh") {
       announceDevices();
       return publicStatus("Lista de dispositivos atualizada");

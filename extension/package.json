@@ -1,6 +1,6 @@
 {
   "name": "pitchai-extension",
-  "version": "0.18.4",
+  "version": "0.18.5",
   "description": "Extensão Pitch AI para automação de lives do TikTok Shop",
   "type": "module",
   "scripts": {
