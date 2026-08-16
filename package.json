@@ -14,8 +14,8 @@
     "format": "prettier --write .",
     "test:e2e": "node node_modules/@playwright/test/cli.js test",
     "test:e2e:install": "playwright install --with-deps chromium webkit",
-    "test:perf": "playwright test e2e/perf.spec.ts --project=desktop",
-    "test:smoke": "playwright test e2e/perf.spec.ts --project=desktop",
+    "test:perf": "node node_modules/@playwright/test/cli.js test e2e/perf.spec.ts --project=desktop",
+    "test:smoke": "node node_modules/@playwright/test/cli.js test e2e/perf.spec.ts --project=desktop",
     "build:extension": "node scripts/pack-extension.mjs"
   },
   "dependencies": {

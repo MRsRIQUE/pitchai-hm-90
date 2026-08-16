@@ -11,11 +11,12 @@ jobs:
     timeout-minutes: 5
     steps:
       - uses: actions/checkout@v4
-      - uses: oven-sh/setup-bun@v2
+      - uses: actions/setup-node@v4
         with:
-          bun-version: latest
-      - run: bun install --frozen-lockfile
-      - run: bun run lint
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm run lint
 
   smoke:
     runs-on: ubuntu-latest
@@ -30,9 +31,10 @@ jobs:
       E2E_PERSONAL_PASSWORD: ${{ secrets.E2E_PERSONAL_PASSWORD }}
     steps:
       - uses: actions/checkout@v4
-      - uses: oven-sh/setup-bun@v2
+      - uses: actions/setup-node@v4
         with:
-          bun-version: latest
-      - run: bun install --frozen-lockfile
-      - run: bunx playwright install --with-deps chromium
-      - run: bun run test:smoke
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - run: npm run test:smoke
