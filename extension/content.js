@@ -5429,11 +5429,11 @@
     const listenBtn = el(
       "button",
       {
-        class: "pitchai-btn" + (cfg.respostasIA ? " primary" : ""),
+        class: "pitchai-btn" + (replyAutomationEnabled(cfg) ? " primary" : ""),
         id: "pitchai-listen",
         title: "Ligar/desligar a leitura do chat pela IA",
       },
-      cfg.respostasIA ? LISTEN_ON_LABEL : LISTEN_OFF_LABEL,
+      replyAutomationEnabled(cfg) ? LISTEN_ON_LABEL : LISTEN_OFF_LABEL,
     );
     // Estado visual da escuta em um lugar só (clique e eco do painel).
     const applyListenUi = (on) => {
@@ -5443,9 +5443,16 @@
     listenBtn.addEventListener("click", async () => {
       const on = !listenBtn.classList.contains("primary");
       applyListenUi(on); // feedback imediato
-      // gravação incremental para não sobrescrever o que o painel salvou
-      const saved = await updateConfig((fresh) => {
-        fresh.respostasIA = on;
+      // O botão é o interruptor mestre da IA: liga/desliga a leitura do chat.
+      // Ao LIGAR não força a voz — se o vendedor deixou só "responder no chat",
+      // mantém texto puro; sem nenhum canal ativo, assume a voz (padrão).
+      await updateConfig((fresh) => {
+        if (on) {
+          if (!fresh.respostasIA && !fresh.responderNoChat) fresh.respostasIA = true;
+        } else {
+          fresh.respostasIA = false;
+          fresh.responderNoChat = false;
+        }
         return fresh;
       }).catch(() => null);
       if (on) {
@@ -5459,10 +5466,8 @@
         }
       } else {
         stopPitchLoop();
-        if (!saved?.responderNoChat) {
-          stopChatListener();
-          sessionEnd();
-        }
+        stopChatListener();
+        sessionEnd();
       }
     });
 
@@ -5633,7 +5638,7 @@
         }
         master.classList.toggle("on", !!c.protecaoGeral);
         master.setAttribute("aria-pressed", String(!!c.protecaoGeral));
-        applyListenUi(!!c.respostasIA);
+        applyListenUi(replyAutomationEnabled(c));
         if (replyAutomationEnabled(c)) {
           sessionStart();
           startChatListener().catch(() => {});
