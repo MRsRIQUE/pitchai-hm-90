@@ -1,6 +1,9 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useState } from "react";
-import { Check, Sparkles, Volume2, VolumeX, Lock, ShieldCheck } from "lucide-react";
+import { signOut as firebaseSignOut } from "firebase/auth";
+import { Check, Sparkles, Volume2, VolumeX, Lock, ShieldCheck, LogOut } from "lucide-react";
+import { toast } from "sonner";
+import { getFirebaseAuth } from "@/lib/firebase";
 import { SiteNav } from "@/components/live/SiteNav";
 import { useUserSubscription } from "@/hooks/useUserSubscription";
 import {
@@ -35,7 +38,22 @@ export const Route = createFileRoute("/planos")({
 });
 
 function PlanosPage() {
-  const { subscription: sub, isPaidActive: isActive, isComped, userId } = useUserSubscription();
+  const {
+    subscription: sub,
+    isPaidActive: isActive,
+    isComped,
+    userId,
+    userEmail,
+  } = useUserSubscription();
+
+  async function handleSignOut() {
+    try {
+      await firebaseSignOut(getFirebaseAuth());
+      toast.info("Sessão encerrada.");
+    } catch {
+      toast.error("Erro ao sair.");
+    }
+  }
 
   return (
     <div className="marketing-page min-h-screen">
@@ -52,7 +70,20 @@ function PlanosPage() {
             <span className="font-semibold text-[#00E676]">Anual</span> liberam a voz e narração de
             áudio da IA em tempo real!
           </p>
-          {!userId && (
+          {userId ? (
+            <p className="mt-4 flex flex-wrap items-center justify-center gap-3 text-sm text-white/60">
+              <span className="break-all">
+                Conectado como <span className="font-semibold text-white/85">{userEmail}</span>
+              </span>
+              <button
+                type="button"
+                onClick={handleSignOut}
+                className="inline-flex items-center gap-1.5 rounded-lg border border-white/15 bg-white/5 px-3 py-1.5 text-xs font-semibold text-white/80 transition-colors hover:bg-white/10 hover:text-white"
+              >
+                <LogOut className="h-3.5 w-3.5" /> Sair da conta
+              </button>
+            </p>
+          ) : (
             <p className="mt-4 text-sm text-orange-300">
               <Link to="/entrar" search={{ next: "/planos" }} className="underline">
                 Entre na sua conta
