@@ -6,8 +6,18 @@
   // Notifica o site do Pitch AI que a extensão está instalada
   try {
     window.pitchAiExtensionInstalled = true;
+    // Antes essa versão ficava hardcoded ("0.15.1") e nunca era atualizada a
+    // cada release — o painel web achava que a extensão estava desatualizada
+    // mesmo depois de várias atualizações reais. Lê do manifest de verdade.
+    const _installedVersion = (() => {
+      try {
+        return chrome.runtime.getManifest().version;
+      } catch {
+        return "";
+      }
+    })();
     window.dispatchEvent(
-      new CustomEvent("pitchai-extension-detected", { detail: { version: "0.15.1" } }),
+      new CustomEvent("pitchai-extension-detected", { detail: { version: _installedVersion } }),
     );
 
     // Allowlist de origins aceitos pelo content script — evita que iframes/scripts
@@ -3423,11 +3433,29 @@
 
   function startLiveTimer() {
     if (auto.liveTimer) return;
-    auto.liveStartedAt = Date.now();
+    // Antes marcava o início já no carregamento da página (`mount()`), então se
+    // o usuário abria o painel de controle antes de entrar ao vivo, o tempo
+    // corria "em falso" e a LIVE era encerrada mais cedo que o combinado — e de
+    // forma inconsistente, dependendo de quanto tempo a página ficava aberta
+    // antes de começar a transmissão de fato. Agora só marca `liveStartedAt`
+    // quando o botão de encerrar (que só existe com a LIVE de fato no ar) é
+    // detectado pela primeira vez. Não zera se já havia um valor: `stopAutomations`
+    // + `startAutomations` roda de novo a cada checagem de licença (60s), e sem
+    // essa guarda o cronômetro "esquecia" o tempo já decorrido a cada reinício.
+    if (!auto.liveStartedAt) auto.liveStartedAt = 0;
     auto.liveTimer = setInterval(async () => {
+      if (auto.ended) return;
+      if (!auto.liveStartedAt) {
+        let node = null;
+        try {
+          node = await mapNode("endLive");
+        } catch {}
+        if (!node) return; // ainda não foi ao ar — não conta tempo nem age
+        auto.liveStartedAt = Date.now();
+      }
       const cfg = await loadConfig();
       const et = cfg.encerrarTempo || {};
-      if (!et.enabled || auto.ended) return;
+      if (!et.enabled) return;
       const limitMs = Math.max(1, Number(et.minutes) || 120) * 60000;
       const elapsed = Date.now() - auto.liveStartedAt;
       if (elapsed < limitMs) {

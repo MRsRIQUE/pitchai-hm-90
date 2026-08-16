@@ -298,10 +298,14 @@
   background: rgba(255, 255, 255, 0.035);
   border: 1px solid rgba(255, 255, 255, 0.1);
   color: #f9fafb;
-  min-height: 34px;
-  padding: 0 11px;
+  /* Botões "rasos" (34px, padding curto) eram fáceis de tocar por engano na
+     barra apertada, principalmente o de ligar/desligar a IA — daí desligar
+     sem querer e achar que "a IA parou de responder". Área de toque maior
+     reduz esse clique acidental. */
+  min-height: 38px;
+  padding: 0 14px;
   border-radius: 11px;
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 600;
   line-height: 1;
   white-space: nowrap;
@@ -480,8 +484,20 @@
 .pitchai-review-actions {
   display: flex !important;
   justify-content: flex-end !important;
-  gap: 7px !important;
+  gap: 8px !important;
   margin-top: 13px !important;
+}
+/* "Pular" e "Falar agora" são os botões mais importantes desse fluxo — perder
+   um clique aqui descarta uma resposta pronta. Maiores que o .pitchai-btn
+   padrão para reduzir esse risco. */
+.pitchai-review-actions .pitchai-btn {
+  flex: 1 1 0 !important;
+  min-height: 42px !important;
+  padding: 0 16px !important;
+  font-size: 13px !important;
+  justify-content: center !important;
+  display: inline-flex !important;
+  align-items: center !important;
 }
 @keyframes pitchai-review-in {
   from { opacity: 0; transform: translateY(12px) scale(0.98); }
