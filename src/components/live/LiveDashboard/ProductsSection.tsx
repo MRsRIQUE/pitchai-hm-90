@@ -12,7 +12,7 @@ import { Plus, Trash2, ShoppingBag, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { useLiveStore } from "@/stores/useLiveStore";
 import { useShallow } from "zustand/react/shallow";
-import { newProduct, vitrineItemsToNewProducts, type Product } from "@/lib/live/config";
+import { mergeVitrineProducts, newProduct, type Product } from "@/lib/live/config";
 import { useVitrineSync } from "@/hooks/live/useVitrineSync";
 
 export interface ProductsSectionProps {
@@ -67,15 +67,12 @@ export function ProductsSection({ compact = false }: ProductsSectionProps) {
         return;
       }
 
-      const novos = vitrineItemsToNewProducts(config.produtos, outcome.items);
-
-      if (novos.length === 0) {
+      if (outcome.importedCount === 0) {
         toast.info("Nenhum produto novo — todos já estavam na sua lista");
         return;
       }
 
-      updateConfig((c) => ({ ...c, produtos: [...c.produtos, ...novos] }));
-      toast.success(`${novos.length} produto(s) importado(s) da vitrine`);
+      toast.success(`${outcome.importedCount} produto(s) importado(s) da vitrine`);
     } finally {
       setImporting(false);
     }
@@ -103,15 +100,15 @@ export function ProductsSection({ compact = false }: ProductsSectionProps) {
         return;
       }
 
-      const novos = vitrineItemsToNewProducts(config.produtos, scraped);
+      const merged = mergeVitrineProducts(config.produtos, scraped);
 
-      if (novos.length === 0) {
+      if (merged.addedCount === 0) {
         toast.info("Nenhum produto novo — todos já existiam");
         return;
       }
 
-      updateConfig((c) => ({ ...c, produtos: [...c.produtos, ...novos] }));
-      toast.success(`${novos.length} produto(s) importado(s) do catálogo`);
+      updateConfig((c) => ({ ...c, produtos: merged.produtos }));
+      toast.success(`${merged.addedCount} produto(s) importado(s) do catálogo`);
     } catch (e) {
       toast.error("Falha ao importar", {
         description: e instanceof Error ? e.message : "JSON inválido",

@@ -57,7 +57,7 @@ import {
 } from "@/lib/live/config";
 import { VOICES, type VoiceId } from "@/lib/live/voices";
 import { playSaleSound, unlockSaleSound } from "@/lib/live/sale-sound";
-import { pollSalesCount } from "@/lib/live/sync";
+import { pollSalesCount, pushLiveConfigFields } from "@/lib/live/sync";
 
 import { MobileBottomNav } from "../MobileBottomNav";
 import { LiveStudioCard } from "../LiveStudioCard";
@@ -256,6 +256,26 @@ function LiveDashboardContent() {
     updateConfig((c) => ({ ...c, aiContext: { ...c.aiContext, [k]: v } }));
   };
 
+  const updateAutoFixar = (value: LiveConfig["autoFixar"]) => {
+    update("autoFixar", value);
+    void pushLiveConfigFields({ autoFixar: value }).catch((error) => {
+      console.error("[LiveDashboard] falha ao sincronizar Auto-Fixar:", error);
+      toast.error("Não consegui atualizar o Auto-Fixar na extensão");
+    });
+  };
+
+  const toggleAutoFixProduct = (productId: string) => {
+    const currentIds = config.autoFixar.ids ?? [];
+    const ids = currentIds.includes(productId)
+      ? currentIds.filter((id) => id !== productId)
+      : [...currentIds, productId];
+    const names = config.produtos
+      .filter((produto) => ids.includes(produto.id))
+      .map((produto) => produto.name);
+
+    updateAutoFixar({ ...config.autoFixar, ids, names });
+  };
+
   // Modo simples/avançado
   const simple = config.uiMode !== "avancado";
   const setMode = (m: "simples" | "avancado") => updateConfig((c) => ({ ...c, uiMode: m }));
@@ -274,9 +294,11 @@ function LiveDashboardContent() {
 
       if (outcome.ok) {
         toast.success(
-          outcome.items.length > 0
-            ? `Vitrine sincronizada — ${outcome.items.length} item(ns)`
-            : "Vitrine sincronizada, mas nenhum produto veio do TikTok",
+          outcome.importedCount > 0
+            ? `Vitrine sincronizada — ${outcome.importedCount} produto(s) adicionado(s)`
+            : outcome.items.length > 0
+              ? "Vitrine sincronizada — produtos já estavam na lista"
+              : "Vitrine sincronizada, mas nenhum produto veio do TikTok",
         );
       } else if (outcome.busy) {
         toast.info("Já estava sincronizando — aguarde alguns segundos");
@@ -730,19 +752,19 @@ function LiveDashboardContent() {
                           <Switch
                             checked={config.autoFixar.enabled}
                             onCheckedChange={(v) =>
-                              update("autoFixar", { ...config.autoFixar, enabled: v })
+                              updateAutoFixar({ ...config.autoFixar, enabled: v })
                             }
                           />
                         </div>
                         <p className="mt-1 text-sm text-muted-foreground">
-                          Adicione produtos e clique em "Buscar produtos".
+                          Selecione abaixo os produtos que participarão do rodízio automático.
                         </p>
                         <div className="mt-3 flex flex-wrap items-center gap-2">
                           <Input
-                            placeholder="Buscar produto por nome ou nº"
+                            placeholder="Filtrar a lista por nome"
                             value={config.autoFixar.query}
                             onChange={(e) =>
-                              update("autoFixar", {
+                              updateAutoFixar({
                                 ...config.autoFixar,
                                 query: e.target.value,
                               })
@@ -755,7 +777,7 @@ function LiveDashboardContent() {
                               type="number"
                               value={config.autoFixar.minSec}
                               onChange={(e) =>
-                                update("autoFixar", {
+                                updateAutoFixar({
                                   ...config.autoFixar,
                                   minSec: +e.target.value,
                                 })
@@ -767,7 +789,7 @@ function LiveDashboardContent() {
                               type="number"
                               value={config.autoFixar.maxSec}
                               onChange={(e) =>
-                                update("autoFixar", {
+                                updateAutoFixar({
                                   ...config.autoFixar,
                                   maxSec: +e.target.value,
                                 })
@@ -776,6 +798,66 @@ function LiveDashboardContent() {
                             />
                             <span>seg</span>
                           </div>
+                        </div>
+                        <div className="mt-3 rounded-xl border border-border/70 bg-muted/20 p-3">
+                          <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+                            <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                              Produtos no rodízio
+                            </span>
+                            <span className="text-xs text-muted-foreground">
+                              {(config.autoFixar.ids ?? []).length} selecionado(s)
+                            </span>
+                          </div>
+                          {config.produtos.length > 0 ? (
+                            <div className="flex max-h-40 flex-wrap gap-2 overflow-y-auto pr-1">
+                              {config.produtos
+                                .filter((produto) =>
+                                  produto.name
+                                    .toLowerCase()
+                                    .includes(config.autoFixar.query.trim().toLowerCase()),
+                                )
+                                .map((produto) => {
+                                  const selected = (config.autoFixar.ids ?? []).includes(
+                                    produto.id,
+                                  );
+                                  return (
+                                    <button
+                                      key={produto.id}
+                                      type="button"
+                                      onClick={() => toggleAutoFixProduct(produto.id)}
+                                      className={`inline-flex max-w-full items-center gap-1.5 rounded-lg border px-3 py-2 text-left text-xs transition-colors ${
+                                        selected
+                                          ? "border-primary/60 bg-primary/15 text-foreground"
+                                          : "border-border bg-background/60 text-muted-foreground hover:border-primary/35 hover:text-foreground"
+                                      }`}
+                                    >
+                                      {selected && (
+                                        <CheckCircle2 className="h-3.5 w-3.5 shrink-0 text-primary" />
+                                      )}
+                                      <span className="truncate">{produto.name}</span>
+                                      {produto.price && (
+                                        <span className="shrink-0 opacity-70">{produto.price}</span>
+                                      )}
+                                    </button>
+                                  );
+                                })}
+                            </div>
+                          ) : (
+                            <p className="text-sm text-muted-foreground">
+                              Sincronize a vitrine para escolher os produtos que serão fixados.
+                            </p>
+                          )}
+                          {config.produtos.length > 0 &&
+                            config.produtos.every(
+                              (produto) =>
+                                !produto.name
+                                  .toLowerCase()
+                                  .includes(config.autoFixar.query.trim().toLowerCase()),
+                            ) && (
+                              <p className="text-sm text-muted-foreground">
+                                Nenhum produto encontrado com esse filtro.
+                              </p>
+                            )}
                         </div>
                       </div>
                     </div>

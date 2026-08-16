@@ -12,6 +12,7 @@ import {
 } from "@/lib/live/sync";
 import { validateVitrineResponse } from "@/lib/validations/vitrine";
 import { withRetry } from "@/lib/api/withRetry";
+import { mergeVitrineProducts } from "@/lib/live/config";
 
 export interface VitrineSyncOptions {
   /** Intervalo de sincronização em ms (padrão: 20000) */
@@ -30,7 +31,7 @@ export interface VitrineSyncOptions {
  * falhou (o auto-sync interno simplesmente ignora o retorno).
  */
 export type VitrineSyncOutcome =
-  | { ok: true; items: any[]; updatedAt: string | null }
+  | { ok: true; items: any[]; updatedAt: string | null; importedCount: number }
   /**
    * `busy` marca a colisão com uma sincronização já em andamento. Não é falha
    * de rede nem vitrine vazia — quem chama não deve gritar erro por isso.
@@ -152,18 +153,32 @@ export function useVitrineSync(options: VitrineSyncOptions = {}): VitrineSyncRes
         },
       );
 
-      // Atualiza o estado com os dados validados
+      // Atualiza o estado com os dados validados e promove a vitrine para a
+      // lista de produtos que todos os módulos do painel realmente consomem.
+      let importedCount = 0;
       if (isMountedRef.current) {
         setVitrine(
           result.items,
           result.items.length === 0 ? "vazia" : "ok",
           result.updatedAt ?? null,
         );
+        updateConfig((current) => {
+          const merged = mergeVitrineProducts(current.produtos, result.items);
+          importedCount = merged.addedCount;
+          return merged.produtos === current.produtos
+            ? current
+            : { ...current, produtos: merged.produtos };
+        });
         applyRemoteControls(result.controls);
         onSuccessRef.current?.(result.items, result.updatedAt ?? null);
       }
 
-      return { ok: true, items: result.items, updatedAt: result.updatedAt ?? null };
+      return {
+        ok: true,
+        items: result.items,
+        updatedAt: result.updatedAt ?? null,
+        importedCount,
+      };
     } catch (error) {
       if (!isMountedRef.current) return { ok: false, error: "Componente desmontado" };
 
@@ -188,7 +203,7 @@ export function useVitrineSync(options: VitrineSyncOptions = {}): VitrineSyncRes
         setLoading("vitrine", false);
       }
     }
-  }, [setVitrine, setLoading, setError, applyRemoteControls]);
+  }, [setVitrine, setLoading, setError, updateConfig, applyRemoteControls]);
 
   // Função para cancelar sincronização
   const cancelSync = useCallback(() => {

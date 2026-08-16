@@ -38,8 +38,10 @@ export type LiveConfig = {
     query: string;
     minSec: number;
     maxSec: number;
-    /** Produtos selecionados para o rodízio; vazio = todos. */
+    /** Produtos selecionados para o rodízio; vazio = nenhum. */
     ids?: string[];
+    /** Nomes acompanham os ids porque a extensão pode recriar os ids ao ler a vitrine. */
+    names?: string[];
   };
   encerrarTempo: { enabled: boolean; minutes: number };
   respostasIA: boolean;
@@ -109,7 +111,7 @@ export const DEFAULT_CONFIG: LiveConfig = {
   protecaoGeral: false,
   violacao: true,
   autoMod: true,
-  autoFixar: { enabled: false, query: "", minSec: 20, maxSec: 60, ids: [] },
+  autoFixar: { enabled: false, query: "", minSec: 20, maxSec: 60, ids: [], names: [] },
   encerrarTempo: { enabled: false, minutes: 120 },
   respostasIA: true,
   responderNoChat: false,
@@ -153,6 +155,7 @@ export function loadConfig(): LiveConfig {
         // caso a proteção entra ligada, que é o padrão seguro.
         usarListaPadrao: parsed.filtros?.usarListaPadrao ?? DEFAULT_CONFIG.filtros.usarListaPadrao,
       },
+      autoFixar: { ...DEFAULT_CONFIG.autoFixar, ...(parsed.autoFixar ?? {}) },
       selectors: { ...DEFAULT_CONFIG.selectors, ...(parsed.selectors ?? {}) },
       somVenda: { ...DEFAULT_CONFIG.somVenda, ...(parsed.somVenda ?? {}) },
     };
@@ -186,16 +189,53 @@ export function vitrineItemsToNewProducts(
   items: { name?: string; price?: string; description?: string }[],
 ): Product[] {
   const existentes = new Set(produtosAtuais.map((p) => p.name.toLowerCase().trim()));
+  const novos: Product[] = [];
 
-  return items
-    .filter((item) => item?.name && !existentes.has(String(item.name).toLowerCase().trim()))
-    .map((item) => ({
+  for (const item of items) {
+    const name = String(item?.name ?? "").trim();
+    const key = name.toLowerCase();
+    if (!name || existentes.has(key)) continue;
+
+    existentes.add(key);
+    novos.push({
       id: crypto.randomUUID(),
-      name: String(item.name),
-      price: item.price ?? "",
-      description: item.description ?? "",
+      name,
+      price: String(item.price ?? "").trim(),
+      description: String(item.description ?? "").trim(),
       active: false,
-    }));
+    });
+  }
+
+  return novos;
+}
+
+/**
+ * Promove a vitrine sincronizada para a lista que alimenta IA, roteiros e
+ * automações. Também garante um produto ativo na primeira importação.
+ */
+export function mergeVitrineProducts(
+  produtosAtuais: Product[],
+  items: { name?: string; price?: string; description?: string }[],
+): { produtos: Product[]; addedCount: number } {
+  const novos = vitrineItemsToNewProducts(produtosAtuais, items);
+  const hasActive = produtosAtuais.some((produto) => produto.active);
+
+  if (hasActive) {
+    return {
+      produtos: novos.length > 0 ? [...produtosAtuais, ...novos] : produtosAtuais,
+      addedCount: novos.length,
+    };
+  }
+
+  if (produtosAtuais.length > 0) {
+    return {
+      produtos: [{ ...produtosAtuais[0], active: true }, ...produtosAtuais.slice(1), ...novos],
+      addedCount: novos.length,
+    };
+  }
+
+  if (novos.length > 0) novos[0] = { ...novos[0], active: true };
+  return { produtos: novos, addedCount: novos.length };
 }
 
 /** Classifica uma frase por contexto para escolher a voz certa. */

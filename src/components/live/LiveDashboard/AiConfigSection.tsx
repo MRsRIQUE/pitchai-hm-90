@@ -5,7 +5,7 @@
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { Brain } from "lucide-react";
+import { Brain, CheckCircle2, Package } from "lucide-react";
 import { useLiveStore } from "@/stores/useLiveStore";
 import { useShallow } from "zustand/react/shallow";
 import { PresetPicker } from "../PresetPicker";
@@ -28,6 +28,16 @@ export function AiConfigSection({ compact = false }: AiConfigSectionProps) {
     updateConfig((c) => ({
       ...c,
       aiContext: { ...c.aiContext, [key]: value },
+    }));
+  };
+
+  const activateProduct = (productId: string) => {
+    updateConfig((current) => ({
+      ...current,
+      produtos: current.produtos.map((produto) => ({
+        ...produto,
+        active: produto.id === productId,
+      })),
     }));
   };
 
@@ -93,6 +103,43 @@ export function AiConfigSection({ compact = false }: AiConfigSectionProps) {
             Preencha uma vez. Vira o "cérebro" da IA — combina com os produtos ativos para responder
             no chat e gerar roteiros.
           </p>
+        </div>
+
+        <div className="mb-4 rounded-xl border border-border/70 bg-muted/20 p-3">
+          <div className="mb-2 flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+            <Package className="h-3.5 w-3.5" />
+            Produtos disponíveis para a IA
+          </div>
+          {config.produtos.length > 0 ? (
+            <div className="flex flex-wrap gap-2">
+              {config.produtos.map((produto) => (
+                <button
+                  key={produto.id}
+                  type="button"
+                  onClick={() => activateProduct(produto.id)}
+                  className={`inline-flex max-w-full items-center gap-1.5 rounded-lg border px-3 py-2 text-left text-xs transition-colors ${
+                    produto.active
+                      ? "border-primary/60 bg-primary/15 text-foreground"
+                      : "border-border bg-background/60 text-muted-foreground hover:border-primary/35 hover:text-foreground"
+                  }`}
+                  title="Usar este produto nas respostas e roteiros"
+                >
+                  {produto.active && <CheckCircle2 className="h-3.5 w-3.5 shrink-0 text-primary" />}
+                  <span className="truncate">{produto.name}</span>
+                  {produto.price && <span className="shrink-0 opacity-70">{produto.price}</span>}
+                </button>
+              ))}
+            </div>
+          ) : (
+            <p className="text-sm text-muted-foreground">
+              Nenhum produto sincronizado. Use “Sincronizar vitrine” para carregar sua lista.
+            </p>
+          )}
+          {config.produtos.some((produto) => produto.active) && (
+            <p className="mt-2 text-xs text-primary">
+              Produto ativo: {config.produtos.find((produto) => produto.active)?.name}
+            </p>
+          )}
         </div>
 
         <div className="grid gap-3 sm:grid-cols-2">
