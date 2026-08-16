@@ -2122,14 +2122,19 @@
     healthTimer: null,
     healthEl: null,
     sentReplies: new Map(),
+    // Ecos próprios permanecem bloqueados durante toda a live. O DOM do
+    // TikTok pode manter a mesma linha visível por mais tempo que o TTL curto.
+    ownEchoes: new Set(),
     lastChatSendAt: 0,
   };
   const MIN_INTERVAL_MS = 4000;
   const CHAT_SEND_INTERVAL_MS = 6000;
   const PITCH_IDLE_MS = 8000;
   const NO_MSG_WARN_MS = 60000;
-  const CHAT_DEDUPE_MS = 45000;
-  const SENT_REPLY_TTL_MS = 60000;
+  const CHAT_DEDUPE_MS = 120000;
+  // Inclui respostas apenas faladas: o eco pode reaparecer por rede/DOM depois
+  // que o áudio terminou, então a proteção precisa ser comum aos dois canais.
+  const SENT_REPLY_TTL_MS = 120000;
   const MAX_CHAT_QUEUE = 20;
   const PITCH_BANK_STORAGE_KEY = "pitchai.pitchBanks.v1";
   const REPLY_CACHE_TTL_MS = 60 * 60 * 1000;
@@ -2627,6 +2632,10 @@
       activity.markStatus(item.id, "ignored", "automação de respostas desligada", reply);
       return false;
     }
+    // Registra antes de falar/enviar. Assim, se o TikTok devolver o texto da
+    // resposta ao feed durante o TTS ou após um envio ambíguo, ele nunca volta
+    // para a fila como uma nova pergunta.
+    rememberSentReply(reply);
     let delivered = false;
     if (cfg.responderNoChat) {
       const sent = await sendChatReply(reply);
@@ -2841,10 +2850,19 @@
   }
 
   function enqueueMessage(msg) {
+    const key = `${msg.author || ""}|${msg.text || ""}`.toLowerCase();
+    if (msg.isSelf === true || chatState.ownEchoes.has(key)) {
+      chatState.ownEchoes.add(key);
+      return;
+    }
     // A mensagem enviada pela própria extensão reaparece no feed. Não a trate
     // como uma nova pergunta, evitando um ciclo de respostas automáticas.
-    if (isRecentlySentReply(msg.text)) return;
-    const key = `${msg.author}|${msg.text}`.toLowerCase();
+    if (isRecentlySentReply(msg.text)) {
+      chatState.ownEchoes.add(key);
+      if (chatState.ownEchoes.size > 300)
+        chatState.ownEchoes.delete(chatState.ownEchoes.values().next().value);
+      return;
+    }
     const now = Date.now();
     const last = chatState.seen.get(key) || 0;
     if (now - last < CHAT_DEDUPE_MS) return;
@@ -2989,6 +3007,7 @@
     }
     chatState.queue = [];
     chatState.node = null;
+    chatState.ownEchoes.clear();
 
     stopPitchLoop();
     stopHealthCheck();

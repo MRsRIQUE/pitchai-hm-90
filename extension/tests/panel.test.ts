@@ -33,8 +33,11 @@ describe("painel distribuído", () => {
 
   it("protege o chat contra spam, auto-loop e sobrescrita de rascunho", () => {
     expect(contentSource).toContain("CHAT_SEND_INTERVAL_MS = 6000");
-    expect(contentSource).toContain("SENT_REPLY_TTL_MS = 60000");
-    expect(contentSource).toContain("if (isRecentlySentReply(msg.text)) return;");
+    expect(contentSource).toContain("SENT_REPLY_TTL_MS = 120000");
+    expect(contentSource).toContain("rememberSentReply(reply);");
+    expect(contentSource).toContain("ownEchoes");
+    expect(contentSource).toContain("chatState.ownEchoes.clear()");
+    expect(contentSource).toContain("isRecentlySentReply(msg.text)");
     expect(contentSource).toContain("if (chatEditorValue(editor).trim()) return false;");
     expect(contentSource).toContain("let chatSendChain = Promise.resolve()");
     expect(contentSource).toContain("if (!current.responderNoChat || extSecurity.isLocked)");
