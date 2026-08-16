@@ -34,9 +34,9 @@ describe("painel distribuído", () => {
   it("protege o chat contra spam, auto-loop e sobrescrita de rascunho", () => {
     expect(contentSource).toContain("CHAT_SEND_INTERVAL_MS = 6000");
     expect(contentSource).toContain("SENT_REPLY_TTL_MS = 120000");
-    expect(contentSource).toContain("rememberSentReply(reply);");
-    expect(contentSource).toContain("ownEchoes");
-    expect(contentSource).toContain("chatState.ownEchoes.clear()");
+    expect(contentSource).toContain("rememberSentReply(value);");
+    expect(contentSource).toContain("chatState.sentReplies");
+    expect(contentSource).toContain("chatState.sentReplies.delete");
     expect(contentSource).toContain("isRecentlySentReply(msg.text)");
     expect(contentSource).toContain("if (chatEditorValue(editor).trim()) return false;");
     expect(contentSource).toContain("let chatSendChain = Promise.resolve()");
@@ -48,13 +48,13 @@ describe("painel distribuído", () => {
     expect(contentSource).toContain("pinBusy: false");
     expect(contentSource).toContain("if (auto.pinBusy) return");
     expect(contentSource).toContain('alvo.pid || ""');
-    expect(contentSource).toContain("requiredHits");
+    expect(contentSource).toContain("expectedPid");
   });
 
   it("restringe IA/autofixar a produtos marcados e encerra live em aviso", () => {
-    expect(contentSource).toContain("const allProducts = cfg.produtos || []");
-    expect(contentSource).toContain("const produtos = ids.length");
-    expect(contentSource).toContain("o operador precisa marcar");
+    expect(contentSource).toContain("produtos = produtos.filter");
+    expect(contentSource).toContain("if (!produtos.length)");
+    expect(contentSource).toContain("nenhum produto selecionado para fixar");
     expect(contentSource).toContain('finishLive("aviso de violação detectado")');
   });
 });

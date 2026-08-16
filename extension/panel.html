@@ -98,7 +98,7 @@
         <img src="icon.png" class="pnl-img-logo" alt="" />
         <div class="pnl-brand-text">
           <span class="pnl-logo">Pitch AI <b>LIVE</b></span>
-          <span class="pnl-ver">v0.16.5</span>
+          <span class="pnl-ver">v0.18.0</span>
         </div>
       </div>
       <div class="pnl-header-actions">
@@ -204,58 +204,6 @@
                   </p>
                 </div>
                 <button class="pnl-toggle" data-key="responderNoChat"></button>
-              </div>
-
-              <div class="pnl-row">
-                <div>
-                  <h3>Banco Econômico de Pitches</h3>
-                  <p>
-                    Prepara 10–15 textos por hora e reaproveita cada áudio. Evita gerar voz de novo
-                    a cada repetição.
-                  </p>
-                </div>
-                <button class="pnl-toggle" data-key="pitchBank.enabled"></button>
-              </div>
-
-              <div class="pnl-row">
-                <div>
-                  <h3>Ritmo dos pitches</h3>
-                  <p>O intervalo é sorteado entre o mínimo e o máximo para não soar mecânico.</p>
-                  <div class="pnl-inline">
-                    <label
-                      >Variações/h<input
-                        type="number"
-                        min="10"
-                        max="15"
-                        data-key="pitchBank.variants"
-                    /></label>
-                    <label
-                      >Mín (s)<input
-                        type="number"
-                        min="20"
-                        max="600"
-                        data-key="pitchBank.minIntervalSec"
-                    /></label>
-                    <label
-                      >Máx (s)<input
-                        type="number"
-                        min="20"
-                        max="900"
-                        data-key="pitchBank.maxIntervalSec"
-                    /></label>
-                  </div>
-                </div>
-              </div>
-
-              <div class="pnl-row">
-                <div>
-                  <h3>Reutilizar respostas frequentes</h3>
-                  <p>
-                    Perguntas iguais sobre preço, frete, tamanho e uso reaproveitam a resposta por
-                    uma hora, somente quando o produto também é o mesmo.
-                  </p>
-                </div>
-                <button class="pnl-toggle" data-key="pitchBank.cacheReplies"></button>
               </div>
 
               <div class="pnl-row">
@@ -596,8 +544,8 @@
               <div class="pnl-card-title">
                 <span class="pnl-card-icon">🎥</span>
                 <div>
-                  <h3>Prévia local de câmera e tela</h3>
-                  <p>Opcional: confira a imagem. Esta prévia não envia vídeo ao TikTok.</p>
+                  <h3>Fonte virtual da LIVE</h3>
+                  <p>Carregue um vídeo e envie imagem e áudio diretamente ao TikTok.</p>
                 </div>
               </div>
               <span
@@ -612,16 +560,46 @@
 
             <div class="pnl-inline" style="margin-top: 12px; justify-content: space-between">
               <div class="pnl-inline">
-                <button class="pnl-btn" id="pnl-src-cam">📷 Câmera</button>
-                <button class="pnl-btn" id="pnl-src-screen">🖥 Tela</button>
-                <button class="pnl-btn" id="pnl-src-file">⬆ Vídeo</button>
-              </div>
-              <div class="pnl-inline">
-                <button class="pnl-btn primary" id="pnl-live-start">▶ Pré-visualizar</button>
-                <button class="pnl-btn danger" id="pnl-live-stop">■ Pausar prévia</button>
+                <button class="pnl-btn" id="pnl-src-cam">📷 Prévia da câmera</button>
+                <button class="pnl-btn" id="pnl-src-screen">🖥 Prévia da tela</button>
+                <button class="pnl-btn primary" id="pnl-src-file">⬆ Escolher vídeo</button>
               </div>
             </div>
+            <div class="pnl-inline" style="margin-top: 10px; align-items: end; flex-wrap: wrap">
+              <label style="min-width: 180px; flex: 1">
+                Áudio da transmissão
+                <select id="pnl-media-audio-mode" style="width: 100%; margin-top: 4px">
+                  <option value="video">Áudio do próprio vídeo</option>
+                  <option value="separate">Arquivo de áudio separado</option>
+                  <option value="none">Sem áudio (silêncio)</option>
+                </select>
+              </label>
+              <button class="pnl-btn" id="pnl-src-audio" style="display: none">🎵 Escolher áudio</button>
+            </div>
+            <div class="pnl-inline" style="margin-top: 10px; flex-wrap: wrap">
+              <label>Largura <input id="pnl-media-width" type="number" min="160" max="3840" value="1280" style="width: 84px" /></label>
+              <label>Altura <input id="pnl-media-height" type="number" min="90" max="2160" value="720" style="width: 84px" /></label>
+              <label>FPS <input id="pnl-media-fps" type="number" min="1" max="60" value="30" style="width: 68px" /></label>
+              <label class="pnl-inline"><input id="pnl-media-loop" type="checkbox" checked /> Repetir</label>
+            </div>
+            <div class="pnl-inline" style="margin-top: 8px; flex-wrap: wrap">
+              <label class="pnl-inline" title="Entrega a fonte da Pitch AI mesmo que o TikTok não deixe escolher a fonte">
+                <input id="pnl-media-force" type="checkbox" checked /> Substituir qualquer câmera
+              </label>
+              <label class="pnl-inline" title="Evita o aviso 'Nenhum áudio detectado' quando o vídeo está sem som">
+                <input id="pnl-media-tone" type="checkbox" checked /> Sinal mínimo de áudio
+              </label>
+            </div>
+            <div class="pnl-inline" style="margin-top: 12px; flex-wrap: wrap">
+              <button class="pnl-btn primary" id="pnl-live-start">▶ Usar vídeo no TikTok</button>
+              <button class="pnl-btn danger" id="pnl-live-stop">■ Restaurar câmera e microfone</button>
+              <button class="pnl-btn ghost" id="pnl-media-refresh">↻ Atualizar fontes</button>
+            </div>
             <p class="pnl-sub" id="pnl-src-info" style="margin-top: 8px; font-weight: 500"></p>
+            <p class="pnl-sub" style="margin-top: 4px">
+              Depois de ativar, abra <b>Configurações de áudio e vídeo</b> no TikTok e escolha
+              <b>Pitch AI — Câmera Virtual</b> e <b>Pitch AI — Microfone Virtual</b>.
+            </p>
           </section>
 
           <!-- Agenda e temporizador -->
