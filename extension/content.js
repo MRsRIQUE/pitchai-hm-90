@@ -3835,18 +3835,42 @@
   function matchCard(cards, name, expectedPid = "") {
     const key = normKey(name);
     if (!key) return null;
+    const unitCards = cards.filter((card) => {
+      try {
+        return card.querySelectorAll("button.pc_pin_product_pin").length <= 1;
+      } catch {
+        return true;
+      }
+    });
+    if (expectedPid) {
+      const pidMatch = unitCards.find((card) => {
+        const parsed = parseProductCard(card);
+        return parsed?.pid && String(parsed.pid) === String(expectedPid);
+      });
+      if (pidMatch) return pidMatch;
+    }
     const words = key
       .split(" ")
       .filter((w) => w.length > 3)
       .slice(0, 4);
     let best = null;
     let bestHits = 0;
-    for (const c of cards) {
+    for (const c of unitCards) {
       const parsed = parseProductCard(c);
-      if (expectedPid && parsed?.pid && String(parsed.pid) === String(expectedPid)) return c;
+      // Um wrapper com vários cards pode conter o nome certo, mas o primeiro
+      // botão descendente pertence a outro produto. Falha fechado nesse caso.
+      let pinCount = 0;
+      try {
+        pinCount = c.querySelectorAll("button.pc_pin_product_pin").length;
+      } catch {}
+      if (pinCount > 1) continue;
+      if (expectedPid && parsed?.pid && String(parsed.pid) !== String(expectedPid)) continue;
+      const parsedName = normKey(parsed?.name || "");
+      if (parsedName === key) return c;
+      if (expectedPid && parsedName && parsedName !== key) continue;
       const t = normKey(`${parsed?.name || ""} ${c.textContent || ""}`);
       if (!t) continue;
-      if (t.includes(key)) return c;
+      if (parsedName && key.length >= 12 && parsedName.includes(key)) return c;
       const hits = words.filter((w) => t.includes(w)).length;
       if (hits > bestHits) {
         bestHits = hits;
@@ -3916,7 +3940,7 @@
     };
   }
 
-  async function autoPinTick({ force = false } = {}) {
+  async function autoPinTickUnlocked({ force = false } = {}) {
     if (extSecurity.isLocked) {
       return { ok: false, reason: extSecurity.message || "licença não confirmada" };
     }
@@ -3953,8 +3977,6 @@
     if (!produtos.length) {
       return { ok: false, reason: "nenhum produto selecionado para fixar" };
     }
-    if (auto.pinBusy) return { ok: false, reason: "fixação anterior ainda em andamento" };
-    auto.pinBusy = true;
 
     const alvo = produtos[auto.pinIdx % produtos.length];
     auto.pinIdx++;
@@ -3994,8 +4016,20 @@
           : `Destaque só no roteiro (${res.reason}): ${alvo.name}`,
       ts: Date.now(),
     });
-    auto.pinBusy = false;
     return res;
+  }
+
+  // A rolagem da vitrine virtualizada pode demorar vários segundos. O timer
+  // roda a cada 3s, portanto a trava precisa envolver toda a operação e ser
+  // liberada em finally mesmo quando o TikTok muda o DOM no meio do clique.
+  async function autoPinTick(options = {}) {
+    if (auto.pinBusy) return { ok: false, reason: "fixação anterior ainda em andamento" };
+    auto.pinBusy = true;
+    try {
+      return await autoPinTickUnlocked(options);
+    } finally {
+      auto.pinBusy = false;
+    }
   }
 
   function startAutoPin() {
