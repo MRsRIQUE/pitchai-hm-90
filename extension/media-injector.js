@@ -9,6 +9,10 @@
   const TAG = "[PitchAI Media]";
   const CONTROL_SOURCE = "__pitchai_media_control__";
   const ACK_SOURCE = "__pitchai_media_ack__";
+  // Conversa entre frames tem canal próprio: postada no window do frame de
+  // cima, ela também chega ao content script de lá, que não pode confundi-la
+  // com a resposta da fala (mesmo requestId).
+  const RELAY_ACK_SOURCE = "__pitchai_media_relay_ack__";
   const PANEL_ORIGIN_RX = /^chrome-extension:\/\/[a-p]{32}$/;
 
   // Dispositivos virtuais: é o que faz a Pitch AI aparecer nos seletores
@@ -22,6 +26,25 @@
   };
   const TONE_LEVEL = 0.02; // ~-34 dBFS: acende o medidor sem sujar a transmissão
   const SILENCE_RMS = 0.002;
+
+  // Ducking: a voz da IA entra no mesmo microfone virtual, então o áudio do
+  // vídeo precisa sair da frente enquanto ela fala.
+  const DUCK_LEVEL = 0.12; // ~-18 dB: o vídeo continua audível, mas atrás da voz
+  const DUCK_ATTACK_MS = 120; // descida rápida, ainda sem estalo
+  const DUCK_RELEASE_MS = 400; // subida mais lenta: soa natural
+  const GAIN_FADE_MS = 80; // mute/volume manual
+  const VOICE_FADE_MS = 25; // abre e fecha a fala sem clique
+  const VOICE_CLAIM_MS = 1500; // espera um frame filho assumir a fala
+  const VOICE_MAX_MS = 180000; // teto de segurança de uma fala repassada
+  // Quem captura o microfone virtual costuma ser um iframe. Ele avisa o frame
+  // de cima, senão o status do topo diria "ninguém está usando o microfone".
+  const OWNER_SOURCE = "__pitchai_media_owner__";
+  const OWNER_TTL_MS = 12000;
+  const INACTIVE_CODE = "media-inactive"; // o content.js usa para cair no VB-Cable
+  const INACTIVE_MSG = "Fonte virtual de áudio inativa: toque a voz pelo dispositivo";
+  // O content script roda no mesmo mundo isolado da página; o canal dele só
+  // pode mexer em áudio. Ligar/desligar a fonte continua sendo só do painel.
+  const CONTENT_COMMANDS = new Set(["speak", "stopSpeak", "duck", "status"]);
 
   const state = {
     enabled: false,
@@ -57,6 +80,20 @@
     destNode: null,
     sourceGain: null,
     analyser: null,
+    voiceGain: null, // voz da IA -> destNode (e analyser, senão o tom sobe por baixo dela)
+    voiceGainValue: 1,
+    voiceNodes: null, // fala em andamento: { source, envelope, finish }
+    voiceActive: false,
+    voiceDuckLevel: DUCK_LEVEL, // nível em uso pela fala atual
+    voiceDuckAuto: true, // "abaixar o vídeo quando a IA falar" (padrão do painel)
+    voiceDuckDefault: DUCK_LEVEL, // nível usado quando o "speak" não manda o dele
+    videoGain: 1, // volume manual do áudio do vídeo
+    videoMuted: false, // mute manual: manda sobre o ducking
+    ducking: false, // derivado: duck manual OU fala em andamento
+    duckManual: false,
+    duckManualLevel: DUCK_LEVEL,
+    childOwnerAt: 0, // último aviso de um frame filho que entrega o microfone
+    ownerTicks: 0,
     toneOsc: null,
     toneGain: null,
     toneTimer: null,
@@ -354,6 +391,7 @@
       state.destNode = null;
       state.sourceGain = null;
       state.analyser = null;
+      state.voiceGain = null;
       state.toneOsc = null;
       state.toneGain = null;
       state.videoSrcNode = null;
@@ -361,9 +399,15 @@
     }
     const ctx = state.audioCtx;
     if (!state.destNode || !isLiveTrack(state.audioTrack, "audio")) {
+      // Destino novo: a fala em andamento estaria tocando para o nó antigo.
+      stopVoicePlayback();
       state.destNode = ctx.createMediaStreamDestination();
       state.audioTrack = markSynthetic(state.destNode.stream.getAudioTracks()[0] || null);
+      // O analyser cai junto: preso ao sourceGain antigo, ele mediria silêncio
+      // para sempre e o guarda deixaria o tom tocando por cima de tudo.
       state.sourceGain = null;
+      state.analyser = null;
+      state.voiceGain = null;
       state.toneGain = null;
     }
 
@@ -371,12 +415,22 @@
     // mínimo entra direto no destino, fora da medição, para não se auto-manter.
     if (!state.sourceGain) {
       state.sourceGain = ctx.createGain();
+      // Nó recém-criado, ainda sem sinal: pode nascer no alvo sem estalar.
+      state.sourceGain.gain.value = videoTargetGain();
       state.sourceGain.connect(state.destNode);
-      if (typeof ctx.createAnalyser === "function") {
-        state.analyser = ctx.createAnalyser();
-        state.analyser.fftSize = 1024;
-        state.sourceGain.connect(state.analyser);
-      }
+    }
+    if (!state.analyser && typeof ctx.createAnalyser === "function") {
+      state.analyser = ctx.createAnalyser();
+      state.analyser.fftSize = 1024;
+      state.sourceGain.connect(state.analyser);
+    }
+    // A voz também é medida pelo analyser: o guarda de silêncio mede o RMS ali
+    // e, sem isso, o tom de 120 Hz tocaria por baixo da fala.
+    if (!state.voiceGain) {
+      state.voiceGain = ctx.createGain();
+      state.voiceGain.gain.value = state.voiceGainValue;
+      state.voiceGain.connect(state.destNode);
+      if (state.analyser) state.voiceGain.connect(state.analyser);
     }
     if (!state.toneGain && typeof ctx.createOscillator === "function") {
       state.toneGain = ctx.createGain();
@@ -417,6 +471,10 @@
       } catch {
         toneGain.gain.value = target;
       }
+      // Reavisa o frame de cima de tempos em tempos: o aviso tem validade, para
+      // o status voltar a "ninguém capturando" quando a captura acabar.
+      state.ownerTicks += 1;
+      if (state.ownerTicks % 8 === 0 && ownsVirtualAudio()) announceAudioOwner();
     }, 400);
   }
 
@@ -424,6 +482,225 @@
     try {
       node?.disconnect();
     } catch {}
+  }
+
+  const clampGain = (value, fallback) => {
+    const number = Number(value);
+    return Number.isFinite(number) ? Math.min(2, Math.max(0, number)) : fallback;
+  };
+
+  const clampMs = (value, fallback) => {
+    const number = Number(value);
+    return Number.isFinite(number) ? Math.min(5000, Math.max(10, number)) : fallback;
+  };
+
+  // Todo ajuste de volume vai por rampa: mexer no gain de uma vez estala.
+  function rampGain(param, target, ms) {
+    const ctx = state.audioCtx;
+    if (!param || !ctx) return;
+    const now = ctx.currentTime;
+    const seconds = Math.max(0.01, ms / 1000);
+    try {
+      const current = param.value;
+      param.cancelScheduledValues(now);
+      param.setValueAtTime(current, now);
+      param.linearRampToValueAtTime(target, now + seconds);
+    } catch {
+      try {
+        param.value = target;
+      } catch {}
+    }
+  }
+
+  // O mute manual manda sobre o ducking, e o duck nunca levanta o volume:
+  // ele só pode puxar para baixo o que o vendedor já escolheu.
+  function videoTargetGain() {
+    if (state.videoMuted) return 0;
+    let target = state.videoGain;
+    if (state.voiceActive) target = Math.min(target, state.voiceDuckLevel);
+    if (state.duckManual) target = Math.min(target, state.duckManualLevel);
+    return target;
+  }
+
+  function syncVideoGain(ms = GAIN_FADE_MS) {
+    state.ducking = state.duckManual || state.voiceActive;
+    if (state.sourceGain) rampGain(state.sourceGain.gain, videoTargetGain(), ms);
+  }
+
+  // Só o frame que entregou o microfone virtual à página pode falar: nos outros
+  // o destino não vai a lugar nenhum e a fala se perderia em silêncio.
+  function ownsVirtualAudio() {
+    if (!state.published || !isLiveTrack(state.audioTrack, "audio")) return false;
+    for (const track of state.issuedTracks) {
+      if (isLiveTrack(track, "audio")) return true;
+    }
+    for (const track of state.senderInjected.values()) {
+      if (isLiveTrack(track, "audio")) return true;
+    }
+    return false;
+  }
+
+  function announceAudioOwner() {
+    if (window.top === window) return;
+    try {
+      window.parent.postMessage({ source: OWNER_SOURCE }, window.location.origin);
+    } catch {}
+  }
+
+  // Vale para a aba inteira: este frame entrega o microfone virtual, ou um
+  // filho avisou que entrega.
+  function audioOwnerInTab() {
+    return ownsVirtualAudio() || Date.now() - state.childOwnerAt < OWNER_TTL_MS;
+  }
+
+  function inactiveError(message) {
+    const error = new Error(message || INACTIVE_MSG);
+    error.code = INACTIVE_CODE;
+    return error;
+  }
+
+  function releaseVoiceNodes(nodes) {
+    // Depois do fade: desconectar no mesmo instante cortaria a cauda da fala.
+    setTimeout(() => {
+      disconnectNode(nodes.source);
+      disconnectNode(nodes.envelope);
+    }, VOICE_FADE_MS + 80);
+  }
+
+  // Corta a fala em andamento (comando "stopSpeak", troca de destino, nova
+  // fala). A promise do "speak" correspondente resolve como não concluída.
+  function stopVoicePlayback() {
+    const nodes = state.voiceNodes;
+    if (!nodes) return false;
+    state.voiceNodes = null;
+    rampGain(nodes.envelope.gain, 0, VOICE_FADE_MS);
+    try {
+      nodes.source.onended = null;
+    } catch {}
+    try {
+      nodes.source.stop((state.audioCtx?.currentTime || 0) + VOICE_FADE_MS / 1000);
+    } catch {}
+    nodes.finish?.(false);
+    return true;
+  }
+
+  async function resumeAudioContext(ctx) {
+    if (ctx.state === "running") return;
+    // Sem gesto na página o resume fica pendente para sempre: não dá para
+    // esperar por ele, senão a fala pendura o content.js.
+    try {
+      await Promise.race([ctx.resume(), new Promise((resolve) => setTimeout(resolve, 600))]);
+    } catch {}
+  }
+
+  async function toArrayBuffer(value) {
+    if (!value) return null;
+    if (value instanceof ArrayBuffer) return value.byteLength ? value.slice(0) : null;
+    if (ArrayBuffer.isView(value)) {
+      return value.byteLength
+        ? value.buffer.slice(value.byteOffset, value.byteOffset + value.byteLength)
+        : null;
+    }
+    if (typeof Blob !== "undefined" && value instanceof Blob) {
+      const buffer = await value.arrayBuffer();
+      return buffer.byteLength ? buffer : null;
+    }
+    return null;
+  }
+
+  function decodeVoice(ctx, data) {
+    return new Promise((resolve, reject) => {
+      let settled = false;
+      const ok = (buffer) => {
+        if (settled) return;
+        settled = true;
+        if (buffer) resolve(buffer);
+        else reject(new Error("Não foi possível decodificar a voz"));
+      };
+      const fail = (error) => {
+        if (settled) return;
+        settled = true;
+        reject(new Error(error?.message || "Não foi possível decodificar a voz"));
+      };
+      try {
+        const maybe = ctx.decodeAudioData(data, ok, fail);
+        if (maybe && typeof maybe.then === "function") maybe.then(ok, fail);
+      } catch (error) {
+        fail(error);
+      }
+    });
+  }
+
+  // Toca a voz da IA dentro do microfone virtual e só resolve quando ela
+  // termina — é isso que mantém o content.js sincronizado com a fala.
+  async function speakVoice(payload = {}) {
+    if (!ownsVirtualAudio()) throw inactiveError();
+    const data = await toArrayBuffer(payload.audio);
+    if (!data) throw new Error("O áudio da voz chegou vazio");
+
+    const ctx = ensureAudioGraph();
+    await resumeAudioContext(ctx);
+    if (ctx.state !== "running") {
+      throw inactiveError("Áudio suspenso: clique uma vez na página do TikTok");
+    }
+
+    const buffer = await decodeVoice(ctx, data);
+    stopVoicePlayback(); // uma fala por vez
+
+    const source = ctx.createBufferSource();
+    source.buffer = buffer;
+    const envelope = ctx.createGain();
+    envelope.gain.value = 0;
+    source.connect(envelope);
+    envelope.connect(state.voiceGain);
+
+    state.voiceGainValue = clampGain(payload.gain, state.voiceGainValue);
+    rampGain(state.voiceGain.gain, state.voiceGainValue, VOICE_FADE_MS);
+    // Nível da fala manda; sem ele vale o padrão do painel (1 = não abaixa).
+    state.voiceDuckLevel = clampGain(
+      payload.duckLevel,
+      state.voiceDuckAuto ? state.voiceDuckDefault : 1,
+    );
+    state.voiceActive = true;
+    syncVideoGain(clampMs(payload.attackMs, DUCK_ATTACK_MS));
+
+    const releaseMs = clampMs(payload.releaseMs, DUCK_RELEASE_MS);
+    const nodes = { source, envelope, finish: null, guard: 0, done: false };
+    state.voiceNodes = nodes;
+
+    const startedAt = Date.now();
+    const spoke = await new Promise((resolve) => {
+      nodes.finish = (value) => {
+        if (nodes.done) return;
+        nodes.done = true;
+        clearTimeout(nodes.guard);
+        if (state.voiceNodes === nodes) state.voiceNodes = null;
+        releaseVoiceNodes(nodes);
+        state.voiceActive = false;
+        syncVideoGain(releaseMs);
+        resolve(value);
+      };
+      // Se o contexto for suspenso no meio, o onended nunca chega: o teto pela
+      // duração do buffer impede que a fala prenda quem está esperando.
+      nodes.guard = setTimeout(
+        () => nodes.finish(false),
+        Math.round(buffer.duration * 1000) + 1200,
+      );
+      source.onended = () => nodes.finish(true);
+      rampGain(envelope.gain, 1, VOICE_FADE_MS);
+      try {
+        source.start();
+      } catch (error) {
+        console.warn(TAG, "voz não iniciou:", error?.message);
+        nodes.finish(false);
+      }
+    });
+
+    return {
+      ...publicStatus(spoke ? "Voz reproduzida no microfone virtual" : "Fala interrompida"),
+      spoke,
+      durationMs: Date.now() - startedAt,
+    };
   }
 
   async function configureAudio() {
@@ -450,6 +727,10 @@
     }
     // Sem fonte conectada (modo "none", ou "separate" sem arquivo) o destino
     // produz silêncio — o track continua válido para a página.
+
+    // O mute manual e o ducking valem para a fonte nova também: reconfigurar
+    // não pode devolver o volume cheio no meio de uma fala.
+    syncVideoGain();
 
     // Não aguardamos o resume: sem um gesto na própria página o Chrome deixa a
     // promise pendente, o que penduraria a captura. O primeiro clique na aba
@@ -773,6 +1054,9 @@
     brandTrack(clone, kind);
     state.issuedTracks.add(clone);
     clone.addEventListener("ended", () => state.issuedTracks.delete(clone), { once: true });
+    // Entregamos o microfone virtual: o frame de cima precisa saber, é ele que
+    // responde o status para o painel e para o content script.
+    if (kind === "audio") announceAudioOwner();
     return clone;
   }
 
@@ -1053,6 +1337,12 @@
     if (["video", "separate", "none"].includes(config.audioMode)) {
       state.audioMode = config.audioMode;
     }
+    // O painel manda o ducking automático junto do activate: assim a escolha
+    // do vendedor volta sozinha depois de recarregar a aba.
+    if (typeof config.duckAuto === "boolean") state.voiceDuckAuto = config.duckAuto;
+    if (config.duckAutoLevel !== undefined) {
+      state.voiceDuckDefault = clampGain(config.duckAutoLevel, state.voiceDuckDefault);
+    }
     if (payload.videoFile) setObjectUrl("video", payload.videoFile);
     if (payload.audioFile) setObjectUrl("audio", payload.audioFile);
     ensureCanvas();
@@ -1089,6 +1379,16 @@
       force: state.force,
       tone: state.tone,
       muted: state.mutedFallback,
+      videoMuted: state.videoMuted,
+      videoGain: state.videoGain,
+      ducking: state.ducking,
+      duckLevel: state.duckManual ? state.duckManualLevel : state.voiceDuckLevel,
+      voiceActive: state.voiceActive,
+      voiceGain: state.voiceGainValue,
+      duckAuto: state.voiceDuckAuto,
+      duckAutoLevel: state.voiceDuckDefault,
+      audioOwner: audioOwnerInTab(),
+      audioOwnerHere: ownsVirtualAudio(),
       audioContext: state.audioCtx?.state || "ausente",
       playing: Boolean(state.videoEl && !state.videoEl.paused),
       framesDrawn: state.framesDrawn,
@@ -1105,12 +1405,56 @@
     };
   }
 
-  async function runCommand(command, payload) {
+  async function runCommand(command, payload = {}) {
     if (command === "status")
       return publicStatus(state.enabled ? "Fonte virtual ativa" : "Desligada");
     if (command === "refresh") {
       announceDevices();
       return publicStatus("Lista de dispositivos atualizada");
+    }
+    // Mute/volume manual do áudio do vídeo. Fica guardado no state, então
+    // sobrevive a "refresh", troca de fonte e reconfiguração do grafo.
+    if (command === "audio") {
+      if (typeof payload.muted === "boolean") state.videoMuted = payload.muted;
+      if (payload.gain !== undefined) state.videoGain = clampGain(payload.gain, state.videoGain);
+      syncVideoGain();
+      return publicStatus(
+        state.videoMuted
+          ? "Áudio do vídeo mudo"
+          : `Áudio do vídeo em ${Math.round(state.videoGain * 100)}%`,
+      );
+    }
+    // Ducking manual (o do "speak" é automático e independe deste).
+    if (command === "duck") {
+      const on = Boolean(payload.on);
+      state.duckManual = on;
+      if (payload.level !== undefined) {
+        state.duckManualLevel = clampGain(payload.level, DUCK_LEVEL);
+      }
+      syncVideoGain(
+        on
+          ? clampMs(payload.attackMs, DUCK_ATTACK_MS)
+          : clampMs(payload.releaseMs, DUCK_RELEASE_MS),
+      );
+      return publicStatus(on ? "Áudio do vídeo abaixado" : "Áudio do vídeo restaurado");
+    }
+    // Padrão do ducking automático da fala (chave do painel). Não mexe no
+    // volume agora: vale a partir da próxima fala que não mandar o nível dela.
+    if (command === "duckAuto") {
+      if (payload.on !== undefined) state.voiceDuckAuto = Boolean(payload.on);
+      if (payload.level !== undefined) {
+        state.voiceDuckDefault = clampGain(payload.level, DUCK_LEVEL);
+      }
+      return publicStatus(
+        state.voiceDuckAuto
+          ? `Ao falar, o vídeo cai para ${Math.round(state.voiceDuckDefault * 100)}%`
+          : "O vídeo não abaixa quando a IA fala",
+      );
+    }
+    if (command === "speak") return speakVoice(payload);
+    if (command === "stopSpeak") {
+      const cut = stopVoicePlayback();
+      return publicStatus(cut ? "Fala interrompida" : "Nenhuma fala em andamento");
     }
     if (command === "activate") {
       const fpsChanged = applyConfig(payload);
@@ -1149,6 +1493,9 @@
       state.enabled = false;
       state.published = false;
       state.mutedFallback = false;
+      // Suspender o contexto com uma fala tocando congelaria o onended: quem
+      // pediu a voz ficaria esperando até o teto de segurança.
+      stopVoicePlayback();
       announceDevices();
       const result = await restoreLiveSenders();
       stopUnusedIssuedTracks();
@@ -1188,6 +1535,13 @@
     );
   }
 
+  // O content.js roda no mundo isolado da MESMA janela, então a mensagem dele
+  // volta com event.source === window. A página consegue forjar isso, por isso
+  // a allowlist CONTENT_COMMANDS limita o estrago possível ao áudio.
+  function isContentMessage(event, data) {
+    return !data.relay && event.source === window && event.origin === window.location.origin;
+  }
+
   function relayToChildren(data) {
     for (let index = 0; index < window.frames.length; index += 1) {
       try {
@@ -1196,34 +1550,171 @@
     }
   }
 
+  function isChildFrame(source) {
+    for (let index = 0; index < window.frames.length; index += 1) {
+      try {
+        if (window.frames[index] === source) return true;
+      } catch {}
+    }
+    return false;
+  }
+
+  function postAck(target, origin, source, message) {
+    try {
+      target?.postMessage({ source, ...message }, origin);
+    } catch {}
+  }
+
+  // Quem responde ao pedido: o painel/content recebem o ack direto; um pedido
+  // que veio por relay é respondido para o frame de cima, que repassa adiante.
+  function makeResponder(event, data, origins) {
+    if (origins.fromPanel || origins.fromContent) {
+      const target = event.source;
+      const origin = event.origin;
+      return {
+        claim() {},
+        finish(result) {
+          postAck(target, origin, ACK_SOURCE, {
+            requestId: data.requestId,
+            ok: Boolean(result.ok),
+            status: result.status,
+            error: result.error,
+            code: result.code,
+          });
+        },
+      };
+    }
+    const origin = window.location.origin;
+    return {
+      claim() {
+        postAck(window.parent, origin, RELAY_ACK_SOURCE, {
+          requestId: data.requestId,
+          phase: "claim",
+        });
+      },
+      finish(result) {
+        postAck(window.parent, origin, RELAY_ACK_SOURCE, {
+          requestId: data.requestId,
+          phase: "done",
+          ok: Boolean(result.ok),
+          status: result.status,
+          error: result.error,
+          code: result.code,
+        });
+      },
+    };
+  }
+
+  const relayWaits = new Map();
+  let relaySeq = 0;
+
+  function settleRelayWait(requestId, result) {
+    const wait = relayWaits.get(requestId);
+    if (!wait) return;
+    relayWaits.delete(requestId);
+    clearTimeout(wait.claimTimer);
+    clearTimeout(wait.doneTimer);
+    wait.responder.finish(result);
+  }
+
+  function handleRelayAck(event, data) {
+    if (event.origin !== window.location.origin || !isChildFrame(event.source)) return;
+    const wait = relayWaits.get(data.requestId);
+    if (!wait) return;
+    if (data.phase === "claim") {
+      wait.claimed = true;
+      clearTimeout(wait.claimTimer);
+      wait.responder.claim(); // propaga o "assumi" para cima na cadeia de frames
+      return;
+    }
+    settleRelayWait(data.requestId, {
+      ok: data.ok,
+      status: data.status,
+      error: data.error,
+      code: data.code,
+    });
+  }
+
+  // "speak" é o único comando que precisa chegar em UM frame específico: o que
+  // entregou o microfone virtual. No TikTok isso costuma ser um iframe, então
+  // repassamos e esperamos o frame que assumir a fala responder.
+  function handleSpeak(data, responder) {
+    if (ownsVirtualAudio()) {
+      responder.claim();
+      Promise.resolve(runCommand("speak", data.payload || {}))
+        .then((status) => responder.finish({ ok: true, status }))
+        .catch((error) => {
+          console.warn(TAG, error);
+          responder.finish({
+            ok: false,
+            error: error?.message || "Falha ao reproduzir a voz",
+            code: error?.code,
+          });
+        });
+      return;
+    }
+    // Sem fonte publicada, nenhum frame vai assumir: responde na hora para o
+    // content.js cair no dispositivo sem esperar os 1,5s do repasse.
+    if (!state.published || !window.frames.length) {
+      responder.finish({ ok: false, error: INACTIVE_MSG, code: INACTIVE_CODE });
+      return;
+    }
+    const relayId = data.requestId || `pitchai-voice-${++relaySeq}`;
+    const wait = { responder, claimed: false, claimTimer: 0, doneTimer: 0 };
+    relayWaits.set(relayId, wait);
+    wait.claimTimer = setTimeout(() => {
+      if (wait.claimed) return;
+      settleRelayWait(relayId, { ok: false, error: INACTIVE_MSG, code: INACTIVE_CODE });
+    }, VOICE_CLAIM_MS);
+    wait.doneTimer = setTimeout(() => {
+      settleRelayWait(relayId, { ok: false, error: "A fala não terminou a tempo" });
+    }, VOICE_MAX_MS);
+    relayToChildren({ ...data, requestId: relayId });
+  }
+
   window.addEventListener("message", (event) => {
     const data = event.data;
-    if (!data || data.source !== CONTROL_SOURCE || typeof data.command !== "string") return;
+    if (!data || typeof data !== "object") return;
+    if (data.source === ACK_SOURCE) return;
+    if (data.source === RELAY_ACK_SOURCE) {
+      handleRelayAck(event, data);
+      return;
+    }
+    if (data.source === OWNER_SOURCE) {
+      if (event.origin === window.location.origin && isChildFrame(event.source)) {
+        state.childOwnerAt = Date.now();
+        announceAudioOwner(); // sobe a notícia até o topo
+      }
+      return;
+    }
+    if (data.source !== CONTROL_SOURCE || typeof data.command !== "string") return;
     const fromPanel = isPanelMessage(event, data);
-    const fromParent = isRelayMessage(event, data);
-    if (!fromPanel && !fromParent) return;
+    const fromContent = !fromPanel && isContentMessage(event, data);
+    const fromParent = !fromPanel && !fromContent && isRelayMessage(event, data);
+    if (!fromPanel && !fromContent && !fromParent) return;
+    if (fromContent && !CONTENT_COMMANDS.has(data.command)) return;
+
+    const origins = { fromPanel, fromContent, fromParent };
+    const answerable = fromPanel || fromContent || data.command === "speak";
+    const responder = answerable
+      ? makeResponder(event, data, origins)
+      : { claim() {}, finish() {} };
+
+    if (data.command === "speak") {
+      handleSpeak(data, responder);
+      return;
+    }
 
     relayToChildren(data);
     Promise.resolve(runCommand(data.command, data.payload || {}))
-      .then((status) => {
-        if (!fromPanel) return;
-        event.source?.postMessage(
-          { source: ACK_SOURCE, requestId: data.requestId, ok: true, status },
-          event.origin,
-        );
-      })
+      .then((status) => responder.finish({ ok: true, status }))
       .catch((error) => {
         console.warn(TAG, error);
-        if (!fromPanel) return;
-        event.source?.postMessage(
-          {
-            source: ACK_SOURCE,
-            requestId: data.requestId,
-            ok: false,
-            error: error?.message || "Falha ao configurar a fonte virtual",
-          },
-          event.origin,
-        );
+        responder.finish({
+          ok: false,
+          error: error?.message || "Falha ao configurar a fonte virtual",
+          code: error?.code,
+        });
       });
   });
 

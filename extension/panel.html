@@ -647,6 +647,60 @@
               <button class="pnl-btn danger" id="pnl-live-stop">■ Restaurar câmera e microfone</button>
               <button class="pnl-btn ghost" id="pnl-media-refresh">↻ Atualizar fontes</button>
             </div>
+            <!-- Som do vídeo: o vendedor usa isso no meio da live, então fica
+                 junto dos botões de ligar/desligar a fonte virtual. -->
+            <div class="pnl-list" style="margin-top: 12px">
+              <div class="pnl-row">
+                <div>
+                  <h3>Som do vídeo gravado</h3>
+                  <p>Deixe mudo quando quiser que apenas a voz da IA seja ouvida na transmissão.</p>
+                </div>
+                <div class="pnl-inline" style="gap: 8px">
+                  <span class="pnl-sub" id="pnl-media-voice" hidden style="white-space: nowrap"
+                    >🎙 IA falando</span
+                  >
+                  <button class="pnl-btn" id="pnl-media-mute" type="button" aria-pressed="false">
+                    🔊 Som do vídeo ligado
+                  </button>
+                </div>
+              </div>
+              <div class="pnl-row">
+                <div>
+                  <h3>Abaixar o vídeo quando a IA falar</h3>
+                  <p>
+                    Assim que a IA começa a responder, o som do vídeo cai sozinho e volta ao normal
+                    quando ela termina.
+                  </p>
+                </div>
+                <button class="pnl-toggle on" id="pnl-media-duck" type="button"></button>
+              </div>
+              <label
+                class="pnl-inline"
+                id="pnl-media-duck-wrap"
+                style="gap: 10px; padding: 0 2px; flex-wrap: wrap"
+              >
+                <span style="font-size: 12px; white-space: nowrap">Quanto o vídeo abaixa</span>
+                <input
+                  id="pnl-media-duck-level"
+                  type="range"
+                  min="0"
+                  max="100"
+                  step="1"
+                  value="12"
+                />
+                <span
+                  class="mono"
+                  id="pnl-media-duck-val"
+                  style="min-width: 44px; text-align: right"
+                  >12%</span
+                >
+              </label>
+              <p class="pnl-sub" style="margin-top: -4px">
+                Quanto menor, mais baixo fica o vídeo enquanto a IA fala. Em 0% o vídeo fica mudo
+                durante a fala.
+              </p>
+            </div>
+
             <p class="pnl-sub" id="pnl-src-info" style="margin-top: 8px; font-weight: 500"></p>
             <p class="pnl-sub mono" id="pnl-media-diag" style="margin-top: 4px; font-size: 11px; opacity: 0.8"></p>
             <p class="pnl-sub" style="margin-top: 4px">

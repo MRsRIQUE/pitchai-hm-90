@@ -199,6 +199,10 @@
       pushToTalk: { enabled: false, key: "Space" },
     },
 
+    // Som do vídeo da fonte virtual. `level` é fração (o motor trabalha em
+    // 0..1); a tela mostra porcentagem porque "12%" é o que o vendedor entende.
+    midia: { videoMuted: false, duckIA: { enabled: true, level: 0.12 } },
+
     vozContextos: { default: null, greeting: null, offer: null, farewell: null },
     // usarListaPadrao começa LIGADO: a live nasce protegida sem o vendedor
     // precisar digitar palavrão por palavrão (lista em blocklist.js).
@@ -230,6 +234,12 @@
         ...(stored.voz || {}),
         monitor: { ...DEFAULTS.voz.monitor, ...(stored.voz?.monitor || {}) },
         pushToTalk: { ...DEFAULTS.voz.pushToTalk, ...(stored.voz?.pushToTalk || {}) },
+      },
+      midia: {
+        ...DEFAULTS.midia,
+        ...(stored.midia || {}),
+        // Config antiga (sem a chave) nasce com o abaixamento ligado.
+        duckIA: { ...DEFAULTS.midia.duckIA, ...(stored.midia?.duckIA || {}) },
       },
       vozContextos: { ...DEFAULTS.vozContextos, ...(stored.vozContextos || {}) },
       filtros: {
@@ -445,6 +455,44 @@
     }
   }
 
+  // ---------- Som do vídeo da fonte virtual ----------
+  // O motor (media-injector.js) fala em fração de volume: 1 = 100%, 0.12 = 12%.
+  const DUCK_LEVEL_PADRAO = 0.12;
+  const duckPct = () => {
+    const n = Number(cfg?.midia?.duckIA?.level);
+    const fracao = Number.isFinite(n) ? Math.min(1, Math.max(0, n)) : DUCK_LEVEL_PADRAO;
+    return Math.round(fracao * 100);
+  };
+  const midiaCfg = () => {
+    cfg.midia = { ...DEFAULTS.midia, ...(cfg.midia || {}) };
+    cfg.midia.duckIA = { ...DEFAULTS.midia.duckIA, ...(cfg.midia.duckIA || {}) };
+    return cfg.midia;
+  };
+
+  /** Espelha na tela o mute e o abaixamento guardados na config. */
+  function renderMediaAudio() {
+    const muted = !!cfg?.midia?.videoMuted;
+    const btn = document.getElementById("pnl-media-mute");
+    if (btn) {
+      btn.textContent = muted ? "🔇 Som do vídeo mudo" : "🔊 Som do vídeo ligado";
+      btn.classList.toggle("danger", muted);
+      btn.setAttribute("aria-pressed", muted ? "true" : "false");
+    }
+    const duckOn = cfg?.midia?.duckIA?.enabled !== false;
+    document.getElementById("pnl-media-duck")?.classList.toggle("on", duckOn);
+    const range = document.getElementById("pnl-media-duck-level");
+    const nivel = duckPct();
+    if (range) {
+      // Não puxa o cursor de volta enquanto o vendedor está arrastando.
+      if (document.activeElement !== range) range.value = String(nivel);
+      range.disabled = !duckOn;
+    }
+    const val = document.getElementById("pnl-media-duck-val");
+    if (val) val.textContent = `${nivel}%`;
+    const wrap = document.getElementById("pnl-media-duck-wrap");
+    if (wrap) wrap.style.opacity = duckOn ? "" : "0.45";
+  }
+
   function render() {
     cleanupProducts();
     document.querySelectorAll("[data-key]").forEach((el) => {
@@ -471,6 +519,7 @@
     });
 
     renderBlocklistInfo();
+    renderMediaAudio();
     renderProducts();
     renderAutofixPicker();
   }
@@ -919,6 +968,10 @@
         force: checked("pnl-media-force", true),
         tone: checked("pnl-media-tone", true),
         audioMode: document.getElementById("pnl-media-audio-mode")?.value || "video",
+        // O motor aplica estes dois já no "activate": a escolha do vendedor
+        // volta sozinha depois de recarregar a aba, sem reenviar comando.
+        duckAuto: midiaCfg().duckIA.enabled !== false,
+        duckAutoLevel: duckPct() / 100,
       };
     }
 
@@ -1024,10 +1077,128 @@
       input.click();
     });
 
+    // ---- Som do vídeo: mudo na hora + abaixar quando a IA fala ----
+    // São duas pontas: a config (que sobrevive ao recarregar a aba) e o motor
+    // da página (que é quem mexe no volume de verdade). Quem faz o mudo mandar
+    // sobre o abaixamento é o media-injector.js.
+
+    // Vira true no primeiro clique do vendedor na chave/no nível: a partir daí
+    // a escolha dele manda, e um status atrasado não desfaz o que ele fez.
+    let duckTocado = false;
+
+    async function pushAudioState(payload, fallbackMsg) {
+      try {
+        const status = await sendMedia("audio", payload);
+        info.textContent = status.message || fallbackMsg;
+        renderDiag(status);
+      } catch (error) {
+        // Painel em aba separada ou fonte virtual desligada: a escolha fica
+        // guardada e é reaplicada quando o vídeo entrar no TikTok.
+        info.textContent = error.message;
+      }
+    }
+
+    /**
+     * Se o som foi mudado por outro caminho, o painel acompanha em vez de
+     * mostrar um botão mentindo — o vendedor confia no que está escrito nele.
+     */
+    function syncMediaAudioFromStatus(status) {
+      if (!status || typeof status !== "object") return;
+      const voz = document.getElementById("pnl-media-voice");
+      if (voz) voz.hidden = !status.voiceActive;
+      let mudou = false;
+      if (typeof status.videoMuted === "boolean" && status.videoMuted !== !!cfg.midia?.videoMuted) {
+        midiaCfg().videoMuted = status.videoMuted;
+        save("midia.videoMuted");
+        mudou = true;
+      }
+      // O abaixamento só é mexido pelo painel, então o status vale para a chave
+      // nascer certa — depois que o vendedor clicar, quem manda é a escolha
+      // dele (senão um status atrasado desfaria o clique).
+      if (!duckTocado && typeof status.duckAuto === "boolean") {
+        const nivel = Number(status.duckAutoLevel);
+        const midia = midiaCfg();
+        let duckMudou = false;
+        if (status.duckAuto !== midia.duckIA.enabled) {
+          midia.duckIA.enabled = status.duckAuto;
+          duckMudou = true;
+        }
+        if (Number.isFinite(nivel) && Math.round(nivel * 100) !== duckPct()) {
+          midia.duckIA.level = Math.min(1, Math.max(0, nivel));
+          duckMudou = true;
+        }
+        if (duckMudou) {
+          save("midia.duckIA");
+          mudou = true;
+        }
+      }
+      if (mudou) renderMediaAudio();
+    }
+
+    document.getElementById("pnl-media-mute")?.addEventListener("click", () => {
+      const midia = midiaCfg();
+      midia.videoMuted = !midia.videoMuted;
+      save("midia.videoMuted");
+      renderMediaAudio();
+      pushAudioState(
+        { muted: midia.videoMuted },
+        midia.videoMuted ? "Som do vídeo mudo" : "Som do vídeo ligado",
+      );
+    });
+
+    /**
+     * "duckAuto" só troca o padrão da PRÓXIMA fala — não mexe no volume agora.
+     * Por isso o aviso na tela fala no futuro ("vai cair"), e não no presente.
+     */
+    async function pushDuckAuto(fallbackMsg) {
+      const midia = midiaCfg();
+      try {
+        const status = await sendMedia("duckAuto", {
+          on: midia.duckIA.enabled !== false,
+          level: duckPct() / 100,
+        });
+        info.textContent = status.message || fallbackMsg;
+        renderDiag(status);
+      } catch (error) {
+        info.textContent = error.message;
+      }
+    }
+
+    document.getElementById("pnl-media-duck")?.addEventListener("click", () => {
+      const midia = midiaCfg();
+      duckTocado = true;
+      midia.duckIA.enabled = !midia.duckIA.enabled;
+      save("midia.duckIA");
+      renderMediaAudio();
+      pushDuckAuto(
+        midia.duckIA.enabled
+          ? `O som do vídeo vai cair para ${duckPct()}% enquanto a IA fala.`
+          : "O som do vídeo vai continuar no volume normal enquanto a IA fala.",
+      );
+    });
+
+    // O envio espera o vendedor soltar o cursor: arrastar dispara um "input"
+    // por pixel e não vale mandar 40 comandos para a página.
+    let duckLevelTimer = null;
+    document.getElementById("pnl-media-duck-level")?.addEventListener("input", (e) => {
+      const pct = Math.min(100, Math.max(0, Number(e.target.value) || 0));
+      duckTocado = true;
+      midiaCfg().duckIA.level = pct / 100;
+      save("midia.duckIA");
+      const val = document.getElementById("pnl-media-duck-val");
+      if (val) val.textContent = `${pct}%`;
+      clearTimeout(duckLevelTimer);
+      duckLevelTimer = setTimeout(
+        () => pushDuckAuto(`O som do vídeo vai cair para ${pct}% enquanto a IA fala.`),
+        250,
+      );
+    });
+
     // Diagnóstico ao vivo da fonte virtual: o motor roda na página, então esta
     // linha é a única forma de ver o que está acontecendo sem abrir o DevTools.
     let diagTimer = null;
     function renderDiag(status) {
+      syncMediaAudioFromStatus(status);
       const el = document.getElementById("pnl-media-diag");
       if (!el) return;
       const v = status.video || {};
@@ -1036,6 +1207,8 @@
         `raf ${status.rafAlive ? "on" : "off"} · decod ${v.decodificados ?? "?"} · ` +
         `t ${v.tempo ?? "?"}s · ready ${v.ready ?? "?"} · ` +
         `${v.paused ? "pausado" : "tocando"}${v.muted ? " (mudo)" : ""} · ` +
+        `som ${status.videoMuted ? "mudo" : `${Math.round((status.videoGain ?? 1) * 100)}%`}` +
+        `${status.ducking ? " (abaixado)" : ""} · ia ${status.voiceActive ? "falando" : "quieta"} · ` +
         `audio ${status.audioContext || "?"} · ${status.peerConnections ?? 0}pc` +
         (v.erro ? ` · erro: ${v.erro}` : "");
       if (status.videoSource === "element") {
@@ -1058,6 +1231,10 @@
       diagTimer = null;
       const el = document.getElementById("pnl-media-diag");
       if (el) el.textContent = "";
+      // Sem status chegando não dá para saber se a IA está falando; o aviso
+      // some para não ficar aceso para sempre.
+      const voz = document.getElementById("pnl-media-voice");
+      if (voz) voz.hidden = true;
     }
 
     async function startLive() {
@@ -1089,6 +1266,11 @@
         info.textContent = status.message || "Fonte virtual ativa no TikTok";
         renderDiag(status);
         startDiag();
+        // O "activate" já leva o abaixamento (mediaConfig), mas a fonte nasce
+        // com o som ligado: se o vendedor tinha deixado mudo, reaplica.
+        if (midiaCfg().videoMuted) {
+          pushAudioState({ muted: true }, "Som do vídeo mudo");
+        }
       } catch (error) {
         info.textContent = error.message;
       }

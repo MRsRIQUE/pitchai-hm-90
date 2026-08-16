@@ -51,6 +51,21 @@ describe("painel distribuído", () => {
     expect(contentSource).toContain("expectedPid");
   });
 
+  it("controla o som do vídeo pelo painel sem cair no abaixamento manual", () => {
+    expect(panelHtml).toContain('id="pnl-media-mute"');
+    expect(panelHtml).toContain('id="pnl-media-duck"');
+    expect(panelHtml).toContain('id="pnl-media-duck-level"');
+    expect(panelSource).toMatch(/sendMedia\("audio", payload\)/);
+    expect(panelSource).toMatch(/sendMedia\("duckAuto"/);
+    // "duck" (sem Auto) deixa o vídeo baixo o tempo todo, e não só enquanto a
+    // IA fala: a chave do painel nunca pode mandar esse comando.
+    expect(panelSource).not.toMatch(/sendMedia\("duck"/);
+    // O motor trabalha em fração; a tela mostra porcentagem.
+    expect(panelSource).toMatch(/DUCK_LEVEL_PADRAO = 0\.12/);
+    expect(panelSource).toContain("duckAutoLevel: duckPct() / 100");
+    expect(panelSource).toMatch(/midia:\s*\{ videoMuted: false, duckIA: \{ enabled: true/);
+  });
+
   it("restringe IA/autofixar a produtos marcados e encerra live em aviso", () => {
     expect(contentSource).toContain("produtos = produtos.filter");
     expect(contentSource).toContain("if (!produtos.length)");

@@ -2137,12 +2137,170 @@
       await el.setSinkId(id);
     } catch {}
   }
+
+  // ---------- Ponte de voz com a fonte virtual (media-injector.js) ----------
+  // Numa live com vídeo gravado o TikTok captura UM microfone só. Se a voz da IA
+  // sair por um dispositivo do sistema (VB-Cable), ela e o áudio do vídeo se
+  // atropelam. Com o Estúdio publicando, a fala vai DENTRO do microfone virtual:
+  // o media-injector abaixa o vídeo (duck), fala por cima e devolve o volume.
+  // O ACK do "speak" só chega QUANDO A FALA TERMINA.
+  const MEDIA_CONTROL = "__pitchai_media_control__";
+  const MEDIA_ACK = "__pitchai_media_ack__";
+  const MEDIA_INACTIVE = "media-inactive"; // fonte publicada mas sem captura: cai no VB-Cable
+  const MEDIA_ASK_MS = 2500; // status/stopSpeak: ida e volta curta
+  const VOICE_TIMEOUT_MIN = 30000;
+  const VOICE_TIMEOUT_MAX = 175000; // logo abaixo do teto interno do injector (180s)
+  const VOICE_CHARS_PER_SECOND = 14; // locução média, só para dimensionar o timeout
+  const VIRTUAL_STATUS_TTL = 5000; // evita um round-trip de status a cada fala
+  const VIRTUAL_STATUS_RETRY = 2000; // Estúdio ligado, mas o TikTok ainda não pegou o microfone
+  const VIRTUAL_STATUS_QUIET = 60000; // sem injector na página: não insiste a cada fala
+
+  const pendingMedia = new Map();
+  let mediaSeq = 0;
+  let virtualVoice = null; // fala em andamento no microfone virtual: { done }
+  let virtualSource = { until: 0, active: false };
+
+  // Só o ACK final interessa: a conversa entre frames tem source próprio
+  // ("__pitchai_media_relay_ack__") e o "claim" intermediário dela passaria por
+  // resposta vazia se a comparação de source fosse frouxa.
+  window.addEventListener("message", (ev) => {
+    const d = ev.data;
+    if (ev.source !== window || !d || d.source !== MEDIA_ACK || d.relay) return;
+    const pending = pendingMedia.get(d.requestId);
+    if (!pending) return;
+    pendingMedia.delete(d.requestId);
+    clearTimeout(pending.timer);
+    pending.resolve({ ok: Boolean(d.ok), status: d.status || {}, error: d.error, code: d.code });
+  });
+
+  /**
+   * Manda um comando para o media-injector. O canal do content script só aceita
+   * "speak", "stopSpeak", "duck" e "status" — ligar/desligar a fonte é do painel.
+   * Nunca rejeita: devolve { ok, status, error, code, timedOut }.
+   */
+  function sendMedia(command, payload = {}, timeoutMs = MEDIA_ASK_MS) {
+    const requestId = `pitchai-voice-${++mediaSeq}`;
+    return new Promise((resolve) => {
+      const timer = setTimeout(() => {
+        pendingMedia.delete(requestId);
+        resolve({ ok: false, timedOut: true, error: "a fonte virtual não respondeu" });
+      }, timeoutMs);
+      pendingMedia.set(requestId, { resolve, timer });
+      try {
+        window.postMessage(
+          { source: MEDIA_CONTROL, command, requestId, payload },
+          window.location.origin,
+        );
+      } catch (error) {
+        clearTimeout(timer);
+        pendingMedia.delete(requestId);
+        resolve({ ok: false, error: String(error?.message || error) });
+      }
+    });
+  }
+
+  /**
+   * A voz pode entrar no microfone virtual agora? Não basta o Estúdio estar
+   * ligado (enabled/published): o TikTok precisa ter selecionado a fonte de
+   * áudio, e é isso que audioOwner conta — vale para o topo e para os iframes.
+   */
+  async function isVirtualSourceActive() {
+    if (Date.now() < virtualSource.until) return virtualSource.active;
+    const res = await sendMedia("status");
+    const s = res.ok ? res.status || {} : {};
+    const publicando = Boolean(s.enabled && s.published);
+    const active = publicando && Boolean(s.audioOwner);
+    let ttl = VIRTUAL_STATUS_TTL;
+    // silêncio total é página sem injector: não vale travar toda fala perguntando
+    if (res.timedOut) ttl = VIRTUAL_STATUS_QUIET;
+    // Estúdio ligado sem captura é o vendedor que ainda não escolheu a Pitch AI
+    // em "Fonte de áudio". O cabo é a resposta certa, mas o aviso de captura sai
+    // no instante em que ele escolher: reavalia logo para a fala seguinte já ir
+    // pelo microfone virtual.
+    else if (publicando && !active) ttl = VIRTUAL_STATUS_RETRY;
+    virtualSource = { until: Date.now() + ttl, active };
+    return active;
+  }
+
+  /**
+   * Toca a voz da IA dentro do microfone virtual. O ACK do "speak" só volta
+   * quando a fala termina, então este await É o fim da fala — é o que mantém
+   * isAudioBusy()/waitForAudioEnd() coerentes e a IA sem falar por cima de si.
+   * Devolve { ok, inactive }: "inactive" pede o caminho antigo (VB-Cable).
+   */
+  async function speakThroughVirtualSource(blobOrBuffer, cfg, timeoutMs) {
+    let buffer = null;
+    try {
+      buffer = blobOrBuffer instanceof Blob ? await blobOrBuffer.arrayBuffer() : blobOrBuffer;
+    } catch {}
+    if (!buffer?.byteLength) return { ok: false, inactive: false };
+    const voz = cfg?.voz || {};
+    const request = sendMedia(
+      "speak",
+      // sem duckLevel de propósito: o nível do abaixamento é o que o vendedor
+      // escolheu no painel (duckAuto/activate). Mandar valor daqui atropelaria
+      // a chave "Abaixar o vídeo quando a IA falar".
+      {
+        audio: buffer,
+        mime: blobOrBuffer?.type || "audio/mpeg",
+        gain: Math.min(2, Math.max(0, Number(voz.gain ?? 1))),
+      },
+      timeoutMs || VOICE_TIMEOUT_MIN,
+    );
+    const speaking = {};
+    speaking.done = request.then((res) => {
+      if (virtualVoice === speaking) virtualVoice = null;
+      return res;
+    });
+    virtualVoice = speaking;
+    const res = await speaking.done;
+    // status.spoke === false é fala cortada (stopSpeak ou fala nova): tocou, não é erro
+    if (res.ok) return { ok: true, inactive: false };
+    if (res.code === MEDIA_INACTIVE) {
+      virtualSource = { until: Date.now() + VIRTUAL_STATUS_TTL, active: false };
+      return { ok: false, inactive: true };
+    }
+    // Estouro do timeout: o injector ainda pode estar falando. Cortar e desistir
+    // desta fala é melhor do que dobrar a voz saindo também pelo VB-Cable.
+    if (res.timedOut) sendMedia("stopSpeak");
+    return { ok: false, inactive: false };
+  }
+
+  /** Teto de espera da fala: sai da duração esperada, não de um número fixo. */
+  function voiceTimeoutMs(text) {
+    const estimated = (String(text || "").length / VOICE_CHARS_PER_SECOND) * 1000;
+    return Math.min(VOICE_TIMEOUT_MAX, Math.max(VOICE_TIMEOUT_MIN, Math.round(estimated * 2)));
+  }
+
+  /**
+   * A fala pronta do TTS. O objectURL só nasce se alguém for tocar local (o
+   * caminho antigo ou o monitor); pelo microfone virtual vai o ArrayBuffer.
+   */
+  function makeVoiceSource(blob, text) {
+    let url = "";
+    return {
+      blob,
+      timeoutMs: voiceTimeoutMs(text),
+      url() {
+        if (!url) url = URL.createObjectURL(blob);
+        return url;
+      },
+      revoke() {
+        if (url) URL.revokeObjectURL(url);
+        url = "";
+      },
+    };
+  }
+
   function isAudioBusy() {
+    if (virtualVoice) return true; // falando dentro do microfone virtual
     const a = audioEl;
     if (!a || !a.src) return false;
     return !a.paused && !a.ended;
   }
   function waitForAudioEnd() {
+    // no microfone virtual o fim da fala é o próprio ACK do "speak"
+    if (virtualVoice) return virtualVoice.done.then(() => {});
     const a = audioEl;
     if (!a || !isAudioBusy()) return Promise.resolve();
     return new Promise((resolve) => {
@@ -2157,32 +2315,66 @@
       a.addEventListener("pause", done);
     });
   }
-  async function playAudio(url, cfg) {
+  /**
+   * Retorno no fone do vendedor. Toca sempre local, no dispositivo padrão, nos
+   * dois caminhos — este áudio é só para ele se ouvir, não vai para a live.
+   */
+  async function startMonitor(voice, cfg) {
+    const mon = cfg?.voz?.monitor;
+    if (!mon?.enabled) {
+      try {
+        monitorEl?.pause();
+      } catch {}
+      return;
+    }
+    const m = ensureMonitor();
+    try {
+      if (typeof m.setSinkId === "function") await m.setSinkId("default");
+    } catch {}
+    m.volume = Math.min(1, Math.max(0, Number(mon.volume ?? 0.6)));
+    // sempre do começo: no fallback o monitor tem que reiniciar junto com o
+    // cabo, senão o vendedor ouve adiantado o que ainda vai sair na live
+    m.src = voice.url();
+    m.play().catch(() => {});
+  }
+  /**
+   * Toca a voz da IA. Com a fonte virtual publicando, a fala entra no microfone
+   * virtual e o media-injector abaixa o áudio do vídeo enquanto ela fala; sem
+   * ela, é o caminho de sempre: <audio> no dispositivo da live (VB-Cable).
+   * Recebe a fonte de makeVoiceSource() — não mais uma URL solta.
+   */
+  async function playAudio(voice, cfg) {
+    if (voice?.blob && (await isVirtualSourceActive())) {
+      await startMonitor(voice, cfg);
+      const res = await speakThroughVirtualSource(voice.blob, cfg, voice.timeoutMs);
+      if (res.ok) return true;
+      // erro de verdade (áudio vazio, decode falhou): insistir no cabo não ajuda
+      if (!res.inactive) return false;
+      // publicada mas sem captura nesta aba: não perde a fala, sai pelo cabo
+    }
+    return playThroughDevice(voice, cfg);
+  }
+  /** Caminho antigo: <audio> com setSinkId no dispositivo da live. */
+  async function playThroughDevice(voice, cfg) {
     try {
       const a = ensureAudio();
       await applySink(a, cfg);
       a.volume = Math.min(1, Math.max(0, Number(cfg?.voz?.gain ?? 1)));
-      a.src = url;
-      const mon = cfg?.voz?.monitor;
-      if (mon?.enabled) {
-        // toca em paralelo no dispositivo padrão (fone) — só pra você ouvir
-        const m = ensureMonitor();
-        try {
-          if (typeof m.setSinkId === "function") await m.setSinkId("default");
-        } catch {}
-        m.volume = Math.min(1, Math.max(0, Number(mon.volume ?? 0.6)));
-        m.src = url;
-        m.play().catch(() => {});
-      } else if (monitorEl) {
-        try {
-          monitorEl.pause();
-        } catch {}
-      }
+      a.src = voice.url();
+      await startMonitor(voice, cfg);
       await a.play();
       return true;
     } catch {
       return false;
     }
+  }
+  /** Corta a fala onde quer que ela esteja: <audio> local e microfone virtual. */
+  function stopSpeaking() {
+    try {
+      audioEl?.pause();
+      monitorEl?.pause();
+    } catch {}
+    if (virtualVoice) sendMedia("stopSpeak");
   }
 
   const TTS_CACHE_NAME = "pitchai-tts-hourly-v1";
@@ -2257,7 +2449,7 @@
     const startedAt = Date.now();
     let spoken = false;
     let fromCache = false;
-    let objectUrl = "";
+    let voiceSource = null;
     try {
       let blob = options.useCache ? await readTtsCache(cacheKey, ttlMs) : null;
       fromCache = !!blob;
@@ -2280,9 +2472,9 @@
         if (options.useCache) await writeTtsCache(cacheKey, blob);
       }
       if (options.isCancelled?.()) throw new DOMException("cancelado", "AbortError");
-      objectUrl = URL.createObjectURL(blob);
-      spoken = await playAudio(objectUrl, cfg);
-      if (!spoken) throw new Error("o navegador não iniciou a reprodução da voz");
+      voiceSource = makeVoiceSource(blob, text);
+      spoken = await playAudio(voiceSource, cfg);
+      if (!spoken) throw new Error("não foi possível reproduzir a voz");
       await waitForAudioEnd();
       if (options.signal?.aborted || options.isCancelled?.()) spoken = false;
     } catch (error) {
@@ -2294,7 +2486,7 @@
         });
       }
     } finally {
-      if (objectUrl) URL.revokeObjectURL(objectUrl);
+      voiceSource?.revoke();
     }
     activity.setNowSpeaking(null);
     if (!spoken) return false;
@@ -2620,12 +2812,7 @@
       chatState.pitchAbort?.abort();
     } catch {}
     chatState.pitchAbort = null;
-    if (chatState.pitchAudioActive) {
-      try {
-        audioEl?.pause();
-        monitorEl?.pause();
-      } catch {}
-    }
+    if (chatState.pitchAudioActive) stopSpeaking();
   }
 
   // ---------- Local filter (blacklist / whitelist) ----------
@@ -5016,9 +5203,7 @@
       if (e.code !== cfg.voz.pushToTalk.key) return;
       if (down) return;
       down = true;
-      try {
-        audioEl?.pause();
-      } catch {}
+      stopSpeaking();
     });
     document.addEventListener("keyup", async (e) => {
       const cfg = await loadConfig();
