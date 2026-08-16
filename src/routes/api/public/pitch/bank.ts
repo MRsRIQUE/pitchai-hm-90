@@ -1,6 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { GoogleGenAI } from "@google/genai";
 import { guardApiRequest, recordAiUsageTokens } from "@/lib/live/api-auth.server";
+import { AI_MODELS } from "@/lib/live/ai-models";
 import { corsHeaders } from "@/lib/live/cors.server";
 import { validateContentForPublish } from "@/lib/live/validation.server";
 
@@ -100,7 +101,7 @@ export const Route = createFileRoute("/api/public/pitch/bank")({
         try {
           const ai = new GoogleGenAI({ apiKey });
           const response = await ai.models.generateContent({
-            model: "gemini-3.1-flash-lite",
+            model: AI_MODELS.fast,
             contents: prompt,
             config: {
               systemInstruction: systemInstruction || undefined,

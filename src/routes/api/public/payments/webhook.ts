@@ -1,25 +1,55 @@
 import { createFileRoute } from "@tanstack/react-router";
+import { z } from "zod";
 import { type StripeEnv, verifyWebhook } from "@/lib/stripe.server";
 import { entitlementPlanId, findPitchaiPlan } from "@/lib/live/plans";
 import { fsGet, fsSet, fsQuery, setSubscription } from "@/lib/firebase.server";
 
-function planFromSub(sub: any): string {
+const subscriptionSchema = z.object({
+  id: z.string(),
+  status: z.string(),
+  cancel_at_period_end: z.boolean().optional(),
+  current_period_end: z.number().nullable().optional(),
+  customer: z.union([z.string(), z.object({ id: z.string() })]).optional(),
+  metadata: z.record(z.string()).optional(),
+  items: z
+    .object({
+      data: z
+        .array(
+          z.object({
+            quantity: z.number().nullable().optional(),
+            current_period_end: z.number().nullable().optional(),
+            price: z
+              .object({
+                lookup_key: z.string().nullable().optional(),
+                unit_amount: z.number().nullable().optional(),
+              })
+              .optional(),
+          }),
+        )
+        .default([]),
+    })
+    .optional(),
+});
+
+type StripeSubscription = z.infer<typeof subscriptionSchema>;
+
+function planFromSub(sub: StripeSubscription): string {
   const item = sub.items?.data?.[0];
-  const key: string | undefined = item?.price?.lookup_key;
+  const key: string | undefined = item?.price?.lookup_key ?? undefined;
   if (key && findPitchaiPlan(key)) return entitlementPlanId(key);
   const metadataPlan = sub.metadata?.plan;
-  if (findPitchaiPlan(metadataPlan)) return entitlementPlanId(metadataPlan);
+  if (metadataPlan && findPitchaiPlan(metadataPlan)) return entitlementPlanId(metadataPlan);
   return "free";
 }
 
-async function upsertSellerSub(sub: any, env: StripeEnv) {
+async function upsertSellerSub(sub: StripeSubscription, env: StripeEnv) {
   const userId = sub.metadata?.userId;
   if (!userId) {
     console.warn("[stripe-webhook] missing userId in subscription", sub.id);
     return;
   }
   const item = sub.items?.data?.[0];
-  const periodEnd = item?.current_period_end ?? sub.current_period_end;
+  const periodEnd = item?.current_period_end ?? sub.current_period_end ?? null;
   const plan = planFromSub(sub);
   const status = sub.status;
 
@@ -32,7 +62,7 @@ async function upsertSellerSub(sub: any, env: StripeEnv) {
       stripe_subscription_id: sub.id,
       current_period_end: periodEnd ? new Date(periodEnd * 1000).toISOString() : null,
       granted_until:
-        plan !== "free" && ["active", "trialing"].includes(String(status))
+        plan !== "free" && ["active", "trialing"].includes(String(status)) && periodEnd
           ? new Date(periodEnd * 1000).toISOString()
           : null,
       cancel_at_period_end: sub.cancel_at_period_end ?? false,
@@ -139,11 +169,22 @@ async function handleWebhook(req: Request, env: StripeEnv) {
   const event = await verifyWebhook(req, env);
   switch (event.type) {
     case "customer.subscription.created":
-    case "customer.subscription.updated":
-      await upsertSellerSub(event.data.object, env);
+    case "customer.subscription.updated": {
+      const parsed = subscriptionSchema.safeParse(event.data.object);
+      if (!parsed.success) {
+        console.error("[stripe-webhook] payload de assinatura inválido:", parsed.error.issues);
+        throw new Error("Invalid subscription payload");
+      }
+      await upsertSellerSub(parsed.data, env);
       break;
+    }
     case "customer.subscription.deleted": {
-      const sub = event.data.object;
+      const parsed = subscriptionSchema.safeParse(event.data.object);
+      if (!parsed.success) {
+        console.error("[stripe-webhook] payload de assinatura inválido:", parsed.error.issues);
+        throw new Error("Invalid subscription payload");
+      }
+      const sub = parsed.data;
       const userId = sub.metadata?.userId;
       if (userId) {
         await setSubscription(
@@ -171,14 +212,12 @@ export const Route = createFileRoute("/api/public/payments/webhook")({
   server: {
     handlers: {
       POST: async ({ request }) => {
-        const rawEnv = new URL(request.url).searchParams.get("env");
-        const inferredEnv: StripeEnv = process.env.STRIPE_SECRET_KEY?.startsWith("sk_live_")
+        // O ambiente é SEMPRE inferido da chave configurada. Nunca aceitamos
+        // um parâmetro de query: ele permitia aplicar eventos de um ambiente
+        // no contexto de outro.
+        const stripeEnv: StripeEnv = process.env.STRIPE_SECRET_KEY?.startsWith("sk_live_")
           ? "live"
           : "sandbox";
-        const stripeEnv = rawEnv || inferredEnv;
-        if (stripeEnv !== "sandbox" && stripeEnv !== "live") {
-          return Response.json({ error: "invalid_env" }, { status: 400 });
-        }
         try {
           await handleWebhook(request, stripeEnv);
           return Response.json({ received: true });

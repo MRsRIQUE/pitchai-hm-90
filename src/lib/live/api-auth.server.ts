@@ -1,5 +1,6 @@
 import crypto from "node:crypto";
 import {
+  fsCreateIfAbsent,
   fsGet,
   getAiTokenUsage,
   getSyncTokenOwner,
@@ -21,13 +22,14 @@ import {
 
 const seenNonces = new Map<string, number>();
 const MAX_NONCES = 10000;
+const NONCE_TTL_MS = 600_000;
 
-function isNonceReplayed(nonce: string, ts: number): boolean {
+function isNonceReplayedInMemory(nonce: string, ts: number): boolean {
   if (!nonce) return false;
   const now = Date.now();
   // Remove expired nonces (older than 10 minutes).
   for (const [k, v] of seenNonces.entries()) {
-    if (now - v > 600_000) seenNonces.delete(k);
+    if (now - v > NONCE_TTL_MS) seenNonces.delete(k);
   }
   // LRU bound: if still too many entries, evict oldest 25%.
   if (seenNonces.size >= MAX_NONCES) {
@@ -42,6 +44,31 @@ function isNonceReplayed(nonce: string, ts: number): boolean {
   return false;
 }
 
+/**
+ * Camada persistente de anti-replay: grava o nonce no Firestore com
+ * create-if-absent. Se o documento já existir, é replay (inclusive entre
+ * instâncias/deployments). Best-effort: se o Firestore estiver indisponível,
+ * cai para a checagem em memória.
+ */
+async function isNonceReplayedPersisted(nonce: string, ts: number): Promise<boolean> {
+  if (!nonce) return false;
+  try {
+    const created = await fsCreateIfAbsent(
+      "api_nonces",
+      {
+        createdAt: new Date(ts).toISOString(),
+        expireAt: new Date(ts + NONCE_TTL_MS).toISOString(),
+      },
+      nonce,
+      { mode: "server" },
+    );
+    return !created;
+  } catch (error) {
+    console.warn("[api-auth] anti-replay persistido indisponível, usando memória:", error);
+    return false;
+  }
+}
+
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 function extractSyncToken(request: Request): string {
@@ -53,20 +80,24 @@ function extractSyncToken(request: Request): string {
   return token;
 }
 
-function verifyHmac(request: Request, token: string, endpoint: string): boolean {
+async function verifyHmac(request: Request, token: string, endpoint: string): Promise<boolean> {
   const sig = request.headers.get("x-pitchai-signature");
   const tsStr = request.headers.get("x-pitchai-timestamp");
   const nonce = request.headers.get("x-pitchai-nonce") || "";
 
-  // Em produção exigimos HMAC sempre; em dev deixamos passar (para facilitar testes locais).
-  const isProduction = process.env.NODE_ENV === "production";
+  // Em produção exigimos HMAC sempre. O bypass é OPT-IN via flag explícita
+  // (nunca via NODE_ENV, que pode vir mal configurado no deploy) e serve
+  // apenas para testes locais: PITCHAI_SKIP_HMAC=1 npm run dev
+  const skipHmac = ["1", "true"].includes(String(process.env.PITCHAI_SKIP_HMAC));
   if (!sig || !tsStr) {
-    return !isProduction;
+    return skipHmac;
   }
   const ts = parseInt(tsStr, 10);
   const now = Date.now();
   if (isNaN(ts) || Math.abs(now - ts) > 300_000) return false;
-  if (isNonceReplayed(nonce, ts)) return false;
+  if (isNonceReplayedInMemory(nonce, ts) || (await isNonceReplayedPersisted(nonce, ts))) {
+    return false;
+  }
   const expected = crypto
     .createHmac("sha256", token)
     .update(`${ts}:${nonce}:${endpoint}`)
@@ -388,7 +419,7 @@ export async function guardApiRequest(
   if (!token || !UUID_RE.test(token)) {
     return { ok: false, status: 401, message: "Missing or invalid sync token" };
   }
-  if (!verifyHmac(request, token, endpoint)) {
+  if (!(await verifyHmac(request, token, endpoint))) {
     return { ok: false, status: 401, message: "Invalid HMAC signature" };
   }
   return resolveAndAuthorize(endpoint, token);

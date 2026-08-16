@@ -64,7 +64,7 @@ export const Route = createFileRoute("/api/public/live/config")({
             );
           } catch (err) {
             console.error("[live/config] push falhou:", err);
-            return j(500, { error: err instanceof Error ? err.message : "push_failed" });
+            return j(500, { error: "push_failed" });
           }
           return j(200, { ok: true });
         }

@@ -1,4 +1,5 @@
 import { GoogleGenAI } from "@google/genai";
+import { AI_MODELS } from "@/lib/live/ai-models";
 
 /**
  * Núcleo compartilhado de síntese de voz (TTS).
@@ -22,7 +23,7 @@ export const TTS_MAX_SPEED = 1.2;
  * `GEMINI_TTS_MODEL` força um modelo específico e pula a cascata.
  */
 const GEMINI_TTS_MODELS = [
-  "gemini-3.1-flash-tts-preview",
+  AI_MODELS.tts,
   "gemini-2.5-flash-preview-tts",
   "gemini-2.5-pro-preview-tts",
 ];

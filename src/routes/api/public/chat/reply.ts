@@ -41,6 +41,7 @@ function matchesAny(text: string, words: string[]) {
 }
 
 import { GoogleGenAI, ThinkingLevel } from "@google/genai";
+import { AI_MODELS, chatModelCascade } from "@/lib/live/ai-models";
 
 async function callModel(
   apiKey: string,
@@ -48,7 +49,7 @@ async function callModel(
   messages: { role: string; content: string }[],
   options?: { model?: string; highThinking?: boolean },
 ) {
-  const modelName = options?.model || "gemini-3.5-flash";
+  const modelName = options?.model || AI_MODELS.general;
   const ai = new GoogleGenAI({
     apiKey,
     httpOptions: { headers: { "User-Agent": "pitchai" } },
@@ -57,15 +58,13 @@ async function callModel(
     .map((m) => (m.role === "assistant" ? "Assistente: " : "Usuário: ") + m.content)
     .join("\n");
   const config: Record<string, unknown> = { systemInstruction: system };
-  if (options?.highThinking || modelName === "gemini-3.1-pro-preview") {
+  if (options?.highThinking || modelName === AI_MODELS.complex) {
     config.thinkingConfig = { thinkingLevel: ThinkingLevel.HIGH };
   }
 
   let response;
   let lastError: unknown;
-  const models = [modelName, "gemini-3.1-flash-lite", "gemini-2.5-flash"].filter(
-    (model, index, all) => all.indexOf(model) === index,
-  );
+  const models = chatModelCascade(modelName);
   for (const model of models) {
     try {
       response = await ai.models.generateContent({ model, contents: conversationPrompt, config });

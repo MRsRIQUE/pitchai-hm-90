@@ -6,9 +6,10 @@
  * anterior — todos os bytes não-ASCII foram substituídos por U+FFFD).
  * Sempre regenere com: npm run build:extension
  */
-import { existsSync, readFileSync, statSync } from "node:fs";
+import { existsSync, readFileSync, statSync, mkdtempSync, writeFileSync, rmSync } from "node:fs";
 import { execFileSync } from "node:child_process";
 import path from "node:path";
+import { tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -57,27 +58,52 @@ if (!iconHead.equals(PNG_MAGIC)) {
 
 const psQuote = (value) => `'${String(value).replaceAll("'", "''")}'`;
 
-// Empacota em modo binário. Linux/macOS usam zip; Windows possui fallback
-// nativo para que `npm run build:extension` funcione também no ambiente local.
+// ---------------------------------------------------------------------------
+// Manifest de release: remove hosts de desenvolvimento (localhost/127.0.0.1).
+// O manifest fonte mantém localhost para facilitar testes locais; o zip
+// distribuído (Chrome Web Store) nunca deve referenciar hosts de dev.
+// ---------------------------------------------------------------------------
+const DEV_HOST_RE = /^http:\/\/(?:localhost|127\.0\.0\.1)(?::\d+)?\/\*$/;
+
+const stripDevMatches = (patterns) => (patterns ?? []).filter((p) => !DEV_HOST_RE.test(p));
+
+const releaseManifest = {
+  ...manifest,
+  host_permissions: stripDevMatches(manifest.host_permissions),
+  content_scripts: (manifest.content_scripts ?? []).map((cs) => ({
+    ...cs,
+    matches: stripDevMatches(cs.matches),
+  })),
+};
+
+const stagingDir = mkdtempSync(path.join(tmpdir(), "pitchai-ext-"));
 try {
-  execFileSync(
-    "zip",
-    ["-X", "-q", "-j", "-FS", outZip, ...FILES.map((f) => path.join(extDir, f))],
-    {
-      cwd: extDir,
-    },
+  const stagedManifest = path.join(stagingDir, "manifest.json");
+  writeFileSync(stagedManifest, JSON.stringify(releaseManifest, null, 2));
+
+  // Empacota em modo binário. Linux/macOS usam zip; Windows possui fallback
+  // nativo para que `npm run build:extension` funcione também no ambiente local.
+  const zipFiles = FILES.map((f) =>
+    f === "manifest.json" ? stagedManifest : path.join(extDir, f),
   );
-} catch (err) {
-  if (process.platform !== "win32") {
-    console.error("[pack-extension] Falha ao executar 'zip':", err.message);
-    process.exit(1);
+  try {
+    execFileSync("zip", ["-X", "-q", "-j", "-FS", outZip, ...zipFiles], {
+      cwd: extDir,
+    });
+  } catch (err) {
+    if (process.platform !== "win32") {
+      console.error("[pack-extension] Falha ao executar 'zip':", err.message);
+      process.exit(1);
+    }
+    const literalPaths = zipFiles.map((f) => psQuote(f)).join(",");
+    const command = `Compress-Archive -LiteralPath @(${literalPaths}) -DestinationPath ${psQuote(outZip)} -CompressionLevel Optimal -Force`;
+    execFileSync("powershell.exe", ["-NoProfile", "-NonInteractive", "-Command", command], {
+      cwd: extDir,
+      stdio: "pipe",
+    });
   }
-  const literalPaths = FILES.map((f) => psQuote(path.join(extDir, f))).join(",");
-  const command = `Compress-Archive -LiteralPath @(${literalPaths}) -DestinationPath ${psQuote(outZip)} -CompressionLevel Optimal -Force`;
-  execFileSync("powershell.exe", ["-NoProfile", "-NonInteractive", "-Command", command], {
-    cwd: extDir,
-    stdio: "pipe",
-  });
+} finally {
+  rmSync(stagingDir, { recursive: true, force: true });
 }
 
 const forbiddenBackends = ["pitchai.ai.studio", "pitchai-live.lovable.app"];

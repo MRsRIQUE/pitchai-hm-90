@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { fsCreate, fsSet, verifyFirebaseIdToken } from "@/lib/firebase.server";
 import { findPitchaiPlan } from "@/lib/live/plans";
-import { createStripeClient, getStripeErrorMessage } from "@/lib/stripe.server";
+import { createStripeClient, getStripeErrorMessage, type StripeEnv } from "@/lib/stripe.server";
 
 export const Route = createFileRoute("/api/checkout/start")({
   server: {
@@ -43,7 +43,10 @@ export const Route = createFileRoute("/api/checkout/start")({
             { mode: "server" },
           );
 
-          const stripe = createStripeClient("sandbox");
+          const stripeEnv: StripeEnv = process.env.STRIPE_SECRET_KEY?.startsWith("sk_live_")
+            ? "live"
+            : "sandbox";
+          const stripe = createStripeClient(stripeEnv);
           const prices = await stripe.prices.list({
             lookup_keys: [plan.priceId],
             active: true,
@@ -85,9 +88,9 @@ export const Route = createFileRoute("/api/checkout/start")({
           if (!session.url) throw new Error("Stripe não retornou a URL do checkout.");
           return Response.json({ checkoutUrl: session.url });
         } catch (error) {
-          console.error("[checkout/start]", error);
+          console.error("[checkout/start]", getStripeErrorMessage(error));
           return Response.json(
-            { error: getStripeErrorMessage(error) || "Não foi possível iniciar o pagamento." },
+            { error: "Não foi possível iniciar o pagamento. Tente novamente em instantes." },
             { status: 500 },
           );
         }

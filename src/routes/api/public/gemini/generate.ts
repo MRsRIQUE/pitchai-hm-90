@@ -2,6 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { GoogleGenAI, ThinkingLevel } from "@google/genai";
 import { corsHeaders } from "@/lib/live/cors.server";
 import { guardAiRequest, recordAiUsageTokens } from "@/lib/live/api-auth.server";
+import { resolveChatModel } from "@/lib/live/ai-models";
 import { validateContentForPublish } from "@/lib/live/validation.server";
 
 const MAX_PROMPT_CHARS = 20_000;
@@ -84,15 +85,10 @@ export const Route = createFileRoute("/api/public/gemini/generate")({
           });
 
           // Model selection strategy:
-          // - complex / high thinking: gemini-3.1-pro-preview
-          // - fast / low-latency: gemini-3.1-flash-lite
-          // - general: gemini-3.5-flash
-          let model = "gemini-3.5-flash";
-          if (mode === "complex" || enableHighThinking) {
-            model = "gemini-3.1-pro-preview";
-          } else if (mode === "fast") {
-            model = "gemini-3.1-flash-lite";
-          }
+          // - complex / high thinking: AI_MODELS.complex
+          // - fast / low-latency: AI_MODELS.fast
+          // - general: AI_MODELS.general
+          const model = resolveChatModel(mode, enableHighThinking);
 
           const config: Record<string, unknown> = {};
           if (systemInstruction) {
@@ -137,8 +133,11 @@ export const Route = createFileRoute("/api/public/gemini/generate")({
             upgrade: tokenQuota.upgrade,
           });
         } catch (err: unknown) {
-          const message = err instanceof Error ? err.message : String(err);
-          return json(500, { error: "gemini_error", message });
+          console.error("[gemini/generate]", err);
+          return json(500, {
+            error: "gemini_error",
+            message: "Não foi possível gerar a resposta. Tente novamente em instantes.",
+          });
         }
       },
     },

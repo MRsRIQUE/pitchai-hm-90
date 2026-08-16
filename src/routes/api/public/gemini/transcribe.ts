@@ -2,6 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { GoogleGenAI } from "@google/genai";
 import { corsHeaders } from "@/lib/live/cors.server";
 import { guardAiRequest, recordAiUsageTokens } from "@/lib/live/api-auth.server";
+import { AI_MODELS } from "@/lib/live/ai-models";
 
 // 10MB base64 (~7.5MB binario) — limite suficiente para transcrever curtos clips ao vivo.
 const MAX_AUDIO_BASE64_LENGTH = 10 * 1024 * 1024;
@@ -68,9 +69,8 @@ export const Route = createFileRoute("/api/public/gemini/transcribe")({
             },
           });
 
-          // Transcribe audio using gemini-3.5-flash
           const response = await ai.models.generateContent({
-            model: "gemini-3.5-flash",
+            model: AI_MODELS.general,
             contents: {
               parts: [
                 {
@@ -94,7 +94,7 @@ export const Route = createFileRoute("/api/public/gemini/transcribe")({
 
           return json(200, {
             transcription: response.text ?? "",
-            modelUsed: "gemini-3.5-flash",
+            modelUsed: AI_MODELS.general,
             tokenUsed: tokenQuota.used,
             tokenLimit: tokenQuota.limit,
             tokenRemaining: tokenQuota.remaining,
@@ -103,8 +103,11 @@ export const Route = createFileRoute("/api/public/gemini/transcribe")({
             upgrade: tokenQuota.upgrade,
           });
         } catch (err: unknown) {
-          const message = err instanceof Error ? err.message : String(err);
-          return json(500, { error: "transcription_error", message });
+          console.error("[gemini/transcribe]", err);
+          return json(500, {
+            error: "transcription_error",
+            message: "Não foi possível transcrever o áudio. Tente novamente em instantes.",
+          });
         }
       },
     },

@@ -65,24 +65,52 @@ service cloud.firestore {
 
     match /sync_tokens/{token} {
       allow get: if true;
-      allow create, update: if isPrivileged()
+      // O dono só pode escrever os campos esperados (uid/createdAt) — nunca
+      // metadados arbitrários que o backend ou a extensão venham a confiar.
+      // Em create o documento ainda não existe, então o diff é contra {}.
+      allow create: if isPrivileged()
         || (isSignedIn()
           && request.resource.data.uid == request.auth.uid
-          && hasAccessRecord(request.auth.uid));
+          && hasAccessRecord(request.auth.uid)
+          && request.resource.data.diff({}).affectedKeys()
+            .hasOnly(['uid', 'createdAt']));
+      allow update: if isPrivileged()
+        || (isSignedIn()
+          && request.resource.data.uid == resource.data.uid
+          && hasAccessRecord(request.auth.uid)
+          && request.resource.data.diff(resource.data).affectedKeys()
+            .hasOnly(['uid', 'createdAt']));
       allow delete: if isPrivileged()
         || (isSignedIn() && resource.data.uid == request.auth.uid);
     }
 
     // Config pública por token (consumida pela extensão via REST).
     // O dono só pode escrever no próprio token; leitura é aberta por design.
+    // Escrita limitada aos campos uid/config/updatedAt, com uid imutável.
     match /live_configs_by_token/{token} {
       allow get: if true;
-      allow create, update: if isPrivileged()
+      allow create: if isPrivileged()
         || (isSignedIn()
           && get(/databases/$(database)/documents/sync_tokens/$(token)).data.uid == request.auth.uid
-          && hasAccessRecord(request.auth.uid));
+          && hasAccessRecord(request.auth.uid)
+          && request.resource.data.diff({}).affectedKeys()
+            .hasOnly(['uid', 'config', 'updatedAt']));
+      allow update: if isPrivileged()
+        || (isSignedIn()
+          && get(/databases/$(database)/documents/sync_tokens/$(token)).data.uid == request.auth.uid
+          && hasAccessRecord(request.auth.uid)
+          && request.resource.data.uid == resource.data.uid
+          && request.resource.data.diff(resource.data).affectedKeys()
+            .hasOnly(['uid', 'config', 'updatedAt']));
       allow delete: if isPrivileged()
         || (isSignedIn() && resource.data.uid == request.auth.uid);
+    }
+
+    // Anti-replay de nonces HMAC (create-if-absent). Recomenda-se ativar TTL
+    // no campo expireAt no console (Firestore > Indexes > TTL policies).
+    match /api_nonces/{nonce} {
+      allow create: if isPrivileged();
+      allow read, update, delete: if isServer();
     }
 
     // ------------------------------------------------------------------

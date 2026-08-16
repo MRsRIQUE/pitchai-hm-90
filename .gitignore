@@ -45,3 +45,5 @@ output/
 !.env.example
 *-firebase-adminsdk-*.json
 *service-account*.json
+.vercel
+.env*

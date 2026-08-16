@@ -1,6 +1,6 @@
 import { createServerFn } from "@tanstack/react-start";
 import { requireFirebaseAuth } from "@/lib/firebase-auth";
-import { fsGet, fsQuery } from "@/lib/firebase.server";
+import { fsGet, fsQuery, fsSet } from "@/lib/firebase.server";
 import {
   ensureReferralCode,
   resolveReferralCode,

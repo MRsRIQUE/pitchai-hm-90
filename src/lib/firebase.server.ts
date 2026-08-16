@@ -401,6 +401,39 @@ export async function fsCreate(
   return created?.name?.split("/").pop() ?? "";
 }
 
+/**
+ * Cria um documento apenas se ele ainda não existir (create-if-absent).
+ * Retorna false quando o documento já existe (409/ALREADY_EXISTS) — útil para
+ * detectar replay de nonces sem race condition entre instâncias.
+ */
+export async function fsCreateIfAbsent(
+  collectionPath: string,
+  data: Record<string, unknown>,
+  docId?: string,
+  options: { mode?: FirestoreAuthMode; userToken?: string } = {},
+): Promise<boolean> {
+  const { headers, key } = await authorization(options.mode ?? "public", options.userToken);
+  const docIdQuery = docId ? `documentId=${encodeURIComponent(docId)}` : "";
+  const queryParams = [docIdQuery, key ? key.slice(1) : ""].filter(Boolean).join("&");
+  const url = `${FIRESTORE_BASE_URL}/documents/${collectionPath}${queryParams ? `?${queryParams}` : ""}`;
+  const res = await fetch(url, {
+    method: "POST",
+    headers: { "content-type": "application/json", ...headers },
+    body: JSON.stringify({
+      fields: Object.fromEntries(Object.entries(data).map(([k, v]) => [k, encodeValue(v)])),
+    }),
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    // 409 (ou 400 com ALREADY_EXISTS) = documento já existe.
+    if (res.status === 409 || String(body?.error?.status) === "ALREADY_EXISTS") return false;
+    throw new Error(
+      `Firestore CREATE ${collectionPath} falhou: ${body?.error?.message ?? res.status}`,
+    );
+  }
+  return true;
+}
+
 // ---------------------------------------------------------------------------
 // Modelo de dados do app (coleções)
 // ---------------------------------------------------------------------------

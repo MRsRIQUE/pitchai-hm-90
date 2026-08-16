@@ -19,6 +19,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { getFirebaseAuth } from "@/lib/firebase";
+import { resolveChatModel } from "@/lib/live/ai-models";
 
 type UpgradeOffer = {
   url: string;
@@ -456,11 +457,7 @@ export function GeminiFeaturesPanel() {
             <div className="font-semibold text-foreground flex items-center justify-between">
               <span>Resposta da IA:</span>
               <Badge variant="outline" className="text-[10px]">
-                {modelMode === "complex"
-                  ? "gemini-3.1-pro-preview"
-                  : modelMode === "fast"
-                    ? "gemini-3.1-flash-lite"
-                    : "gemini-3.5-flash"}
+                {resolveChatModel(modelMode)}
               </Badge>
             </div>
             <p className="text-muted-foreground whitespace-pre-wrap">{response}</p>
