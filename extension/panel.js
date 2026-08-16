@@ -176,7 +176,14 @@
     respostasIA: true,
     responderNoChat: false,
     revisarAntesDeEnviar: false,
-    pitchBank: { enabled: true, variants: 12, ttlMinutes: 60, minIntervalSec: 45, maxIntervalSec: 75, cacheReplies: true },
+    pitchBank: {
+      enabled: true,
+      variants: 12,
+      ttlMinutes: 60,
+      minIntervalSec: 45,
+      maxIntervalSec: 75,
+      cacheReplies: true,
+    },
     protecaoGeral: false,
     violacao: true,
     autoMod: true,
@@ -928,7 +935,10 @@
           reject(new Error("A página do TikTok não respondeu; recarregue a aba"));
         }, 15000);
         pendingMedia.set(requestId, { resolve, reject, timer });
-        window.parent.postMessage({ source: MEDIA_CONTROL, command, requestId, payload }, pageOrigin);
+        window.parent.postMessage(
+          { source: MEDIA_CONTROL, command, requestId, payload },
+          pageOrigin,
+        );
       });
     }
 

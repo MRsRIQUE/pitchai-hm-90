@@ -31,7 +31,7 @@ describe("banco econômico de pitches", () => {
     expect(content).toContain("writeTtsCache(cacheKey, blob)");
     expect(content).toContain("STANDALONE_FAQ_RX");
     expect(content).toContain("REPLY_CACHE_TTL_MS = 60 * 60 * 1000");
-    expect(content).toContain('product?.id || product?.name');
+    expect(content).toContain("product?.id || product?.name");
   });
 
   it("expõe controles de economia e ritmo no painel distribuído", () => {

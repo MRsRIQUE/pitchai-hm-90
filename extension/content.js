@@ -847,7 +847,14 @@
     vozContextos: { default: null, greeting: null, offer: null, farewell: null },
     filtros: { blacklist: [], whitelist: [], usarListaPadrao: true },
     revisarAntesDeEnviar: false,
-    pitchBank: { enabled: true, variants: 12, ttlMinutes: 60, minIntervalSec: 45, maxIntervalSec: 75, cacheReplies: true },
+    pitchBank: {
+      enabled: true,
+      variants: 12,
+      ttlMinutes: 60,
+      minIntervalSec: 45,
+      maxIntervalSec: 75,
+      cacheReplies: true,
+    },
     produtos: [],
     aiContext: {},
     ultimoRoteiro: "",
@@ -2032,8 +2039,7 @@
     if (extSecurity.isLocked) return false;
     const ctx = classifyContext(text);
     const voice = resolveVoice(cfg, ctx);
-    const ttlMs =
-      Math.max(30, Math.min(180, Number(cfg?.pitchBank?.ttlMinutes) || 60)) * 60 * 1000;
+    const ttlMs = Math.max(30, Math.min(180, Number(cfg?.pitchBank?.ttlMinutes) || 60)) * 60 * 1000;
     const cacheKey = ttsCacheKey(text, voice);
     activity.setNowSpeaking({ text, ctx });
     const startedAt = Date.now();
@@ -3851,7 +3857,9 @@
     // Repete uma única vez, mas somente após confirmar que o card continua no
     // estado "Fixar"; assim nunca alterna de volta um produto já fixado.
     for (let clickAttempt = 0; clickAttempt < 2; clickAttempt++) {
-      const currentCard = card.isConnected ? card : await locateProductCard(alvo.name || "", alvo.pid || "");
+      const currentCard = card.isConnected
+        ? card
+        : await locateProductCard(alvo.name || "", alvo.pid || "");
       if (currentCard && isPinnedCard(currentCard)) return { ok: true, reason: "fixado" };
       const btn = currentCard && findPinButton(currentCard);
       if (!btn) return { ok: false, reason: "botão de fixar não encontrado" };
@@ -3916,7 +3924,6 @@
   }
 
   async function runAutoPin(cfg, af) {
-
     const min = Math.max(5, Number(af.minSec) || 20);
     const max = Math.max(min, Number(af.maxSec) || 60);
     auto.nextPinAt = Date.now() + (min + Math.random() * (max - min)) * 1000;
