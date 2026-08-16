@@ -143,6 +143,15 @@ export const AIContextSchema = z.object({
 
 export type AIContext = z.infer<typeof AIContextSchema>;
 
+export const PitchBankConfigSchema = z.object({
+  enabled: z.boolean().default(true),
+  variants: z.number().min(10).max(15).default(12),
+  ttlMinutes: z.number().min(30).max(180).default(60),
+  minIntervalSec: z.number().min(20).max(600).default(45),
+  maxIntervalSec: z.number().min(20).max(900).default(75),
+  cacheReplies: z.boolean().default(true),
+});
+
 // ============================================================================
 // Schema principal da configuração
 // ============================================================================
@@ -153,6 +162,7 @@ export const ConfigSchema = z.object({
   syncToken: z.string().optional(),
   respostasIA: z.boolean().default(true),
   responderNoChat: z.boolean().default(false),
+  pitchBank: PitchBankConfigSchema.default({}),
   revisarAntesDeEnviar: z.boolean().default(false),
   protecaoGeral: z.boolean().default(false),
   violacao: z.boolean().default(true),
@@ -191,6 +201,14 @@ export const DEFAULT_CONFIG: Config = {
   syncToken: "",
   respostasIA: true,
   responderNoChat: false,
+  pitchBank: {
+    enabled: true,
+    variants: 12,
+    ttlMinutes: 60,
+    minIntervalSec: 45,
+    maxIntervalSec: 75,
+    cacheReplies: true,
+  },
   revisarAntesDeEnviar: false,
   protecaoGeral: false,
   violacao: true,
@@ -247,7 +265,7 @@ export const DEFAULT_CONFIG: Config = {
   produtos: [],
   roteirosPorProduto: {},
   ultimoRoteiro: "",
-  version: "0.16.3",
+  version: "0.16.4",
   lastUpdated: Date.now(),
 };
 

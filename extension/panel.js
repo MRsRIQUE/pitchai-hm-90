@@ -175,6 +175,14 @@
   const DEFAULTS = {
     respostasIA: true,
     responderNoChat: false,
+    pitchBank: {
+      enabled: true,
+      variants: 12,
+      ttlMinutes: 60,
+      minIntervalSec: 45,
+      maxIntervalSec: 75,
+      cacheReplies: true,
+    },
     revisarAntesDeEnviar: false,
     protecaoGeral: false,
     violacao: true,
@@ -217,6 +225,7 @@
       ...DEFAULTS,
       ...stored,
       autoFixar: { ...DEFAULTS.autoFixar, ...(stored.autoFixar || {}) },
+      pitchBank: { ...DEFAULTS.pitchBank, ...(stored.pitchBank || {}) },
       voz: {
         ...DEFAULTS.voz,
         ...(stored.voz || {}),

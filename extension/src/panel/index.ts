@@ -200,6 +200,7 @@ function normalizeConfig(raw: unknown): Config {
     ...DEFAULT_CONFIG,
     ...stored,
     autoFixar: { ...DEFAULT_CONFIG.autoFixar, ...(stored.autoFixar || {}) },
+    pitchBank: { ...DEFAULT_CONFIG.pitchBank, ...(stored.pitchBank || {}) },
     voz: {
       ...DEFAULT_CONFIG.voz,
       ...(stored.voz || {}),

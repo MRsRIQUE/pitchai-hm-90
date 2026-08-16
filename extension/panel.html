@@ -98,7 +98,7 @@
         <img src="icon.png" class="pnl-img-logo" alt="" />
         <div class="pnl-brand-text">
           <span class="pnl-logo">Pitch AI <b>LIVE</b></span>
-          <span class="pnl-ver">v0.16.3</span>
+          <span class="pnl-ver">v0.16.4</span>
         </div>
       </div>
       <div class="pnl-header-actions">
@@ -204,6 +204,58 @@
                   </p>
                 </div>
                 <button class="pnl-toggle" data-key="responderNoChat"></button>
+              </div>
+
+              <div class="pnl-row">
+                <div>
+                  <h3>Banco Econômico de Pitches</h3>
+                  <p>
+                    Prepara 10–15 textos por hora e reaproveita cada áudio. Evita gerar voz de novo
+                    a cada repetição.
+                  </p>
+                </div>
+                <button class="pnl-toggle" data-key="pitchBank.enabled"></button>
+              </div>
+
+              <div class="pnl-row">
+                <div>
+                  <h3>Ritmo dos pitches</h3>
+                  <p>O intervalo é sorteado entre o mínimo e o máximo para não soar mecânico.</p>
+                  <div class="pnl-inline">
+                    <label
+                      >Variações/h<input
+                        type="number"
+                        min="10"
+                        max="15"
+                        data-key="pitchBank.variants"
+                    /></label>
+                    <label
+                      >Mín (s)<input
+                        type="number"
+                        min="20"
+                        max="600"
+                        data-key="pitchBank.minIntervalSec"
+                    /></label>
+                    <label
+                      >Máx (s)<input
+                        type="number"
+                        min="20"
+                        max="900"
+                        data-key="pitchBank.maxIntervalSec"
+                    /></label>
+                  </div>
+                </div>
+              </div>
+
+              <div class="pnl-row">
+                <div>
+                  <h3>Reutilizar respostas frequentes</h3>
+                  <p>
+                    Perguntas iguais sobre preço, frete, tamanho e uso reaproveitam a resposta por
+                    uma hora, somente quando o produto também é o mesmo.
+                  </p>
+                </div>
+                <button class="pnl-toggle" data-key="pitchBank.cacheReplies"></button>
               </div>
 
               <div class="pnl-row">

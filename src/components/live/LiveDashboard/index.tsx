@@ -264,6 +264,14 @@ function LiveDashboardContent() {
     });
   };
 
+  const updatePitchBank = (value: LiveConfig["pitchBank"]) => {
+    update("pitchBank", value);
+    void pushLiveConfigFields({ pitchBank: value }).catch((error) => {
+      console.error("[LiveDashboard] falha ao sincronizar banco de pitches:", error);
+      toast.error("Não consegui atualizar o banco de pitches na extensão");
+    });
+  };
+
   const toggleAutoFixProduct = (productId: string) => {
     const currentIds = config.autoFixar.ids ?? [];
     const ids = currentIds.includes(productId)
@@ -948,6 +956,96 @@ function LiveDashboardContent() {
                           Digita respostas curtas no chat do TikTok com intervalo anti-spam. Não
                           substitui uma mensagem que você estiver digitando.
                         </p>
+                      </div>
+                    </div>
+                  </Card>
+
+                  {/* Banco econômico de pitches */}
+                  <Card className="p-4">
+                    <div className="flex items-start gap-3">
+                      <div className="mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-secondary/15 text-secondary ring-1 ring-inset ring-secondary/25">
+                        <AudioLines className="h-[18px] w-[18px]" strokeWidth={2.2} />
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center justify-between gap-3">
+                          <h4 className="font-semibold">Banco econômico de pitches</h4>
+                          <Switch
+                            checked={config.pitchBank.enabled}
+                            onCheckedChange={(enabled) =>
+                              updatePitchBank({ ...config.pitchBank, enabled })
+                            }
+                          />
+                        </div>
+                        <p className="mt-1 text-sm text-muted-foreground">
+                          Gera um pacote por hora e reutiliza texto e áudio. O agendador espera cada
+                          fala terminar antes de iniciar a próxima.
+                        </p>
+                        <div className="mt-3 grid gap-3 sm:grid-cols-3">
+                          <label className="text-xs uppercase tracking-wide text-muted-foreground">
+                            Variações por hora
+                            <Input
+                              type="number"
+                              min={10}
+                              max={15}
+                              value={config.pitchBank.variants}
+                              onChange={(event) =>
+                                updatePitchBank({
+                                  ...config.pitchBank,
+                                  variants: Math.max(10, Math.min(15, +event.target.value || 12)),
+                                })
+                              }
+                              className="mt-1"
+                            />
+                          </label>
+                          <label className="text-xs uppercase tracking-wide text-muted-foreground">
+                            Intervalo mínimo (s)
+                            <Input
+                              type="number"
+                              min={20}
+                              max={600}
+                              value={config.pitchBank.minIntervalSec}
+                              onChange={(event) =>
+                                updatePitchBank({
+                                  ...config.pitchBank,
+                                  minIntervalSec: Math.max(20, +event.target.value || 45),
+                                })
+                              }
+                              className="mt-1"
+                            />
+                          </label>
+                          <label className="text-xs uppercase tracking-wide text-muted-foreground">
+                            Intervalo máximo (s)
+                            <Input
+                              type="number"
+                              min={20}
+                              max={900}
+                              value={config.pitchBank.maxIntervalSec}
+                              onChange={(event) =>
+                                updatePitchBank({
+                                  ...config.pitchBank,
+                                  maxIntervalSec: Math.max(20, +event.target.value || 75),
+                                })
+                              }
+                              className="mt-1"
+                            />
+                          </label>
+                        </div>
+                        <label className="mt-3 flex items-center justify-between gap-3 rounded-lg border border-border/60 bg-muted/20 p-3 text-sm">
+                          <span>
+                            <span className="block font-medium">
+                              Reutilizar perguntas frequentes
+                            </span>
+                            <span className="block text-xs text-muted-foreground">
+                              Somente pergunta e produto iguais, por até uma hora.
+                            </span>
+                          </span>
+                          <Switch
+                            checked={config.pitchBank.cacheReplies}
+                            onCheckedChange={(cacheReplies) =>
+                              updatePitchBank({ ...config.pitchBank, cacheReplies })
+                            }
+                          />
+                        </label>
                       </div>
                     </div>
                   </Card>

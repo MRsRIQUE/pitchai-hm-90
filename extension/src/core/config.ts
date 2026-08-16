@@ -92,6 +92,10 @@ export function normalizeConfig(data: unknown): Config {
         ...DEFAULT_CONFIG.autoFixar,
         ...(parsed.autoFixar || {}),
       },
+      pitchBank: {
+        ...DEFAULT_CONFIG.pitchBank,
+        ...(parsed.pitchBank || {}),
+      },
       encerrarTempo: {
         ...DEFAULT_CONFIG.encerrarTempo,
         ...(parsed.encerrarTempo || {}),

@@ -36,6 +36,7 @@ import { Route as ApiPublicLiveMappingRouteImport } from './routes/api/public/li
 import { Route as ApiPublicLiveSessionRouteImport } from './routes/api/public/live/session'
 import { Route as ApiPublicLiveVerifyRouteImport } from './routes/api/public/live/verify'
 import { Route as ApiPublicPaymentsWebhookRouteImport } from './routes/api/public/payments/webhook'
+import { Route as ApiPublicPitchBankRouteImport } from './routes/api/public/pitch/bank'
 import { Route as ApiPublicTtsSpeakRouteImport } from './routes/api/public/tts/speak'
 
 const IndexRoute = IndexRouteImport.update({
@@ -175,6 +176,11 @@ const ApiPublicPaymentsWebhookRoute =
     path: '/api/public/payments/webhook',
     getParentRoute: () => rootRouteImport,
   } as any)
+const ApiPublicPitchBankRoute = ApiPublicPitchBankRouteImport.update({
+  id: '/api/public/pitch/bank',
+  path: '/api/public/pitch/bank',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiPublicTtsSpeakRoute = ApiPublicTtsSpeakRouteImport.update({
   id: '/api/public/tts/speak',
   path: '/api/public/tts/speak',
@@ -209,6 +215,7 @@ export interface FileRoutesByFullPath {
   '/api/public/live/session': typeof ApiPublicLiveSessionRoute
   '/api/public/live/verify': typeof ApiPublicLiveVerifyRoute
   '/api/public/payments/webhook': typeof ApiPublicPaymentsWebhookRoute
+  '/api/public/pitch/bank': typeof ApiPublicPitchBankRoute
   '/api/public/tts/speak': typeof ApiPublicTtsSpeakRoute
 }
 export interface FileRoutesByTo {
@@ -239,6 +246,7 @@ export interface FileRoutesByTo {
   '/api/public/live/session': typeof ApiPublicLiveSessionRoute
   '/api/public/live/verify': typeof ApiPublicLiveVerifyRoute
   '/api/public/payments/webhook': typeof ApiPublicPaymentsWebhookRoute
+  '/api/public/pitch/bank': typeof ApiPublicPitchBankRoute
   '/api/public/tts/speak': typeof ApiPublicTtsSpeakRoute
 }
 export interface FileRoutesById {
@@ -270,6 +278,7 @@ export interface FileRoutesById {
   '/api/public/live/session': typeof ApiPublicLiveSessionRoute
   '/api/public/live/verify': typeof ApiPublicLiveVerifyRoute
   '/api/public/payments/webhook': typeof ApiPublicPaymentsWebhookRoute
+  '/api/public/pitch/bank': typeof ApiPublicPitchBankRoute
   '/api/public/tts/speak': typeof ApiPublicTtsSpeakRoute
 }
 export interface FileRouteTypes {
@@ -302,6 +311,7 @@ export interface FileRouteTypes {
     | '/api/public/live/session'
     | '/api/public/live/verify'
     | '/api/public/payments/webhook'
+    | '/api/public/pitch/bank'
     | '/api/public/tts/speak'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -332,6 +342,7 @@ export interface FileRouteTypes {
     | '/api/public/live/session'
     | '/api/public/live/verify'
     | '/api/public/payments/webhook'
+    | '/api/public/pitch/bank'
     | '/api/public/tts/speak'
   id:
     | '__root__'
@@ -362,6 +373,7 @@ export interface FileRouteTypes {
     | '/api/public/live/session'
     | '/api/public/live/verify'
     | '/api/public/payments/webhook'
+    | '/api/public/pitch/bank'
     | '/api/public/tts/speak'
   fileRoutesById: FileRoutesById
 }
@@ -393,6 +405,7 @@ export interface RootRouteChildren {
   ApiPublicLiveSessionRoute: typeof ApiPublicLiveSessionRoute
   ApiPublicLiveVerifyRoute: typeof ApiPublicLiveVerifyRoute
   ApiPublicPaymentsWebhookRoute: typeof ApiPublicPaymentsWebhookRoute
+  ApiPublicPitchBankRoute: typeof ApiPublicPitchBankRoute
   ApiPublicTtsSpeakRoute: typeof ApiPublicTtsSpeakRoute
 }
 
@@ -587,6 +600,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiPublicPaymentsWebhookRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/public/pitch/bank': {
+      id: '/api/public/pitch/bank'
+      path: '/api/public/pitch/bank'
+      fullPath: '/api/public/pitch/bank'
+      preLoaderRoute: typeof ApiPublicPitchBankRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/public/tts/speak': {
       id: '/api/public/tts/speak'
       path: '/api/public/tts/speak'
@@ -625,6 +645,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiPublicLiveSessionRoute: ApiPublicLiveSessionRoute,
   ApiPublicLiveVerifyRoute: ApiPublicLiveVerifyRoute,
   ApiPublicPaymentsWebhookRoute: ApiPublicPaymentsWebhookRoute,
+  ApiPublicPitchBankRoute: ApiPublicPitchBankRoute,
   ApiPublicTtsSpeakRoute: ApiPublicTtsSpeakRoute,
 }
 export const routeTree = rootRouteImport

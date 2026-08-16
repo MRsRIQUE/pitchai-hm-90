@@ -47,6 +47,15 @@ export type LiveConfig = {
   respostasIA: boolean;
   /** Envia a resposta gerada também como texto no chat do TikTok. */
   responderNoChat: boolean;
+  /** Banco horário reutilizado para economizar geração de texto e voz. */
+  pitchBank: {
+    enabled: boolean;
+    variants: number;
+    ttlMinutes: number;
+    minIntervalSec: number;
+    maxIntervalSec: number;
+    cacheReplies: boolean;
+  };
   notificacoesVenda: boolean;
   /** Som de caixa registradora a cada venda detectada. */
   somVenda: { enabled: boolean; volume: number };
@@ -115,6 +124,14 @@ export const DEFAULT_CONFIG: LiveConfig = {
   encerrarTempo: { enabled: false, minutes: 120 },
   respostasIA: true,
   responderNoChat: false,
+  pitchBank: {
+    enabled: true,
+    variants: 12,
+    ttlMinutes: 60,
+    minIntervalSec: 45,
+    maxIntervalSec: 75,
+    cacheReplies: true,
+  },
   notificacoesVenda: true,
   somVenda: { enabled: true, volume: 0.8 },
 
@@ -156,6 +173,7 @@ export function loadConfig(): LiveConfig {
         usarListaPadrao: parsed.filtros?.usarListaPadrao ?? DEFAULT_CONFIG.filtros.usarListaPadrao,
       },
       autoFixar: { ...DEFAULT_CONFIG.autoFixar, ...(parsed.autoFixar ?? {}) },
+      pitchBank: { ...DEFAULT_CONFIG.pitchBank, ...(parsed.pitchBank ?? {}) },
       selectors: { ...DEFAULT_CONFIG.selectors, ...(parsed.selectors ?? {}) },
       somVenda: { ...DEFAULT_CONFIG.somVenda, ...(parsed.somVenda ?? {}) },
     };
