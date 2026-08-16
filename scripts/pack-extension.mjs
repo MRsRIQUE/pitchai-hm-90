@@ -131,6 +131,32 @@ try {
     stdio: "pipe",
   });
 }
+// ---------------------------------------------------------------------------
+// Versão única do produto: o manifest da extensão é a fonte da verdade.
+// O site lia uma constante escrita à mão que parou de ser bumpada e ficou 14
+// versões atrás. Além de mostrar o número errado no painel e na página de
+// download, ela congelava o cache-buster de /pitchai-extension.zip?v=… — o
+// usuário podia baixar um zip velho servido do cache.
+// ---------------------------------------------------------------------------
+const versionFile = path.join(rootDir, "src", "lib", "live", "version.ts");
+const versionSource = `/**
+ * Versão única do produto — usada no painel, rodapé e página de download.
+ *
+ * ARQUIVO GERADO por scripts/pack-extension.mjs a partir de
+ * extension/manifest.json. Não edite à mão: bumpe o manifest e rode
+ * \`npm run build:extension\`.
+ */
+export const APP_VERSION = "${manifest.version}";
+`;
+const versionBefore = existsSync(versionFile) ? readFileSync(versionFile, "utf8") : "";
+if (versionBefore !== versionSource) {
+  writeFileSync(versionFile, versionSource);
+  const antes = versionBefore.match(/APP_VERSION = "([^"]+)"/)?.[1] ?? "ausente";
+  console.log(
+    `[pack-extension] ${path.relative(rootDir, versionFile)} sincronizado: ${antes} → ${manifest.version}`,
+  );
+}
+
 const size = statSync(outZip).size;
 console.log(
   `[pack-extension] OK — ${path.relative(rootDir, outZip)} (${(size / 1024).toFixed(1)} KB, v${manifest.version}, ${FILES.length} arquivos)`,
