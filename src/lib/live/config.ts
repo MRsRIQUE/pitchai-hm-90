@@ -4,8 +4,36 @@ export type Product = {
   id: string;
   name: string;
   description: string;
+  /**
+   * Preço como texto já formatado pela vitrine ("R$ 89,90", ou a faixa inteira
+   * "R$ 29,90 - R$ 49,90"). Continua sendo o fallback de todo catálogo gravado
+   * antes de `priceCents` existir, então segue preenchido.
+   */
   price: string;
   active: boolean;
+
+  /*
+   * Campos abaixo são opcionais porque o catálogo já gravado não os tem, e
+   * porque a vitrine nem sempre consegue extraí-los. A UI trata cada ausência:
+   * sem `imageUrl` mostra as iniciais do produto, sem `priceCents` cai no
+   * `price` acima, e sem nenhum dos dois esconde o preço.
+   */
+
+  /** URL absoluta https da foto. */
+  imageUrl?: string | null;
+  /**
+   * Preço em CENTAVOS, inteiro. 8990 = R$ 89,90.
+   * Inteiro e não decimal porque dinheiro em float acumula erro.
+   * Ausente = preço desconhecido; `0` = produto grátis. Não são a mesma coisa.
+   */
+  priceCents?: number | null;
+  /**
+   * Teto da faixa, quando o produto é vendido em faixa. Presente só nesse caso —
+   * produto de preço único vem sem ele.
+   */
+  priceMaxCents?: number | null;
+  /** ISO 4217. Ausente ou vazio = "BRL". */
+  currency?: string | null;
 };
 
 export type AIContext = {
@@ -197,34 +225,140 @@ export function newProduct(): Product {
   };
 }
 
+/** O que a extensão manda por produto — ver `VitrineItem` em `./sync`. */
+export type VitrineItemEntrada = {
+  /** Id do produto na config compartilhada. Vazio quando a vitrine não o tem. */
+  id?: string;
+  name?: string;
+  price?: string;
+  priceCents?: number;
+  priceMaxCents?: number;
+  currency?: string;
+  imageUrl?: string;
+  description?: string;
+};
+
+/**
+ * Só os campos de mídia do item, e só os que vieram preenchidos.
+ *
+ * Chave omitida em vez de `undefined` explícito: o produto vai para o Firestore
+ * no push da config, e `undefined` é rejeitado lá.
+ */
+function midiaDoItem(item: VitrineItemEntrada): Partial<Product> {
+  const midia: Partial<Product> = {};
+  if (typeof item.priceCents === "number" && Number.isFinite(item.priceCents)) {
+    midia.priceCents = item.priceCents;
+  }
+  if (typeof item.priceMaxCents === "number" && Number.isFinite(item.priceMaxCents)) {
+    midia.priceMaxCents = item.priceMaxCents;
+  }
+  if (item.currency?.trim()) midia.currency = item.currency.trim();
+  if (item.imageUrl?.trim()) midia.imageUrl = item.imageUrl.trim();
+  return midia;
+}
+
+/** Id utilizável, ou "". Id vazio nunca vira chave: dois produtos sem id casariam. */
+function idDe(alvo: { id?: string } | null | undefined): string {
+  return alvo?.id?.trim() ?? "";
+}
+
+/** Nome como chave de comparação — sem espaços nas pontas, sem caixa. */
+function nomeChave(nome: string | null | undefined): string {
+  return String(nome ?? "")
+    .trim()
+    .toLowerCase();
+}
+
 /**
  * Converte itens vindos da vitrine do TikTok em produtos, descartando os que já
- * existem na lista. O nome (sem espaços e sem diferenciar maiúsculas) é o que
- * identifica a duplicata — mesma regra usada na importação pelo catálogo.
+ * existem na lista. O id manda; o nome (sem espaços e sem diferenciar
+ * maiúsculas) só decide quando falta id dos dois lados — mesma regra usada na
+ * importação pelo catálogo.
  */
 export function vitrineItemsToNewProducts(
   produtosAtuais: Product[],
-  items: { name?: string; price?: string; description?: string }[],
+  items: VitrineItemEntrada[],
 ): Product[] {
-  const existentes = new Set(produtosAtuais.map((p) => p.name.toLowerCase().trim()));
+  const idsExistentes = new Set(produtosAtuais.map(idDe).filter(Boolean));
+  const nomesExistentes = new Set(produtosAtuais.map((p) => nomeChave(p.name)));
   const novos: Product[] = [];
 
   for (const item of items) {
     const name = String(item?.name ?? "").trim();
-    const key = name.toLowerCase();
-    if (!name || existentes.has(key)) continue;
+    if (!name) continue;
 
-    existentes.add(key);
+    // Quem renomeou o produto à mão não bate mais por nome. Sem olhar o id
+    // antes, a importação criaria uma segunda cópia do mesmo produto.
+    const id = idDe(item);
+    if (id && idsExistentes.has(id)) continue;
+    if (nomesExistentes.has(nomeChave(name))) continue;
+
+    if (id) idsExistentes.add(id);
+    nomesExistentes.add(nomeChave(name));
     novos.push({
-      id: crypto.randomUUID(),
+      // Herda o id da vitrine em vez de sortear outro: é o que cria o vínculo
+      // que sobrevive ao usuário renomear o produto depois. Sem isso os dois
+      // lados guardariam ids diferentes e só o nome restaria para reencontrá-lo.
+      id: id || crypto.randomUUID(),
       name,
       price: String(item.price ?? "").trim(),
       description: String(item.description ?? "").trim(),
       active: false,
+      ...midiaDoItem(item),
     });
   }
 
   return novos;
+}
+
+/**
+ * Completa produtos já importados com a foto e o preço numérico que a vitrine
+ * passou a mandar.
+ *
+ * Sem isso, quem importou a vitrine antes desses campos existirem ficaria sem
+ * foto para sempre: o produto já está na lista, então a importação o trata como
+ * duplicata e nunca mais o toca.
+ *
+ * Só PREENCHE LACUNA — nunca sobrescreve valor que já está lá. Nome, descrição e
+ * o `price` em texto ficam intocados: o usuário pode ter editado à mão, e a
+ * vitrine não tem autoridade para desfazer isso.
+ *
+ * O id é quem casa produto com item; o nome é o desempate de quando falta id dos
+ * dois lados. Casar só por nome deixaria sem foto para sempre justamente quem
+ * renomeou o produto — o usuário que mais mexeu no catálogo.
+ */
+export function enrichProductsFromVitrine(
+  produtosAtuais: Product[],
+  items: VitrineItemEntrada[],
+): Product[] {
+  const porId = new Map<string, VitrineItemEntrada>();
+  const porNome = new Map<string, VitrineItemEntrada>();
+
+  for (const item of items) {
+    const id = idDe(item);
+    if (id && !porId.has(id)) porId.set(id, item);
+
+    const nome = nomeChave(item?.name);
+    if (nome && !porNome.has(nome)) porNome.set(nome, item);
+  }
+  if (porId.size === 0 && porNome.size === 0) return produtosAtuais;
+
+  let mudou = false;
+  const atualizados = produtosAtuais.map((produto) => {
+    const id = idDe(produto);
+    const item = (id ? porId.get(id) : undefined) ?? porNome.get(nomeChave(produto.name));
+    if (!item) return produto;
+
+    const faltando = Object.entries(midiaDoItem(item)).filter(
+      ([campo]) => produto[campo as keyof Product] == null,
+    );
+    if (faltando.length === 0) return produto;
+
+    mudou = true;
+    return { ...produto, ...Object.fromEntries(faltando) };
+  });
+
+  return mudou ? atualizados : produtosAtuais;
 }
 
 /**
@@ -233,21 +367,24 @@ export function vitrineItemsToNewProducts(
  */
 export function mergeVitrineProducts(
   produtosAtuais: Product[],
-  items: { name?: string; price?: string; description?: string }[],
+  items: VitrineItemEntrada[],
 ): { produtos: Product[]; addedCount: number } {
-  const novos = vitrineItemsToNewProducts(produtosAtuais, items);
-  const hasActive = produtosAtuais.some((produto) => produto.active);
+  // Completa os que já estão na lista antes de procurar novos: o produto
+  // repetido é ignorado como duplicata logo abaixo e nunca ganharia a foto.
+  const atuais = enrichProductsFromVitrine(produtosAtuais, items);
+  const novos = vitrineItemsToNewProducts(atuais, items);
+  const hasActive = atuais.some((produto) => produto.active);
 
   if (hasActive) {
     return {
-      produtos: novos.length > 0 ? [...produtosAtuais, ...novos] : produtosAtuais,
+      produtos: novos.length > 0 ? [...atuais, ...novos] : atuais,
       addedCount: novos.length,
     };
   }
 
-  if (produtosAtuais.length > 0) {
+  if (atuais.length > 0) {
     return {
-      produtos: [{ ...produtosAtuais[0], active: true }, ...produtosAtuais.slice(1), ...novos],
+      produtos: [{ ...atuais[0], active: true }, ...atuais.slice(1), ...novos],
       addedCount: novos.length,
     };
   }

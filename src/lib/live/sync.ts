@@ -110,7 +110,25 @@ export async function pushMyLiveConfig(config: LiveConfig): Promise<void> {
   );
 }
 
-export type VitrineItem = { name: string; price?: string; description?: string };
+export type VitrineItem = {
+  /**
+   * Id do produto na config compartilhada. É por ele que o painel reencontra um
+   * produto que o usuário renomeou — o nome sozinho perderia esse produto.
+   */
+  id?: string;
+  name: string;
+  /** Texto que a vitrine escreveu ("R$ 89,90"). Fallback do catálogo antigo. */
+  price?: string;
+  /** Menor preço em CENTAVOS. Ausente = desconhecido; 0 significaria "de graça". */
+  priceCents?: number;
+  /** Maior preço da faixa, em centavos. Só existe quando o produto tem faixa. */
+  priceMaxCents?: number;
+  /** ISO 4217. Ausente = o painel assume BRL. */
+  currency?: string;
+  /** URL absoluta http(s) da foto. */
+  imageUrl?: string;
+  description?: string;
+};
 
 /**
  * Chaves que a barra injetada na live (extensão) liga/desliga em tempo real e
@@ -231,13 +249,33 @@ export async function pullVitrine(options?: { signal?: AbortSignal }): Promise<{
     const remote = data.config ?? {};
     const produtos: any[] = Array.isArray(remote.produtos) ? remote.produtos : [];
 
-    const items = produtos
+    // Cada campo é copiado só quando tem o tipo certo, e omitido quando não —
+    // nunca `undefined` explícito, que o setDoc do Firestore rejeita na volta.
+    const numero = (v: unknown) =>
+      typeof v === "number" && Number.isFinite(v) && v >= 0 ? v : undefined;
+    const texto = (v: unknown) => (typeof v === "string" && v.trim() ? v : undefined);
+
+    const items: VitrineItem[] = produtos
       .filter((p) => p?.fromVitrine && typeof p?.name === "string" && p.name.trim())
-      .map((p) => ({
-        name: String(p.name),
-        price: typeof p.price === "string" ? p.price : undefined,
-        description: typeof p.description === "string" ? p.description : undefined,
-      }));
+      .map((p) => {
+        const item: VitrineItem = { name: String(p.name) };
+        const id = texto(p.id);
+        const price = typeof p.price === "string" ? p.price : undefined;
+        const priceCents = numero(p.priceCents);
+        const priceMaxCents = numero(p.priceMaxCents);
+        const currency = texto(p.currency);
+        const imageUrl = texto(p.imageUrl);
+        const description = typeof p.description === "string" ? p.description : undefined;
+
+        if (id !== undefined) item.id = id;
+        if (price !== undefined) item.price = price;
+        if (priceCents !== undefined) item.priceCents = priceCents;
+        if (priceMaxCents !== undefined) item.priceMaxCents = priceMaxCents;
+        if (currency !== undefined) item.currency = currency;
+        if (imageUrl !== undefined) item.imageUrl = imageUrl;
+        if (description !== undefined) item.description = description;
+        return item;
+      });
 
     return {
       items,

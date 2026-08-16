@@ -692,14 +692,41 @@
   let lastScrape = { api: 0, dom: 0, total: 0, at: 0 };
 
   function productFingerprint(p) {
-    return [p?.pid, p?.name, p?.price, p?.description, p?.image, p?.stock]
+    return [p?.pid, p?.name, p?.price, p?.description, p?.imageUrl, p?.stock]
       .map((value) => String(value || "").trim())
       .join("\u241f");
   }
 
+  /**
+   * Normaliza o produto cru da API antes de guardar.
+   *
+   * O hook.js entrega o payload como o TikTok escreveu (`image`, pre\u00e7o s\u00f3 como
+   * texto); daqui para frente o formato \u00e9 o que o painel consome. Converter na
+   * entrada evita ter que lembrar disso em cada ponto de consumo.
+   */
+  function normalizeNetProduct(p) {
+    const centavos = parsePriceCents(p?.price);
+    const moeda = currencyFromPrice(p?.price);
+    const foto = isUsableImageUrl(p?.imageUrl)
+      ? String(p.imageUrl).trim()
+      : isUsableImageUrl(p?.image)
+        ? String(p.image).trim()
+        : "";
+
+    const normalizado = { ...p };
+    delete normalizado.image;
+    if (centavos) normalizado.priceCents = centavos.cents;
+    if (centavos?.maxCents) normalizado.priceMaxCents = centavos.maxCents;
+    if (moeda) normalizado.currency = moeda;
+    if (foto) normalizado.imageUrl = foto;
+    else delete normalizado.imageUrl;
+    return normalizado;
+  }
+
   function onNetProducts(list) {
     let changed = 0;
-    for (const p of list) {
+    for (const raw of list) {
+      const p = normalizeNetProduct(raw);
       if (isBadProductName(p.name)) continue;
       let key = p.pid ? `#${p.pid}` : normKey(p.name);
       if (!key || key === "#") continue;
@@ -1146,6 +1173,20 @@
   // handles de conta: "arthurdias993", "@loja.oficial"
   const HANDLE_RX = /^@?[a-z][a-z0-9._-]{2,}\d{0,6}$/i;
 
+  // Os títulos mais compridos do catálogo real ficam perto de 160 caracteres;
+  // textContent de container passa de 200. Mesmo teto do ProductSchema.
+  const MAX_PRODUCT_NAME_LEN = 200;
+  // Emenda de textContent: as palavras grudam na fronteira entre elementos
+  // irmãos ("relâmpagoRecompensa"). Exige 3 minúsculas antes da maiúscula porque
+  // marca não é emenda — "iPhone", "20000mAh" e "MagSafe" têm no máximo 2.
+  const GLUED_WORDS_RX = /\p{Ll}{3}\p{Lu}/gu;
+  // Nome real chega a 3 somando marcas ("PowerBank ... SmartWatch"); o lixo
+  // importado tinha 9.
+  const MAX_GLUED_WORDS = 3;
+  // Estado vazio da vitrine. Não ancorado: aparece sozinho e emendado no meio.
+  const EMPTY_STATE_RX =
+    /(ainda\s+n[ãa]o\s+h[áa]\s+produtos|produtos\s+adicionados\s+aparecer[ãa]o|apenas\s+para\s+espectadores)/i;
+
   /** Nomes da conta/streamer detectados na página — nunca são produto. */
   const accountNames = new Set();
   let _accountAt = 0;
@@ -1199,9 +1240,19 @@
   }
 
   function isBadProductName(name) {
+    // Comprimento medido no bruto: cleanName trunca em 200 e esconderia o excesso.
+    const raw = String(name || "")
+      .replace(/\s+/g, " ")
+      .trim();
+    if (raw.length > MAX_PRODUCT_NAME_LEN) return true;
+
     const cleaned = cleanName(name);
     const key = normKey(cleaned);
     if (!key || key.length < 4) return true;
+    // Emendas e estado vazio não dependem de conhecer os rótulos do TikTok —
+    // continuam valendo quando ele renomeia os botões.
+    if ((cleaned.match(GLUED_WORDS_RX) || []).length > MAX_GLUED_WORDS) return true;
+    if (EMPTY_STATE_RX.test(cleaned)) return true;
     if (PRODUCT_CHROME_RX.test(cleaned)) return true;
     if (BADGE_RX.test(cleaned) || JUNK_NAME_RX.test(cleaned) || PRODUCT_UI_RX.test(cleaned))
       return true;
@@ -1295,7 +1346,15 @@
     if ((item.description || "").length > (prev.description || "").length)
       prev.description = item.description;
     if (!prev.pid && item.pid) prev.pid = item.pid;
-    if (item.image && !prev.image) prev.image = item.image;
+    if (item.imageUrl && !prev.imageUrl) prev.imageUrl = item.imageUrl;
+    // Preço numérico anda junto com o texto: se um card trouxe a faixa e outro o
+    // valor único, misturar os dois mostraria um mínimo que não é do mesmo preço.
+    if (item.priceCents != null) {
+      prev.priceCents = item.priceCents;
+      if (item.priceMaxCents != null) prev.priceMaxCents = item.priceMaxCents;
+      else delete prev.priceMaxCents;
+      if (item.currency) prev.currency = item.currency;
+    }
     if (item.stock != null) prev.stock = item.stock;
     if (item.active) prev.active = true;
     if (item.name && item.name.length > (prev.name || "").length) prev.name = item.name;
@@ -1418,6 +1477,138 @@
     return false;
   }
 
+  // ---------- Preço em centavos e foto do produto ----------
+  // O painel formata a partir de priceCents/imageUrl (ver sections/produto.ts);
+  // `price` continua sendo o texto, para o catálogo antigo já gravado.
+
+  /** Símbolo escrito na vitrine → ISO 4217. */
+  const CURRENCY_BY_SYMBOL = { R$: "BRL", US$: "USD", $: "USD", "€": "EUR", "£": "GBP" };
+  /** Liga os dois lados de uma faixa. "De X por Y" fica fora: é preço riscado. */
+  const PRICE_RANGE_SEP_RX = /^\s*[-–—~]\s*$/;
+  /** Teto combinado com o painel: acima disso ele ignora e cai no fallback. */
+  const MAX_IMAGE_URL_LEN = 2048;
+
+  /**
+   * Converte o número escrito pela vitrine em centavos.
+   *
+   * Quem decide o separador decimal é a quantidade de dígitos depois dele, não o
+   * símbolo: assim "R$ 1.299" (milhar) e "R$ 89,90" (centavo) saem certos sem
+   * depender de a página estar em pt-BR.
+   */
+  function numberToCents(raw) {
+    const limpo = String(raw)
+      .replace(/[^\d.,]/g, "")
+      .replace(/[.,]+$/, "");
+    if (!limpo) return null;
+
+    const posDecimal = Math.max(limpo.lastIndexOf(","), limpo.lastIndexOf("."));
+    let inteiros = limpo;
+    let centavos = "00";
+    if (posDecimal >= 0) {
+      const fracao = limpo.slice(posDecimal + 1);
+      // 3 dígitos depois do separador é milhar ("1.299"), não centavo.
+      if (fracao.length === 1 || fracao.length === 2) {
+        inteiros = limpo.slice(0, posDecimal);
+        centavos = fracao.padEnd(2, "0");
+      }
+    }
+
+    const digitos = inteiros.replace(/\D/g, "");
+    // Acima de 9 dígitos não é preço: é id de produto que escapou do PRICE_RX.
+    if (!digitos || digitos.length > 9) return null;
+    return Number(digitos) * 100 + Number(centavos);
+  }
+
+  /**
+   * Preço em centavos. Devolve null quando não há preço — nunca 0, que é um
+   * preço válido e faria o painel anunciar o produto de graça.
+   */
+  function parsePriceCents(raw) {
+    if (!raw) return null;
+    const texto = String(raw);
+    const rx = new RegExp(PRICE_RX.source, "gi");
+    const achados = [];
+    let m;
+    while ((m = rx.exec(texto)) !== null) {
+      const cents = numberToCents(m[0]);
+      if (cents !== null) achados.push({ cents, inicio: m.index, fim: m.index + m[0].length });
+    }
+    if (!achados.length) return null;
+
+    for (let i = 1; i < achados.length; i++) {
+      if (!PRICE_RANGE_SEP_RX.test(texto.slice(achados[i - 1].fim, achados[i].inicio))) continue;
+      const menor = Math.min(achados[i - 1].cents, achados[i].cents);
+      const maior = Math.max(achados[i - 1].cents, achados[i].cents);
+      if (menor !== maior) return { cents: menor, maxCents: maior };
+    }
+    return { cents: Math.min(...achados.map((a) => a.cents)) };
+  }
+
+  /** Moeda lida do símbolo; undefined quando não há preço (o painel assume BRL). */
+  function currencyFromPrice(raw) {
+    const simbolo = String(raw || "").match(PRICE_RX)?.[1];
+    return simbolo ? CURRENCY_BY_SYMBOL[simbolo.toUpperCase()] : undefined;
+  }
+
+  /**
+   * URL que sobrevive à viagem até o painel. Só http(s): `blob:` morre fora da
+   * aba do TikTok e `data:` estoura o doc de 1 MiB no Firestore. Domínio não é
+   * filtrado de propósito — a CDN do TikTok rotaciona host.
+   */
+  function isUsableImageUrl(url) {
+    if (!url) return false;
+    const limpo = String(url).trim();
+    if (limpo.length > MAX_IMAGE_URL_LEN) return false;
+    return /^https?:\/\/\S+$/i.test(limpo);
+  }
+
+  /**
+   * Maior resolução de um srcset. A vírgula só separa candidatos quando vem
+   * antes de outra URL — a própria URL da CDN tem vírgula no recorte.
+   */
+  function pickBestSrcsetUrl(srcset) {
+    if (!srcset) return "";
+    let melhor = "";
+    let melhorPeso = -1;
+    for (const parte of String(srcset).split(/,\s+(?=https?:\/\/|\/)/)) {
+      const [url, descritor] = parte.trim().split(/\s+/);
+      if (!url) continue;
+      const peso = descritor ? parseFloat(descritor) || 1 : 1;
+      if (peso > melhorPeso) {
+        melhorPeso = peso;
+        melhor = url;
+      }
+    }
+    return melhor;
+  }
+
+  /**
+   * Foto do produto no card. Pula avatar — é para isso que looksLikeAvatar
+   * existe — e prefere o srcset, que traz a resolução maior; o src costuma vir
+   * na miniatura borrada que o TikTok usa enquanto carrega.
+   */
+  function extractImageUrl(card, imgs) {
+    for (const img of imgs || []) {
+      if (looksLikeAvatar(img)) continue;
+      const candidata =
+        pickBestSrcsetUrl(img.getAttribute?.("srcset")) || (img.getAttribute?.("src") || "").trim();
+      if (isUsableImageUrl(candidata)) return candidata;
+    }
+
+    // Muito card do TikTok pinta a foto como background em vez de <img>.
+    try {
+      const comFundo = [card, ...Array.from(card.querySelectorAll("[style*='image']")).slice(0, 4)];
+      for (const el of comFundo) {
+        const url = (getComputedStyle(el).backgroundImage || "").match(
+          /url\(["']?(.*?)["']?\)/,
+        )?.[1];
+        if (isUsableImageUrl(url)) return url;
+      }
+    } catch {}
+
+    return "";
+  }
+
   /** Avatares são redondos/pequenos — nunca contam como imagem de produto. */
   function looksLikeAvatar(img) {
     try {
@@ -1518,7 +1709,22 @@
       .join(" · ")
       .slice(0, 400);
 
-    return { pid, name, price: price.replace(/\s+/g, " ").trim().slice(0, 40), description };
+    const centavos = parsePriceCents(price);
+    const moeda = currencyFromPrice(price);
+    const imageUrl = extractImageUrl(card, imgs);
+
+    // Campo ausente em vez de vazio: o painel distingue "não sei o preço" de
+    // "de graça" pela ausência, e undefined explode no setDoc do Firestore.
+    return {
+      pid,
+      name,
+      price: price.replace(/\s+/g, " ").trim().slice(0, 40),
+      ...(centavos ? { priceCents: centavos.cents } : {}),
+      ...(centavos?.maxCents ? { priceMaxCents: centavos.maxCents } : {}),
+      ...(moeda ? { currency: moeda } : {}),
+      ...(imageUrl ? { imageUrl } : {}),
+      description,
+    };
   }
 
   function hasMultipleProductRows(el) {
@@ -1654,6 +1860,12 @@
           name: p.name,
           price: p.price || "",
           description: p.description || "",
+          // A foto e o preço numérico vêm daqui, da API — remontar o produto
+          // sem eles era o que apagava a imagem que o hook já tinha lido.
+          ...(p.priceCents != null ? { priceCents: p.priceCents } : {}),
+          ...(p.priceMaxCents != null ? { priceMaxCents: p.priceMaxCents } : {}),
+          ...(p.currency ? { currency: p.currency } : {}),
+          ...(p.imageUrl ? { imageUrl: p.imageUrl } : {}),
         },
         resultsIdx,
       );
@@ -3524,6 +3736,12 @@
           pid: s.pid || "",
           name: s.name,
           price: s.price || "",
+          // Este é o objeto que vai para a config e chega ao painel: campo que
+          // não for copiado aqui é campo que o usuário nunca vê.
+          ...(s.priceCents != null ? { priceCents: s.priceCents } : {}),
+          ...(s.priceMaxCents != null ? { priceMaxCents: s.priceMaxCents } : {}),
+          ...(s.currency ? { currency: s.currency } : {}),
+          ...(s.imageUrl ? { imageUrl: s.imageUrl } : {}),
           description: s.description || "",
           active: false,
           fromVitrine: true,

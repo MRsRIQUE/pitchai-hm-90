@@ -4,20 +4,34 @@
  */
 
 import { z } from "zod";
+import { MAX_IMAGE_URL_LEN, MAX_PRODUCT_NAME_LEN } from "../utils/string";
 
 // ============================================================================
 // Schemas para dados do TikTok
 // ============================================================================
 
-/** Schema para um produto do TikTok Shop */
+/**
+ * Schema para um produto do TikTok Shop.
+ *
+ * `price` é o texto que a vitrine escreveu ("R$ 89,90"); `priceCents` é o mesmo
+ * valor em centavos, que é o que o painel formata. Os dois convivem: o texto
+ * atende o catálogo antigo, já gravado, que não tem os campos numéricos.
+ */
 export const ProductSchema = z.object({
   pid: z.string().max(64).optional(),
   id: z.string().max(64).optional(),
-  name: z.string().min(4).max(200),
+  name: z.string().min(4).max(MAX_PRODUCT_NAME_LEN),
   price: z.string().max(40).optional(),
+  /** Menor preço em CENTAVOS. Ausente = preço desconhecido; 0 seria "de graça". */
+  priceCents: z.number().int().nonnegative().optional(),
+  /** Maior preço da faixa, em centavos. Só existe quando o produto tem faixa. */
+  priceMaxCents: z.number().int().nonnegative().optional(),
+  /** ISO 4217. Ausente = o painel assume BRL. */
+  currency: z.string().max(3).optional(),
   description: z.string().max(400).optional(),
   stock: z.number().optional(),
-  image: z.string().optional(),
+  /** URL absoluta http(s) da foto. Ver `isUsableImageUrl`. */
+  imageUrl: z.string().max(MAX_IMAGE_URL_LEN).optional(),
   active: z.boolean().optional(),
   fromVitrine: z.boolean().optional(),
   demo: z.boolean().optional(),
@@ -453,11 +467,19 @@ export {
   isHandleName,
   productKey,
   namesMatch,
+  parsePriceCents,
+  currencyFromPrice,
+  isUsableImageUrl,
+  pickBestSrcsetUrl,
   PRICE_RX,
   CTA_RX,
   BADGE_RX,
   JUNK_NAME_RX,
+  MAX_IMAGE_URL_LEN,
+  MAX_PRODUCT_NAME_LEN,
 } from "../utils/string";
+
+export type { PrecoCentavos } from "../utils/string";
 
 export { encryptConfigObj, decryptConfigObj, signRequest } from "../utils/crypto";
 

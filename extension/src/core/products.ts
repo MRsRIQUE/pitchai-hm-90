@@ -12,6 +12,10 @@ import {
   isBadProductName,
   cleanName,
   normKey,
+  parsePriceCents,
+  currencyFromPrice,
+  isUsableImageUrl,
+  pickBestSrcsetUrl,
   PRICE_RX,
   CTA_RX,
 } from "../types";
@@ -118,6 +122,36 @@ export function extractPrice(card: HTMLElement): string {
 }
 
 /**
+ * Extrai a foto do produto de um elemento DOM.
+ *
+ * Pula avatar: há foto de perfil no DOM da live, e é justamente por isso que
+ * `looksLikeAvatar` existe. Prefere o `srcset` porque ele traz a resolução maior
+ * — o `src` costuma vir na miniatura borrada que o TikTok usa no carregamento.
+ */
+export function extractImageUrl(card: HTMLElement): string {
+  for (const img of Array.from(card.querySelectorAll<HTMLImageElement>("img"))) {
+    if (looksLikeAvatar(img)) continue;
+
+    const candidata =
+      pickBestSrcsetUrl(img.getAttribute("srcset")) || (img.getAttribute("src") || "").trim();
+    if (isUsableImageUrl(candidata)) return candidata;
+  }
+
+  // Muito card do TikTok pinta a foto como background em vez de <img>.
+  const comFundo = [card, ...Array.from(card.querySelectorAll<HTMLElement>("[style*='image']"))];
+  for (const el of comFundo) {
+    try {
+      const url = (getComputedStyle(el).backgroundImage || "").match(/url\(["']?(.*?)["']?\)/)?.[1];
+      if (isUsableImageUrl(url)) return url as string;
+    } catch {
+      // Ignora erros
+    }
+  }
+
+  return "";
+}
+
+/**
  * Extrai a descrição de um elemento DOM
  */
 export function extractDescription(text: string, name: string, price: string): string {
@@ -190,11 +224,19 @@ export function parseProductCard(card: HTMLElement): Product | null {
     if (isBadProductName(name)) return null;
 
     const description = extractDescription(text, name, price);
+    const centavos = parsePriceCents(price);
+    const imageUrl = extractImageUrl(card);
 
+    // Campos ausentes em vez de vazios: o painel distingue "não sei o preço" de
+    // "de graça" pela ausência, e um 0 aqui anunciaria o produto errado.
     return {
       pid: pid || "",
       name,
       price,
+      ...(centavos ? { priceCents: centavos.cents } : {}),
+      ...(centavos?.maxCents ? { priceMaxCents: centavos.maxCents } : {}),
+      ...(currencyFromPrice(price) ? { currency: currencyFromPrice(price) } : {}),
+      ...(imageUrl ? { imageUrl } : {}),
       description,
       fromVitrine: true,
     };
