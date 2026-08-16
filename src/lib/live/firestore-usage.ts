@@ -39,7 +39,30 @@ export function subscribeToUserUsageStats(
     (snapshot) => {
       const items = snapshot.docs
         .filter((item) => item.id !== "__test_connection__")
-        .map((item) => ({ ...(item.data() as UserAiUsageStat), userId: item.id }));
+        .map((item): UserAiUsageStat => {
+          const data = item.data() as Partial<UserAiUsageStat>;
+          const tokensInput = Number(data.tokensInput) || 0;
+          const tokensOutput = Number(data.tokensOutput) || 0;
+          const status = ["active", "quota_alert", "throttled", "blocked"].includes(
+            String(data.status),
+          )
+            ? (data.status as UserAiUsageStat["status"])
+            : "active";
+          return {
+            userId: item.id,
+            userEmail: String(data.userEmail || "(sem e-mail)"),
+            tokensInput,
+            tokensOutput,
+            totalTokens: Number(data.totalTokens) || tokensInput + tokensOutput,
+            apiCallCount: Number(data.apiCallCount) || 0,
+            callFrequencyPerMin: Number(data.callFrequencyPerMin) || 0,
+            lastApiCallAt: String(data.lastApiCallAt || ""),
+            activeModel: String(data.activeModel || "não informado"),
+            status,
+            costEstimateUsd: Number(data.costEstimateUsd) || 0,
+            updatedAt: String(data.updatedAt || ""),
+          };
+        });
       onUpdate(items);
     },
     (error) => {

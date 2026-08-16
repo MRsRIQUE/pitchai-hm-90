@@ -12,7 +12,13 @@ export type CompedAccess = {
 };
 
 async function assertAdmin(ctx: FirebaseAuthContext) {
-  if (!(await isAdmin(ctx.userId, ctx.user?.email))) throw new Error("Forbidden");
+  if (
+    !(await isAdmin(ctx.userId, ctx.user?.email, {
+      mode: "server",
+      userToken: ctx.firebaseToken,
+    }))
+  )
+    throw new Error("Forbidden");
 }
 
 function adminFirestoreOptions(ctx: FirebaseAuthContext) {

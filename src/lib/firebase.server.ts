@@ -848,8 +848,12 @@ export function isAdminEmail(email?: string | null): boolean {
   return normalizedEmail !== null && ADMIN_EMAILS.has(normalizedEmail);
 }
 
-export async function isAdmin(uid: string, email?: string | null): Promise<boolean> {
+export async function isAdmin(
+  uid: string,
+  email?: string | null,
+  options: { mode?: FirestoreAuthMode; userToken?: string } = {},
+): Promise<boolean> {
   if (isAdminEmail(email)) return true;
-  const doc = await fsGet(`admins/${uid}`, { mode: "public" });
-  return !!doc?.data?.role;
+  const doc = await fsGet(`admins/${uid}`, options);
+  return doc?.data?.role === "admin";
 }

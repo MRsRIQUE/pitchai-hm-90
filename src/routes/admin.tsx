@@ -50,8 +50,13 @@ function AdminPage() {
       return;
     }
     setEmail(user.email ?? "");
-    const admin = await checkIsAdmin(user.uid, user.email);
-    setStatus(admin ? "ok" : "not-admin");
+    try {
+      const admin = await checkIsAdmin();
+      setStatus(admin ? "ok" : "not-admin");
+    } catch (error) {
+      console.error("Falha ao validar acesso administrativo:", error);
+      setStatus(getFirebaseAuth().currentUser ? "not-admin" : "signed-out");
+    }
   }
 
   useEffect(() => {
@@ -183,7 +188,7 @@ function OverviewTab({ onNavigate }: { onNavigate: (tab: Tab) => void }) {
   const costs = useQuery({ queryKey: ["admin", "costs"], queryFn: fetchCosts });
   const commissions = useQuery({ queryKey: ["admin", "commissions"], queryFn: fetchCommissions });
   const ranking = useQuery({ queryKey: ["admin", "ranking"], queryFn: fetchRanking });
-  const loading = plans.isLoading && costs.isLoading && commissions.isLoading && ranking.isLoading;
+  const loading = plans.isLoading || costs.isLoading || commissions.isLoading || ranking.isLoading;
   const failedSources = [
     plans.error ? "planos e assinaturas" : null,
     costs.error ? "custos" : null,

@@ -200,7 +200,8 @@ service cloud.firestore {
     // ------------------------------------------------------------------
 
     match /admins/{uid} {
-      allow read: if true;
+      allow get: if isSignedIn() && request.auth.uid == uid;
+      allow list: if isAdmin();
       allow write: if isServer();
     }
 

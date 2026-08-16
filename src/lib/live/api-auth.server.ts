@@ -210,7 +210,19 @@ async function resolveByUserToken(token: string): Promise<string | null> {
 }
 
 async function authorizeUser(userId: string): Promise<GuardResult> {
-  const access = await resolveUserAccess(userId, { mode: "server" });
+  const [access, adminUsage] = await Promise.all([
+    resolveUserAccess(userId, { mode: "server" }),
+    fsGet(`ai_usage_stats/${userId}`, { mode: "server" }).catch(() => null),
+  ]);
+  if (adminUsage?.data?.status === "blocked") {
+    return {
+      ok: false,
+      status: 403,
+      message: "O acesso à IA desta conta foi bloqueado pela administração.",
+      userId,
+      remaining: 0,
+    };
+  }
   if (!access.active) {
     return {
       ok: false,

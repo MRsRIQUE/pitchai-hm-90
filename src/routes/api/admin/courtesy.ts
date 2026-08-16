@@ -14,7 +14,8 @@ async function requireAdmin(request: Request): Promise<AdminContext> {
   if (!token) throw new Response("Não autenticado", { status: 401 });
   const user = await verifyFirebaseIdToken(token).catch(() => null);
   if (!user) throw new Response("Sessão inválida", { status: 401 });
-  if (!(await isAdmin(user.uid, user.email))) throw new Response("Acesso negado", { status: 403 });
+  if (!(await isAdmin(user.uid, user.email, { mode: "server", userToken: token })))
+    throw new Response("Acesso negado", { status: 403 });
   return { uid: user.uid, email: user.email, token };
 }
 

@@ -106,7 +106,8 @@ export type StripeAdminSnapshot = {
 };
 
 async function ensureAdmin(ctx: FirebaseAuthContext): Promise<void> {
-  if (!(await isAdmin(ctx.userId, ctx.user?.email))) throw new Error("Forbidden");
+  if (!(await isAdmin(ctx.userId, ctx.user?.email, adminFirestoreOptions(ctx))))
+    throw new Error("Forbidden");
 }
 
 function adminFirestoreOptions(ctx: FirebaseAuthContext) {
@@ -149,12 +150,14 @@ function isRevenueActive(subscription: SubscriptionData): boolean {
 }
 
 /* ---------- Auth ---------- */
-export async function checkIsAdmin(userId: string, email?: string | null): Promise<boolean> {
-  // A allowlist por e-mail é a fonte imediata de autorização para o painel.
-  // Normalizamos aqui também para evitar falhas por espaços ou capitalização
-  // vindos do perfil do Firebase Auth.
-  const normalizedEmail = email?.trim().toLowerCase() || null;
-  return isAdmin(userId, normalizedEmail);
+const getAdminStatus = createServerFn({ method: "GET" })
+  .middleware([requireFirebaseAuth])
+  .handler(async ({ context }): Promise<boolean> =>
+    isAdmin(context.userId, context.user?.email, adminFirestoreOptions(context)),
+  );
+
+export async function checkIsAdmin(): Promise<boolean> {
+  return getAdminStatus({});
 }
 
 /* ---------- Ranking (server-only) ---------- */
@@ -792,59 +795,82 @@ const getUsersWithUsage = createServerFn({ method: "GET" })
   .handler(async ({ context }): Promise<AdminUserUsage[]> => {
     await ensureAdmin(context);
     const firestore = adminFirestoreOptions(context);
-    // Lê todos os docs de ai_usage_stats para obter uso real
-    const docs = await fsQuery("ai_usage_stats", firestore);
-    const userIds = docs.map((doc) => doc.id);
+    // Perfis são a base da listagem. Uso e cortesia são complementares,
+    // portanto contas novas ou ainda sem consumo também aparecem.
+    const [profiles, usageDocs, compedDocs] = await Promise.all([
+      fsQuery("users", firestore),
+      fsQuery("ai_usage_stats", firestore),
+      fsQuery("comped_access", firestore),
+    ]);
+    const userIds = Array.from(
+      new Set([
+        ...profiles.map((doc) => doc.id),
+        ...usageDocs.map((doc) => doc.id),
+        ...compedDocs.map((doc) => doc.id),
+      ]),
+    );
     const currentMonth = new Date().toISOString().slice(0, 7);
-    const [subscriptions, userProfiles, monthlyUsage] = await Promise.all([
+    const [subscriptions, monthlyUsage] = await Promise.all([
       fetchSubscriptionsForUsers(context, userIds),
-      fsGetMany(
-        userIds.map((userId) => `users/${userId}`),
-        firestore,
-      ),
       fsGetMany(
         userIds.map((userId) => `users/${userId}/token_usage/${currentMonth}`),
         firestore,
       ),
     ]);
     const subscriptionsByUser = new Map(subscriptions.map((sub) => [sub.userId, sub]));
-    const profilesByUser = new Map(userProfiles.map((profile) => [profile.id, profile.data]));
+    const profilesByUser = new Map(profiles.map((profile) => [profile.id, profile.data]));
+    const usageByUser = new Map(usageDocs.map((doc) => [doc.id, doc.data]));
+    const activeCompedByUser = new Map(
+      compedDocs
+        .filter((doc) => {
+          if (doc.data.status !== "comped") return false;
+          const until = String(doc.data.grantedUntil || "");
+          return !until || (Number.isFinite(Date.parse(until)) && Date.parse(until) > Date.now());
+        })
+        .map((doc) => [doc.id, doc.data]),
+    );
     const monthlyUsageByUser = new Map(
       monthlyUsage.map((usage) => {
         const match = usage.path.match(/^users\/([^/]+)\/token_usage\/[^/]+$/);
         return [match?.[1] ?? "", usage.data] as const;
       }),
     );
-    return docs.map((d): AdminUserUsage => {
-      const sub = subscriptionsByUser.get(d.id);
-      const planFromSub = sub?.plan ?? "gratuito";
-      const statFromSub = sub?.status ?? "active";
-      const isComped = sub?.status === "comped";
-      const usageStatus = (d.data.status as string) ?? "active";
-      const isBlocked = usageStatus === "blocked";
-      const currentUsage = monthlyUsageByUser.get(d.id);
-      const tokensInput = (currentUsage?.tokensInput as number) ?? 0;
-      const tokensOutput = (currentUsage?.tokensOutput as number) ?? 0;
-      return {
-        userId: d.id,
-        email:
-          (d.data.userEmail as string) ??
-          (profilesByUser.get(d.id)?.email as string) ??
-          "(sem e-mail)",
-        plan: planFromSub,
-        status: statFromSub,
-        tokensInput,
-        tokensOutput,
-        totalTokens: tokensInput + tokensOutput,
-        ttsMinutes: (d.data.ttsMinutes as number) ?? 0,
-        apiCallCount: (d.data.apiCallCount as number) ?? 0,
-        lastApiCallAt: (d.data.lastApiCallAt as string) ?? "",
-        activeModel: (d.data.activeModel as string) ?? "gemini-2.5-flash",
-        isBlocked,
-        isComped,
-        costEstimateUsd: (d.data.costEstimateUsd as number) ?? 0,
-      };
-    });
+    return userIds
+      .map((userId): AdminUserUsage => {
+        const profile = profilesByUser.get(userId);
+        const usage = usageByUser.get(userId);
+        const sub = subscriptionsByUser.get(userId);
+        const comped = activeCompedByUser.get(userId);
+        const isComped = Boolean(comped);
+        const planFromSub = String(comped?.plan || sub?.plan || "gratuito");
+        const statFromSub = isComped ? "comped" : (sub?.status ?? "free");
+        const usageStatus = (usage?.status as string) ?? "active";
+        const isBlocked = usageStatus === "blocked";
+        const currentUsage = monthlyUsageByUser.get(userId);
+        const tokensInput = (currentUsage?.tokensInput as number) ?? 0;
+        const tokensOutput = (currentUsage?.tokensOutput as number) ?? 0;
+        return {
+          userId,
+          email:
+            (profile?.email as string) ??
+            (usage?.userEmail as string) ??
+            (comped?.email as string) ??
+            "(sem e-mail)",
+          plan: planFromSub,
+          status: statFromSub,
+          tokensInput,
+          tokensOutput,
+          totalTokens: tokensInput + tokensOutput,
+          ttsMinutes: (usage?.ttsMinutes as number) ?? 0,
+          apiCallCount: (usage?.apiCallCount as number) ?? 0,
+          lastApiCallAt: (usage?.lastApiCallAt as string) ?? "",
+          activeModel: (usage?.activeModel as string) ?? "não informado",
+          isBlocked,
+          isComped,
+          costEstimateUsd: (usage?.costEstimateUsd as number) ?? 0,
+        };
+      })
+      .sort((a, b) => b.lastApiCallAt.localeCompare(a.lastApiCallAt));
   });
 
 export async function fetchUsersWithUsage(): Promise<AdminUserUsage[]> {
@@ -871,19 +897,6 @@ const setBlockedFn = createServerFn({ method: "POST" })
       },
       firestore,
     );
-    const currentMonth = new Date().toISOString().slice(0, 7);
-    await fsSet(
-      `users/${data.userId}/token_usage/${currentMonth}`,
-      {
-        userId: data.userId,
-        period: currentMonth,
-        tokensInput: 0,
-        tokensOutput: 0,
-        totalTokens: 0,
-        updatedAt: new Date().toISOString(),
-      },
-      firestore,
-    );
     return { ok: true };
   });
 
@@ -900,21 +913,58 @@ const resetUsageAdminFn = createServerFn({ method: "POST" })
   .handler(async ({ data, context }) => {
     await ensureAdmin(context);
     const firestore = adminFirestoreOptions(context);
-    const current = await fsGet(`ai_usage_stats/${data.userId}`, firestore);
-    await fsSet(
-      `ai_usage_stats/${data.userId}`,
-      {
-        ...((current?.data as any) ?? {}),
-        tokensInput: 0,
-        tokensOutput: 0,
-        totalTokens: 0,
-        apiCallCount: 0,
-        callFrequencyPerMin: 0,
-        costEstimateUsd: 0,
-        updatedAt: new Date().toISOString(),
-      },
-      firestore,
-    );
+    const now = new Date();
+    const day = now.toISOString().slice(0, 10);
+    const month = day.slice(0, 7);
+    const [stats, daily, monthly] = await Promise.all([
+      fsGet(`ai_usage_stats/${data.userId}`, firestore),
+      fsGet(`users/${data.userId}/usage/${day}`, firestore),
+      fsGet(`users/${data.userId}/token_usage/${month}`, firestore),
+    ]);
+    const updatedAt = now.toISOString();
+    await Promise.all([
+      fsSet(
+        `ai_usage_stats/${data.userId}`,
+        {
+          ...((stats?.data as any) ?? {}),
+          tokensInput: 0,
+          tokensOutput: 0,
+          totalTokens: 0,
+          apiCallCount: 0,
+          callFrequencyPerMin: 0,
+          costEstimateUsd: 0,
+          updatedAt,
+        },
+        firestore,
+      ),
+      fsSet(
+        `users/${data.userId}/usage/${day}`,
+        {
+          ...((daily?.data as any) ?? {}),
+          userId: data.userId,
+          chat_reply: 0,
+          tts_speak: 0,
+          tokensInput: 0,
+          tokensOutput: 0,
+          totalTokens: 0,
+          updatedAt,
+        },
+        firestore,
+      ),
+      fsSet(
+        `users/${data.userId}/token_usage/${month}`,
+        {
+          ...((monthly?.data as any) ?? {}),
+          userId: data.userId,
+          period: month,
+          tokensInput: 0,
+          tokensOutput: 0,
+          totalTokens: 0,
+          updatedAt,
+        },
+        firestore,
+      ),
+    ]);
     return { ok: true };
   });
 

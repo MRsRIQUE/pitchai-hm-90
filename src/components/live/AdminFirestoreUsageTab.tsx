@@ -28,6 +28,10 @@ export function AdminFirestoreUsageTab() {
   const [statusFilter, setStatusFilter] = useState("all");
   const { data: costs } = useQuery({ queryKey: ["admin", "costs"], queryFn: fetchCosts });
   const usdBrlRate = Number(costs?.usd_brl ?? 0);
+  const availableModels = useMemo(
+    () => Array.from(new Set(stats.map((item) => item.activeModel))).sort(),
+    [stats],
+  );
 
   // Initialize Firestore listeners
   useEffect(() => {
@@ -247,8 +251,11 @@ export function AdminFirestoreUsageTab() {
             className="rounded-lg bg-black/40 border border-white/10 px-2.5 py-1.5 text-white outline-none focus:border-[#7C3AED]"
           >
             <option value="all">Todos os Modelos</option>
-            <option value="gemini-2.5-flash">Gemini 2.5 Flash</option>
-            <option value="gemini-2.5-pro">Gemini 2.5 Pro</option>
+            {availableModels.map((model) => (
+              <option key={model} value={model}>
+                {model}
+              </option>
+            ))}
           </select>
 
           <select
