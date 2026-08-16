@@ -443,6 +443,39 @@ function monthlyRecurringCents(price: any, quantity = 1): number {
   return Math.round(amount / count);
 }
 
+async function listAllStripeSubscriptions(stripe: any): Promise<any[]> {
+  const subscriptions: any[] = [];
+  let startingAfter: string | undefined;
+  do {
+    const page = await stripe.subscriptions.list({
+      status: "all",
+      limit: 100,
+      expand: ["data.customer"],
+      ...(startingAfter ? { starting_after: startingAfter } : {}),
+    });
+    subscriptions.push(...page.data);
+    startingAfter = page.has_more ? page.data.at(-1)?.id : undefined;
+    if (page.has_more && !startingAfter) throw new Error("Stripe retornou paginação inválida");
+  } while (startingAfter);
+  return subscriptions;
+}
+
+async function listAllStripeInvoicesSince(stripe: any, since: number): Promise<any[]> {
+  const invoices: any[] = [];
+  let startingAfter: string | undefined;
+  do {
+    const page = await stripe.invoices.list({
+      created: { gte: since },
+      limit: 100,
+      ...(startingAfter ? { starting_after: startingAfter } : {}),
+    });
+    invoices.push(...page.data);
+    startingAfter = page.has_more ? page.data.at(-1)?.id : undefined;
+    if (page.has_more && !startingAfter) throw new Error("Stripe retornou paginação inválida");
+  } while (startingAfter);
+  return invoices;
+}
+
 const getStripeAdminSnapshot = createServerFn({ method: "GET" })
   .middleware([requireFirebaseAuth])
   .handler(async ({ context }): Promise<StripeAdminSnapshot> => {
@@ -451,9 +484,9 @@ const getStripeAdminSnapshot = createServerFn({ method: "GET" })
     const stripe = createStripeClient(environment);
     const since = Math.floor((Date.now() - 30 * 24 * 60 * 60 * 1000) / 1000);
 
-    const [stripeSubs, invoices, balance, firestoreSubs] = await Promise.all([
-      stripe.subscriptions.list({ status: "all", limit: 100, expand: ["data.customer"] }),
-      stripe.invoices.list({ created: { gte: since }, limit: 100 }),
+    const [stripeSubscriptions, stripeInvoices, balance, firestoreSubs] = await Promise.all([
+      listAllStripeSubscriptions(stripe),
+      listAllStripeInvoicesSince(stripe, since),
       stripe.balance.retrieve(),
       fetchAllSubscriptions(context),
     ]);
@@ -464,7 +497,7 @@ const getStripeAdminSnapshot = createServerFn({ method: "GET" })
     const dashboardBase =
       environment === "live" ? "https://dashboard.stripe.com" : "https://dashboard.stripe.com/test";
 
-    const subscriptions = stripeSubs.data.map((sub: any): StripeAdminSubscription => {
+    const subscriptions = stripeSubscriptions.map((sub: any): StripeAdminSubscription => {
       const item = sub.items?.data?.[0];
       const customer = typeof sub.customer === "object" ? sub.customer : null;
       const email = String(customer?.email || sub.metadata?.email || "");
@@ -485,7 +518,7 @@ const getStripeAdminSnapshot = createServerFn({ method: "GET" })
     });
 
     const revenueStatuses = new Set(["active", "trialing", "past_due"]);
-    const mrrCents = stripeSubs.data.reduce((sum: number, sub: any) => {
+    const mrrCents = stripeSubscriptions.reduce((sum: number, sub: any) => {
       if (!revenueStatuses.has(String(sub.status))) return sum;
       return (
         sum +
@@ -501,7 +534,7 @@ const getStripeAdminSnapshot = createServerFn({ method: "GET" })
       (balance[kind] || [])
         .filter((item: any) => item.currency === "brl")
         .reduce((sum: number, item: any) => sum + Number(item.amount || 0), 0);
-    const paidInvoices = invoices.data.filter((invoice: any) => invoice.status === "paid");
+    const paidInvoices = stripeInvoices.filter((invoice: any) => invoice.status === "paid");
 
     return {
       environment,
@@ -523,7 +556,7 @@ const getStripeAdminSnapshot = createServerFn({ method: "GET" })
         (sub) => ["active", "trialing", "past_due"].includes(sub.status) && !sub.firestoreSynced,
       ).length,
       subscriptions,
-      recentInvoices: invoices.data.slice(0, 20).map((invoice: any): StripeAdminInvoice => ({
+      recentInvoices: stripeInvoices.slice(0, 20).map((invoice: any): StripeAdminInvoice => ({
         id: invoice.id,
         email: String(invoice.customer_email || ""),
         amountCents: Number(invoice.amount_paid || invoice.amount_due || 0),

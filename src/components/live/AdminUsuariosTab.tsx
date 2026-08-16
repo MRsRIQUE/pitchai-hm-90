@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { CompedAccess } from "@/lib/live/comped.functions";
 import { getFirebaseAuth } from "@/lib/firebase";
 import { PITCHAI_PLANS } from "@/lib/live/plans";
+import { resolvePlanQuota } from "@/lib/live/quotas";
 import {
   calculateUserCost,
   DEFAULT_PLAN_QUOTAS,
@@ -159,6 +160,7 @@ export function UsuariosTab() {
 
   // Cotas State — carrega do servidor, fallback para defaults
   const [quotas, setQuotas] = useState<Record<string, PlanQuota>>(DEFAULT_PLAN_QUOTAS);
+  const [quotasSaved, setQuotasSaved] = useState(false);
   const { data: serverQuotas } = useQuery({
     queryKey: ["admin", "plan-quotas"],
     queryFn: fetchPlanQuotas,
@@ -169,7 +171,12 @@ export function UsuariosTab() {
 
   const saveQuotasM = useMutation({
     mutationFn: (q: Record<string, PlanQuota>) => savePlanQuotas(q),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["admin", "plan-quotas"] }),
+    onMutate: () => setQuotasSaved(false),
+    onSuccess: () => {
+      setQuotasSaved(true);
+      window.setTimeout(() => setQuotasSaved(false), 2500);
+      qc.invalidateQueries({ queryKey: ["admin", "plan-quotas"] });
+    },
   });
 
   // Profiler Calculator State
@@ -230,7 +237,7 @@ export function UsuariosTab() {
         planPrice,
       );
 
-      const quota = quotas[u.plan] || DEFAULT_PLAN_QUOTAS.gratuito;
+      const quota = resolvePlanQuota(u.plan, quotas);
       const isOverTokenQuota = u.tokensInput + u.tokensOutput >= quota.monthlyTokenLimit;
       const isOverTtsQuota = u.ttsMinutes > quota.ttsMinutesLimit;
       const isOverQuota = isOverTokenQuota || isOverTtsQuota;
@@ -976,7 +983,7 @@ export function UsuariosTab() {
               >
                 {saveQuotasM.isPending
                   ? "Salvando…"
-                  : saveQuotasM.isSuccess
+                  : quotasSaved
                     ? "Salvo! ✓"
                     : "Salvar Regras de Cotas"}
               </button>

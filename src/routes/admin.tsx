@@ -60,7 +60,6 @@ function AdminPage() {
   }
 
   useEffect(() => {
-    evaluate();
     const unsub = onAuthStateChanged(getFirebaseAuth(), () => evaluate());
     return () => unsub();
   }, []);
@@ -1127,16 +1126,21 @@ function NumField({
   step?: number;
   onChange: (v: number) => void;
 }) {
+  const [draft, setDraft] = useState(String(value));
+  useEffect(() => setDraft(String(value)), [value]);
+
   return (
     <label className="flex flex-col text-xs text-white/60">
       {label}
       <input
         type="number"
-        defaultValue={value}
+        value={draft}
         step={step ?? 1}
         min={0}
-        onBlur={(e) => {
-          const v = +e.target.value || 0;
+        onChange={(e) => setDraft(e.target.value)}
+        onBlur={() => {
+          const v = +draft || 0;
+          setDraft(String(v));
           if (v !== value) onChange(v);
         }}
         className="mt-1 bg-black/40 border border-white/10 rounded px-2 py-1.5 text-white font-mono outline-none focus:border-[#7C3AED]"

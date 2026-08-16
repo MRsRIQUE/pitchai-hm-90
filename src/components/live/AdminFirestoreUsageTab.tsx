@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
   subscribeToUserUsageStats,
@@ -28,6 +28,12 @@ export function AdminFirestoreUsageTab() {
   const [statusFilter, setStatusFilter] = useState("all");
   const { data: costs } = useQuery({ queryKey: ["admin", "costs"], queryFn: fetchCosts });
   const usdBrlRate = Number(costs?.usd_brl ?? 0);
+  const estimatedCostUsd = useCallback(
+    (item: UserAiUsageStat) =>
+      (item.tokensInput / 1000) * Number(costs?.chat_per_1k_in ?? 0.0001) +
+      (item.tokensOutput / 1000) * Number(costs?.chat_per_1k_out ?? 0.0004),
+    [costs?.chat_per_1k_in, costs?.chat_per_1k_out],
+  );
   const availableModels = useMemo(
     () => Array.from(new Set(stats.map((item) => item.activeModel))).sort(),
     [stats],
@@ -81,7 +87,7 @@ export function AdminFirestoreUsageTab() {
         ? Math.round(stats.reduce((s, u) => s + (u.callFrequencyPerMin || 0), 0) / totalUsers)
         : 0;
 
-    const totalCostUsd = stats.reduce((s, u) => s + (u.costEstimateUsd || 0), 0);
+    const totalCostUsd = stats.reduce((sum, item) => sum + estimatedCostUsd(item), 0);
     const totalCostBrl = usdBrlRate > 0 ? totalCostUsd * usdBrlRate : null;
 
     const quotaAlerts = stats.filter(
@@ -99,7 +105,7 @@ export function AdminFirestoreUsageTab() {
       totalCostBrl,
       quotaAlerts,
     };
-  }, [stats, usdBrlRate]);
+  }, [stats, usdBrlRate, estimatedCostUsd]);
 
   const handleResetUser = async (userId: string) => {
     if (!window.confirm("Zerar definitivamente as estatísticas deste usuário?")) return;
@@ -312,6 +318,7 @@ export function AdminFirestoreUsageTab() {
               ) : (
                 filteredStats.map((u) => {
                   const inputRatio = u.totalTokens > 0 ? (u.tokensInput / u.totalTokens) * 100 : 50;
+                  const itemCostUsd = estimatedCostUsd(u);
 
                   return (
                     <tr key={u.userId} className="hover:bg-white/[0.02] transition">
@@ -360,13 +367,9 @@ export function AdminFirestoreUsageTab() {
                       </td>
 
                       <td className="py-3 pr-3 text-right">
-                        <div className="text-purple-300 font-bold">
-                          ${u.costEstimateUsd.toFixed(3)}
-                        </div>
+                        <div className="text-purple-300 font-bold">${itemCostUsd.toFixed(3)}</div>
                         <div className="text-[10px] text-white/40">
-                          {usdBrlRate > 0
-                            ? `R$ ${(u.costEstimateUsd * usdBrlRate).toFixed(2)}`
-                            : "—"}
+                          {usdBrlRate > 0 ? `R$ ${(itemCostUsd * usdBrlRate).toFixed(2)}` : "—"}
                         </div>
                       </td>
 

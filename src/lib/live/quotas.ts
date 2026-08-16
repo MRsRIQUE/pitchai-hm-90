@@ -56,7 +56,9 @@ export const DEFAULT_PLAN_QUOTAS: Record<string, PlanQuota> = {
 const PLAN_ALIASES: Record<string, string> = {
   free: "gratuito",
   mensal: "pitchai_mensal",
+  starter: "pitchai_mensal",
   pro: "pitchai_trimestral",
+  studio: "pitchai_trimestral",
   pro_mensal: "pitchai_mensal",
   pitchai_pro_monthly: "pitchai_mensal",
   trimestral: "pitchai_trimestral",
