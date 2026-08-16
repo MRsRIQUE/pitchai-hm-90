@@ -50,4 +50,11 @@ describe("painel distribuído", () => {
     expect(contentSource).toContain('alvo.pid || ""');
     expect(contentSource).toContain("requiredHits");
   });
+
+  it("restringe IA/autofixar a produtos marcados e encerra live em aviso", () => {
+    expect(contentSource).toContain("const allProducts = cfg.produtos || []");
+    expect(contentSource).toContain("const produtos = ids.length");
+    expect(contentSource).toContain("o operador precisa marcar");
+    expect(contentSource).toContain('finishLive("aviso de violação detectado")');
+  });
 });

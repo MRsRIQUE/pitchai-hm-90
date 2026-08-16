@@ -1372,7 +1372,8 @@
       upsertProduct(keep, p, keepIdx);
     });
     cfg.produtos = Array.from(keep.values());
-    if (!cfg.produtos.some((p) => p.active) && cfg.produtos[0]) cfg.produtos[0].active = true;
+    // Não ativa o primeiro item automaticamente: somente produtos marcados
+    // pelo operador podem entrar no autofixar ou no contexto da IA.
     return cfg.produtos.length !== before;
   }
 
@@ -1876,7 +1877,15 @@
 
   function buildSystemPrompt(cfg) {
     const ctx = cfg.aiContext || {};
-    const produtos = cfg.produtos || [];
+    const allProducts = cfg.produtos || [];
+    const af = cfg.autoFixar || {};
+    const ids = Array.isArray(af.ids) ? af.ids : [];
+    const names = Array.isArray(af.names) ? af.names.map((name) => normKey(name)) : [];
+    const produtos = ids.length
+      ? allProducts.filter((p) => ids.includes(p.id) || (p.pid && ids.includes(p.pid)))
+      : names.length
+        ? allProducts.filter((p) => names.includes(normKey(p.name || "")))
+        : [];
     const ativo = produtos.find((p) => p.active);
     const catalog = produtos
       .map(
@@ -3958,19 +3967,16 @@
     // casa por id, pid ou nome normalizado — a vitrine pode reescrever o id.
     const ids = Array.isArray(af.ids) ? af.ids : [];
     const names = Array.isArray(af.names) ? af.names.map((n) => normKey(n)) : [];
-    if (Array.isArray(af.ids) || Array.isArray(af.names)) {
+    if (ids.length || names.length) {
       produtos = produtos.filter(
         (p) =>
           ids.includes(p.id) ||
           (p.pid && ids.includes(p.pid)) ||
           names.includes(normKey(p.name || "")),
       );
-    } else if (af.query) {
-      const q = normKey(af.query);
-      produtos = produtos.filter((p) => normKey(p.name || "").includes(q));
     } else {
-      // Nunca escolhe todos implicitamente: o operador precisa marcar quais
-      // produtos participam do autofixar.
+      // Nunca escolhe todos nem usa apenas a busca textual implicitamente:
+      // o operador precisa marcar os produtos que participam.
       produtos = [];
     }
 
@@ -4202,6 +4208,10 @@
       stopPitchLoop();
       activity.log({ type: "violation", text: "Proteção geral: IA pausada.", ts: Date.now() });
     }
+    // Aviso real na área monitorada é condição de segurança: encerra a LIVE
+    // imediatamente para evitar novas vendas/conteúdo enquanto o operador não
+    // consegue intervir. Em modo demo, finishLive apenas registra a simulação.
+    await finishLive("aviso de violação detectado");
   }
 
   async function clearViolation(cfg) {
