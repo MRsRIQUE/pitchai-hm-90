@@ -15,11 +15,11 @@ import { PitchAIEvent, PitchAIEventType } from "../types";
 export class PitchAIEventBus {
   private static instance: PitchAIEventBus;
   private listeners: Map<PitchAIEventType, Set<(data: unknown) => void>> = new Map();
-  
+
   private constructor() {
     this.listenGlobal();
   }
-  
+
   /**
    * Obtém a instância singleton
    */
@@ -29,86 +29,74 @@ export class PitchAIEventBus {
     }
     return PitchAIEventBus.instance;
   }
-  
+
   // ==========================================================================
   // Registrar Listeners
   // ==========================================================================
-  
+
   /**
    * Registra um listener para um tipo de evento
    */
-  public on<T>(
-    type: PitchAIEventType,
-    callback: (data: T) => void,
-  ): () => void {
+  public on<T>(type: PitchAIEventType, callback: (data: T) => void): () => void {
     if (!this.listeners.has(type)) {
       this.listeners.set(type, new Set());
     }
-    
+
     this.listeners.get(type)!.add(callback as (data: unknown) => void);
-    
+
     // Retorna função para remover o listener
     return () => {
       this.listeners.get(type)?.delete(callback as (data: unknown) => void);
     };
   }
-  
+
   /**
    * Registra um listener que é chamado apenas uma vez
    */
-  public once<T>(
-    type: PitchAIEventType,
-    callback: (data: T) => void,
-  ): () => void {
+  public once<T>(type: PitchAIEventType, callback: (data: T) => void): () => void {
     const onceCallback = (data: unknown) => {
       callback(data as T);
       this.off(type, onceCallback);
     };
-    
+
     return this.on(type, onceCallback);
   }
-  
+
   /**
    * Remove um listener
    */
-  public off<T>(
-    type: PitchAIEventType,
-    callback: (data: T) => void,
-  ): void {
+  public off<T>(type: PitchAIEventType, callback: (data: T) => void): void {
     this.listeners.get(type)?.delete(callback as (data: unknown) => void);
   }
-  
+
   /**
    * Remove todos os listeners de um tipo
    */
   public offAll(type: PitchAIEventType): void {
     this.listeners.delete(type);
   }
-  
+
   /**
    * Remove todos os listeners
    */
   public clear(): void {
     this.listeners.clear();
   }
-  
+
   // ==========================================================================
   // Emitir Eventos
   // ==========================================================================
-  
+
   /**
    * Emite um evento para todos os listeners
    */
-  public emit<T>(
-    type: PitchAIEventType,
-    data: T,
-  ): void {
+  public emit<T>(type: PitchAIEventType, data: T): void {
     const event: PitchAIEvent<T> = {
       type,
       data,
       timestamp: Date.now(),
     };
-    
+
     // Dispara listeners internos
     this.listeners.get(type)?.forEach((cb) => {
       try {
@@ -117,11 +105,11 @@ export class PitchAIEventBus {
         console.error(`[PitchAIEventBus] Error in listener for ${type}:`, error);
       }
     });
-    
+
     // Dispara evento global (para outros scripts)
     this.emitGlobal(event);
   }
-  
+
   /**
    * Emite um evento global (CustomEvent)
    */
@@ -136,11 +124,11 @@ export class PitchAIEventBus {
       console.error("[PitchAIEventBus] Failed to emit global event:", error);
     }
   }
-  
+
   // ==========================================================================
   // Listeners Globais
   // ==========================================================================
-  
+
   /**
    * Configura listeners para eventos globais
    */
@@ -155,12 +143,12 @@ export class PitchAIEventBus {
       "status:update",
       "mapping:update",
     ];
-    
+
     eventTypes.forEach((type) => {
       window.addEventListener(`pitchai:${type}`, (ev: Event) => {
         const customEvent = ev as CustomEvent;
         const event = customEvent.detail as PitchAIEvent;
-        
+
         if (event?.type === type) {
           this.emit(type, event.data);
         }

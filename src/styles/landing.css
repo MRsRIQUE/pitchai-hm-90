@@ -956,6 +956,9 @@
 }
 .landing .chat-a-text {
   color: #0c0c0d;
+  flex: 1;
+  min-width: 0;
+  min-height: 1.45em;
 }
 .landing .pcard {
   color: #0c0c0d;

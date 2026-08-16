@@ -54,6 +54,7 @@ export function SyncTokenCard() {
   // Sync token & quota
   const [token, setToken] = useState<string>("");
   const [busy, setBusy] = useState(false);
+  const [connectionError, setConnectionError] = useState<string | null>(null);
   const [tokenInfo, setTokenInfo] = useState<{
     plan?: string;
     remainingChat?: number;
@@ -106,6 +107,7 @@ export function SyncTokenCard() {
         setStatus("signed-out");
         setUserEmail("");
         setUserPhoto(null);
+        setConnectionError(null);
         return;
       }
 
@@ -121,13 +123,19 @@ export function SyncTokenCard() {
       }
 
       try {
+        setConnectionError(null);
         const row = await ensureMyLiveConfig();
         const t = row?.sync_token ?? "";
         setToken(t);
         setStatus("ready");
         if (t) checkStatus(t);
+        if (row?.repaired) {
+          toast.success("Conexão da extensão reparada automaticamente.");
+        }
       } catch (e: any) {
         setStatus("ready");
+        setToken("");
+        setConnectionError(e?.message || "Não foi possível preparar a conexão da extensão.");
       }
     } finally {
       bootstrapInProgress.current = false;
@@ -480,10 +488,10 @@ export function SyncTokenCard() {
   }
 
   return (
-    <Card className="space-y-4 p-4 border shadow-sm bg-card/80 backdrop-blur">
+    <Card className="w-full min-w-0 space-y-4 overflow-hidden border bg-card/80 p-4 shadow-sm backdrop-blur">
       {/* Account Info Header */}
-      <div className="flex items-center justify-between gap-2 pb-2 border-b">
-        <div className="flex items-center gap-2.5">
+      <div className="flex flex-wrap items-start justify-between gap-2 pb-2 border-b">
+        <div className="flex min-w-0 flex-1 items-center gap-2.5">
           {userPhoto ? (
             <img src={userPhoto} alt="User" className="h-8 w-8 rounded-full border" />
           ) : (
@@ -491,9 +499,9 @@ export function SyncTokenCard() {
               <User className="h-4 w-4" />
             </div>
           )}
-          <div>
-            <div className="text-xs font-bold text-foreground flex items-center gap-1.5">
-              {userEmail}
+          <div className="min-w-0 flex-1">
+            <div className="flex min-w-0 flex-wrap items-center gap-1.5 text-xs font-bold text-foreground">
+              <span className="min-w-0 break-all">{userEmail}</span>
               {tokenInfo.plan && (
                 <Badge
                   variant={tokenInfo.locked ? "destructive" : "default"}
@@ -516,7 +524,7 @@ export function SyncTokenCard() {
           variant="ghost"
           size="sm"
           onClick={handleSignOut}
-          className="h-8 text-xs gap-1 text-muted-foreground hover:text-foreground"
+          className="h-8 shrink-0 text-xs gap-1 text-muted-foreground hover:text-foreground"
         >
           <LogOut className="h-3.5 w-3.5" /> Sair
         </Button>
@@ -524,33 +532,40 @@ export function SyncTokenCard() {
 
       <ExtensionStatusBanner syncToken={token} />
 
+      {connectionError && (
+        <div className="rounded-lg border border-red-400/30 bg-red-500/10 p-3 text-xs text-red-200">
+          <strong className="block">Conexão não liberada</strong>
+          <span>{connectionError}</span>
+        </div>
+      )}
+
       <p className="text-xs text-muted-foreground">
         Se preferir fazer manualmente, copie o código abaixo e cole no campo <b>Sync token</b> da
         sua extensão:
       </p>
 
       {tokenInfo.chatLimit !== undefined && (
-        <div className="p-2.5 rounded-lg bg-muted/50 border space-y-1.5 text-xs">
-          <div className="flex items-center justify-between text-muted-foreground">
-            <span className="flex items-center gap-1 font-medium text-foreground">
+        <div className="min-w-0 space-y-2 rounded-lg border bg-muted/50 p-2.5 text-xs">
+          <div className="grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-start gap-3 text-muted-foreground">
+            <span className="flex min-w-0 items-start gap-1 font-medium leading-4 text-foreground">
               <Sparkles className="h-3.5 w-3.5 text-primary" /> Cota de mensagens hoje:
             </span>
-            <span className="font-mono font-semibold text-foreground">
+            <span className="whitespace-nowrap text-right font-mono text-[11px] font-semibold text-foreground">
               {tokenInfo.remainingChat} / {tokenInfo.chatLimit} restantes
             </span>
           </div>
-          <div className="flex items-center justify-between text-muted-foreground">
-            <span>Cota de voz (TTS) hoje:</span>
-            <span className="font-mono font-semibold text-foreground">
+          <div className="grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-start gap-3 text-muted-foreground">
+            <span className="leading-4">Cota de voz (TTS) hoje:</span>
+            <span className="whitespace-nowrap text-right font-mono text-[11px] font-semibold text-foreground">
               {tokenInfo.remainingTts} / {tokenInfo.ttsLimit} restantes
             </span>
           </div>
         </div>
       )}
 
-      <div className="flex gap-2">
-        <Input readOnly value={token} className="font-mono text-xs bg-muted/30" />
-        <Button size="icon" variant="secondary" onClick={copyToken}>
+      <div className="flex min-w-0 gap-2">
+        <Input readOnly value={token} className="min-w-0 flex-1 font-mono text-xs bg-muted/30" />
+        <Button className="shrink-0" size="icon" variant="secondary" onClick={copyToken}>
           <Copy className="h-4 w-4" />
         </Button>
       </div>

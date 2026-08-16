@@ -40,8 +40,14 @@ export async function safeFetch<T = any>(
   input: RequestInfo | URL,
   init?: SafeFetchOptions,
 ): Promise<T | null> {
-  const { timeout = 10000, onError, fallback, showToast, responseType, ...fetchOptions } =
-    init || {};
+  const {
+    timeout = 10000,
+    onError,
+    fallback,
+    showToast,
+    responseType,
+    ...fetchOptions
+  } = init || {};
 
   // Criar controller para timeout
   const controller = new AbortController();

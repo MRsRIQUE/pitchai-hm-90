@@ -30,6 +30,7 @@ import {
   fireSuccessConfetti,
 } from "@/components/live/ExtensionStatusBanner";
 import { copyToClipboard } from "@/lib/clipboard";
+import { connectSyncTokenToExtension } from "@/lib/live/extension-sync";
 
 interface QuickStartModalProps {
   open: boolean;
@@ -41,6 +42,7 @@ export function QuickStartModal({ open, onOpenChange, syncToken }: QuickStartMod
   const [step, setStep] = useState(1);
   const [extensionDetected, setExtensionDetected] = useState(false);
   const [accountLinked, setAccountLinked] = useState(false);
+  const [linkingAccount, setLinkingAccount] = useState(false);
 
   useEffect(() => {
     if (typeof window !== "undefined" && (window as any).pitchAiExtensionInstalled) {
@@ -63,11 +65,17 @@ export function QuickStartModal({ open, onOpenChange, syncToken }: QuickStartMod
       return;
     }
 
-    // Destino explícito: com "*" qualquer iframe ou script de terceiro na
-    // página receberia o token, que é a credencial usada pela extensão.
-    window.postMessage({ type: "PITCHAI_SYNC_TOKEN", token: syncToken }, window.location.origin);
-
     const copied = await copyToClipboard(syncToken);
+    setLinkingAccount(true);
+    const result = await connectSyncTokenToExtension(syncToken);
+    setLinkingAccount(false);
+    if (!result.ok) {
+      setAccountLinked(false);
+      toast.error("A extensão não confirmou a conexão", {
+        description: result.message || "Atualize a extensão e tente novamente.",
+      });
+      return;
+    }
 
     setAccountLinked(true);
     fireSuccessConfetti();
@@ -251,13 +259,16 @@ export function QuickStartModal({ open, onOpenChange, syncToken }: QuickStartMod
                 <Button
                   size="sm"
                   onClick={handleLinkAccount}
+                  disabled={linkingAccount}
                   className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs gap-2 shadow"
                 >
                   <ShieldCheck className="h-4 w-4" />
                   <span>
-                    {accountLinked
-                      ? "Re-vincular Conta do TikTok Shop 🎉"
-                      : "Vincular Minha Conta do TikTok Shop 🎉"}
+                    {linkingAccount
+                      ? "Validando conexão…"
+                      : accountLinked
+                        ? "Re-vincular Conta do TikTok Shop 🎉"
+                        : "Vincular Minha Conta do TikTok Shop 🎉"}
                   </span>
                 </Button>
               </div>

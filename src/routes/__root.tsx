@@ -10,7 +10,6 @@ import {
 import { useEffect, type ReactNode } from "react";
 
 import appCss from "../styles.css?url";
-import { reportLovableError } from "../lib/lovable-error-reporting";
 import { ThemeProvider } from "@/lib/use-theme";
 import { Toaster } from "@/components/ui/sonner";
 import { ReferralCapture } from "@/components/ReferralCapture";
@@ -36,7 +35,7 @@ function NotFoundComponent() {
 function ErrorComponent({ error, reset }: { error: Error; reset: () => void }) {
   const router = useRouter();
   useEffect(() => {
-    reportLovableError(error, { boundary: "tanstack_root_error_component" });
+    console.error("[root-error]", error);
   }, [error]);
   return (
     <div className="marketing-page flex min-h-screen items-center justify-center px-4">
@@ -119,6 +118,40 @@ function RootShell({ children }: { children: ReactNode }) {
 
 function RootComponent() {
   const { queryClient } = Route.useRouteContext();
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const clearLegacyWorker = async () => {
+      const registrations =
+        "serviceWorker" in navigator ? await navigator.serviceWorker.getRegistrations() : [];
+      const cacheKeys = "caches" in window ? await caches.keys() : [];
+      const legacyCacheKeys = cacheKeys.filter(
+        (key) => key.startsWith("fit-") || key.startsWith("pitchai-"),
+      );
+
+      await Promise.all([
+        ...registrations.map((registration) => registration.unregister()),
+        ...legacyCacheKeys.map((key) => caches.delete(key)),
+      ]);
+
+      const needsReload = registrations.length > 0 || legacyCacheKeys.length > 0;
+      const reloadKey = "pitchai-legacy-cache-cleared-v1";
+      if (!cancelled && needsReload && sessionStorage.getItem(reloadKey) !== "1") {
+        sessionStorage.setItem(reloadKey, "1");
+        window.location.reload();
+      }
+    };
+
+    void clearLegacyWorker().catch(() => {
+      // Cache cleanup must never prevent the application from rendering.
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   return (
     <QueryClientProvider client={queryClient}>
       <ThemeProvider>

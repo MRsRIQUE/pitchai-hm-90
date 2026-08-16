@@ -35,7 +35,7 @@ function QuentesPage() {
     <div className="marketing-page min-h-dvh">
       <SiteNav />
 
-      <main className="mx-auto max-w-5xl px-4 py-6">
+      <main className="desktop-rail py-8">
         <h1 className="marketing-title text-4xl sm:text-5xl">Produtos quentes 🔥</h1>
         <p className="mt-2 text-sm text-white/60">
           Seleção da equipe Pitch AI com os produtos que mais estão vendendo em live. Clique para
@@ -49,7 +49,7 @@ function QuentesPage() {
             Nenhum produto no ranking ainda.
           </p>
         ) : (
-          <div className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          <div className="desktop-card-grid mt-6">
             {items.map((p, i) => (
               <article key={p.id} className="marketing-panel overflow-hidden rounded-2xl">
                 <div className="relative aspect-[4/3] bg-black/40">

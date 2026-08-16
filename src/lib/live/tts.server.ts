@@ -10,19 +10,11 @@ import { GoogleGenAI } from "@google/genai";
  * Fonte primária: Gemini TTS nativo (@google/genai + GEMINI_API_KEY), a mesma
  * credencial já usada em /api/public/gemini/generate.
  *
- * Fallback: gateway da Lovable (compatível com a API de speech da OpenAI), usado
- * SOMENTE se LOVABLE_API_KEY existir e tiver o formato que o gateway aceita.
- * O gateway rejeita qualquer chave sem o prefixo `sk_` com 401 — era por isso que
- * o antigo fallback `process.env.LOVABLE_API_KEY || process.env.GEMINI_API_KEY`
- * nunca funcionava: uma chave do Google (`AIza...`) jamais autentica lá.
  */
 
 export const TTS_MAX_CHARS = 500;
 export const TTS_MIN_SPEED = 0.7;
 export const TTS_MAX_SPEED = 1.2;
-
-const LOVABLE_SPEECH_URL = "https://ai.gateway.lovable.dev/v1/audio/speech";
-const LOVABLE_KEY_PREFIX = "sk_";
 
 /**
  * Modelos TTS do Gemini, tentados em ordem. O primeiro que responder com áudio
@@ -62,10 +54,6 @@ const OPENAI_TO_GEMINI_VOICE: Record<string, string> = {
   sage: "Umbriel", // Neutra, tranquila
 };
 
-const GEMINI_TO_OPENAI_VOICE: Record<string, string> = Object.fromEntries(
-  Object.entries(OPENAI_TO_GEMINI_VOICE).map(([openai, gemini]) => [gemini.toLowerCase(), openai]),
-);
-
 /** Vozes prebuilt aceitas pelo Gemini TTS. */
 const GEMINI_VOICES = [
   "Zephyr",
@@ -104,21 +92,12 @@ const GEMINI_VOICE_BY_LOWER = new Map(GEMINI_VOICES.map((name) => [name.toLowerC
 
 /** Equivalente a `nova`, o DEFAULT_VOICE do front. */
 const DEFAULT_GEMINI_VOICE = "Leda";
-const DEFAULT_OPENAI_VOICE = "nova";
 
 /** Aceita tanto o id da OpenAI salvo na config quanto um nome nativo do Gemini. */
 export function resolveGeminiVoice(voice: string | undefined): string {
   const raw = (voice ?? "").trim().toLowerCase();
   if (!raw) return DEFAULT_GEMINI_VOICE;
   return OPENAI_TO_GEMINI_VOICE[raw] ?? GEMINI_VOICE_BY_LOWER.get(raw) ?? DEFAULT_GEMINI_VOICE;
-}
-
-/** Caminho inverso, para o fallback da Lovable (que fala OpenAI). */
-export function resolveOpenAiVoice(voice: string | undefined): string {
-  const raw = (voice ?? "").trim().toLowerCase();
-  if (!raw) return DEFAULT_OPENAI_VOICE;
-  if (raw in OPENAI_TO_GEMINI_VOICE) return raw;
-  return GEMINI_TO_OPENAI_VOICE[raw] ?? DEFAULT_OPENAI_VOICE;
 }
 
 // ---------------------------------------------------------------------------
@@ -138,7 +117,7 @@ export type TtsSuccess = {
   ok: true;
   audio: Uint8Array;
   contentType: string;
-  provider: "gemini" | "lovable";
+  provider: "gemini";
   model: string;
   voice: string;
 };
@@ -404,78 +383,6 @@ async function synthesizeWithGemini(
 }
 
 // ---------------------------------------------------------------------------
-// Provedor: gateway da Lovable (fallback)
-// ---------------------------------------------------------------------------
-
-async function synthesizeWithLovable(
-  apiKey: string,
-  input: { text: string; voice: string; speed: number },
-): Promise<TtsResult> {
-  let upstream: Response;
-  try {
-    upstream = await fetch(LOVABLE_SPEECH_URL, {
-      method: "POST",
-      headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
-      body: JSON.stringify({
-        model: "openai/gpt-4o-mini-tts",
-        input: input.text,
-        voice: input.voice,
-        speed: input.speed,
-        response_format: "mp3",
-      }),
-    });
-  } catch (error) {
-    return {
-      ok: false,
-      status: 503,
-      code: "upstream_unavailable",
-      message: "Não foi possível falar com o serviço de voz de reserva.",
-      detail: errorText(error),
-    };
-  }
-
-  if (!upstream.ok) {
-    const body = await upstream.text().catch(() => "");
-    if (upstream.status === 429) {
-      return {
-        ok: false,
-        status: 429,
-        code: "quota_exceeded",
-        message: "A cota do serviço de voz de reserva foi excedida.",
-        detail: body.slice(0, 500),
-      };
-    }
-    return {
-      ok: false,
-      status: 502,
-      code: "upstream_rejected",
-      message:
-        "O serviço de voz de reserva (Lovable) recusou a requisição. A LOVABLE_API_KEY provavelmente expirou.",
-      detail: `HTTP ${upstream.status}: ${body.slice(0, 500)}`,
-    };
-  }
-
-  const audio = new Uint8Array(await upstream.arrayBuffer());
-  if (!audio.length) {
-    return {
-      ok: false,
-      status: 502,
-      code: "no_audio",
-      message: "O serviço de voz de reserva respondeu sem áudio.",
-    };
-  }
-
-  return {
-    ok: true,
-    audio,
-    contentType: "audio/mpeg",
-    provider: "lovable",
-    model: "openai/gpt-4o-mini-tts",
-    voice: input.voice,
-  };
-}
-
-// ---------------------------------------------------------------------------
 // Entrada pública
 // ---------------------------------------------------------------------------
 
@@ -492,48 +399,19 @@ export async function synthesizeSpeech(input: TtsInput): Promise<TtsResult> {
 
   const speed = Math.max(TTS_MIN_SPEED, Math.min(TTS_MAX_SPEED, Number(input.speed) || 1.0));
 
-  const geminiKey = process.env.GEMINI_API_KEY?.trim();
-  const lovableKey = process.env.LOVABLE_API_KEY?.trim();
-  // O gateway da Lovable rejeita qualquer chave fora do formato `sk_...` com 401.
-  const lovableUsable = !!lovableKey && lovableKey.startsWith(LOVABLE_KEY_PREFIX);
-
-  if (!geminiKey && !lovableUsable) {
+  const geminiKey = (process.env.GEMINI_API_KEY || process.env.GCP_API_KEY)?.trim();
+  if (!geminiKey) {
     return {
       ok: false,
       status: 500,
       code: "missing_api_key",
-      message: lovableKey
-        ? "O servidor não tem GEMINI_API_KEY configurada, e a LOVABLE_API_KEY presente está em formato inválido (precisa começar com 'sk_')."
-        : "O servidor não tem GEMINI_API_KEY configurada. Sem ela a voz da IA não pode ser gerada.",
+      message: "O servidor não tem GEMINI_API_KEY nem GCP_API_KEY configurada.",
     };
   }
 
-  if (geminiKey) {
-    const result = await synthesizeWithGemini(geminiKey, {
-      text,
-      voice: resolveGeminiVoice(input.voice),
-      speed,
-    });
-    if (result.ok) return result;
-
-    if (!lovableUsable) return result;
-
-    console.warn(
-      "[tts] Gemini falhou, tentando o gateway da Lovable:",
-      result.detail ?? result.message,
-    );
-    const fallback = await synthesizeWithLovable(lovableKey!, {
-      text,
-      voice: resolveOpenAiVoice(input.voice),
-      speed,
-    });
-    // Se o fallback também falhar, o erro do provedor principal é mais útil.
-    return fallback.ok ? fallback : result;
-  }
-
-  return synthesizeWithLovable(lovableKey!, {
+  return synthesizeWithGemini(geminiKey, {
     text,
-    voice: resolveOpenAiVoice(input.voice),
+    voice: resolveGeminiVoice(input.voice),
     speed,
   });
 }

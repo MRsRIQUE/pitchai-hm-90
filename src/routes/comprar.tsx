@@ -3,7 +3,7 @@ import { onAuthStateChanged } from "firebase/auth";
 import { Loader2 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { getFirebaseAuth } from "@/lib/firebase";
-import { PITCHAI_PLANS } from "@/lib/live/plans";
+import { findPitchaiPlan } from "@/lib/live/plans";
 
 type Search = { plan?: string };
 
@@ -18,17 +18,28 @@ function ComprarPage() {
   const { plan: planId } = useSearch({ from: "/comprar" });
   const navigate = useNavigate();
   const [error, setError] = useState<string | null>(null);
-  const plan = PITCHAI_PLANS.find((item) => item.priceId === planId);
+  const plan = findPitchaiPlan(planId || "");
 
   useEffect(() => {
     if (!plan) return;
     const auth = getFirebaseAuth();
-    return onAuthStateChanged(auth, async (user) => {
+    let settled = false;
+    const redirectToSignup = () => {
+      if (settled) return;
+      settled = true;
+      const next = `/comprar?plan=${encodeURIComponent(plan.priceId)}`;
+      navigate({ to: "/entrar", search: { mode: "signup", next }, replace: true });
+    };
+    const fallback = window.setTimeout(() => {
+      if (!auth.currentUser) redirectToSignup();
+    }, 3_000);
+    const unsubscribe = onAuthStateChanged(auth, async (user) => {
       if (!user) {
-        const next = `/comprar?plan=${encodeURIComponent(plan.priceId)}`;
-        navigate({ to: "/entrar", search: { mode: "signup", next }, replace: true });
+        redirectToSignup();
         return;
       }
+      settled = true;
+      window.clearTimeout(fallback);
       try {
         const token = await user.getIdToken();
         const response = await fetch("/api/checkout/start", {
@@ -45,6 +56,11 @@ function ComprarPage() {
         setError(cause instanceof Error ? cause.message : "Não foi possível abrir o checkout.");
       }
     });
+    return () => {
+      settled = true;
+      window.clearTimeout(fallback);
+      unsubscribe();
+    };
   }, [navigate, plan]);
 
   if (!plan) {

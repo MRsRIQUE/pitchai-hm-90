@@ -1,285 +1,101 @@
-import React, { useState } from "react";
-import { useQueryClient } from "@tanstack/react-query";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import {
-  Lock,
-  CheckCircle2,
-  ExternalLink,
-  Sparkles,
-  ShieldAlert,
-  Mail,
-  Loader2,
-  HelpCircle,
-  Zap,
-} from "lucide-react";
+import { Lock, CheckCircle2, ExternalLink, Sparkles, ShieldAlert, Zap } from "lucide-react";
 import { PITCHAI_PLANS, formatBRL, type PitchaiPlan } from "@/lib/live/plans";
-import { getFirebaseAuth } from "@/lib/firebase";
 
-interface PaymentGuardProps {
-  userEmail?: string;
-  onActivated?: () => void;
+function checkoutUrl(plan: PitchaiPlan): string {
+  return "/comprar?plan=" + encodeURIComponent(plan.priceId);
 }
 
-/** Anexa o e-mail do usuário logado ao link de checkout da PerfectPay para pré-popular o campo. */
-function checkoutUrlWithEmail(plan: PitchaiPlan): string {
-  return `/comprar?plan=${encodeURIComponent(plan.priceId)}`;
-}
-
-export function PaymentGuardOverlay({ userEmail, onActivated }: PaymentGuardProps) {
-  const [activeTab, setActiveTab] = useState<"checkout" | "activate">("checkout");
-  const [emailInput, setEmailInput] = useState(userEmail || "");
-  const [loading, setLoading] = useState(false);
-  const [statusMsg, setStatusMsg] = useState<{ type: "success" | "error"; text: string } | null>(
-    null,
-  );
-
-  // Invalida queries de subscription no React Query — substitui window.location.reload().
-  const queryClient = useQueryClient();
-
-  const handleActivate = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setLoading(true);
-    setStatusMsg(null);
-
-    try {
-      // Ativação depende só de e-mail: o backend só libera acesso se existir
-      // um pagamento aprovado real registrado pelo webhook para esse e-mail.
-      const auth = getFirebaseAuth();
-      const token = auth.currentUser ? await auth.currentUser.getIdToken() : null;
-      if (!token) {
-        setStatusMsg({
-          type: "error",
-          text: "Faça login no Pitch AI antes de ativar sua licença.",
-        });
-        setLoading(false);
-        return;
-      }
-      const res = await fetch("/api/public/payments/activate", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({ email: emailInput.trim() }),
-      });
-
-      const data = await res.json();
-
-      if (!res.ok || !data.success) {
-        setStatusMsg({
-          type: "error",
-          text:
-            data.message ||
-            "Pagamento não localizado ainda para este e-mail. Verifique se digitou o mesmo e-mail usado na compra.",
-        });
-      } else {
-        setStatusMsg({
-          type: "success",
-          text: "Licença ativada com sucesso! Liberando acesso à ferramenta...",
-        });
-        // Invalida queries de subscription para que hooks refetcham do Firestore.
-        await queryClient.invalidateQueries({ queryKey: ["subscription"] });
-        if (onActivated) onActivated();
-      }
-    } catch (err) {
-      setStatusMsg({
-        type: "error",
-        text: "Erro de conexão ao ativar licença. Tente novamente em instantes.",
-      });
-    } finally {
-      setLoading(false);
-    }
-  };
-
+export function PaymentGuardOverlay() {
   return (
     <div className="relative z-50 flex min-h-[600px] w-full flex-col items-center justify-center rounded-3xl border border-purple-500/30 bg-[#120826]/95 p-6 text-white shadow-2xl backdrop-blur-2xl sm:p-10">
-      {/* Glow de Fundo */}
-      <div className="absolute -top-20 -right-20 h-80 w-80 rounded-full bg-[#FF8C00]/20 blur-3xl pointer-events-none" />
-      <div className="absolute -bottom-20 -left-20 h-80 w-80 rounded-full bg-[#7C3AED]/30 blur-3xl pointer-events-none" />
+      <div className="pointer-events-none absolute -top-20 -right-20 h-80 w-80 rounded-full bg-[#FF8C00]/20 blur-3xl" />
+      <div className="pointer-events-none absolute -bottom-20 -left-20 h-80 w-80 rounded-full bg-[#7C3AED]/30 blur-3xl" />
 
-      {/* Trava Header */}
-      <div className="relative z-10 flex flex-col items-center text-center max-w-2xl">
-        <div className="mb-4 inline-flex h-16 w-16 items-center justify-center rounded-2xl bg-amber-500/20 border border-amber-500/40 text-amber-400 shadow-lg animate-pulse">
+      <div className="relative z-10 flex max-w-2xl flex-col items-center text-center">
+        <div className="mb-4 inline-flex h-16 w-16 animate-pulse items-center justify-center rounded-2xl border border-amber-500/40 bg-amber-500/20 text-amber-400 shadow-lg">
           <Lock className="h-8 w-8" />
         </div>
-
-        <div className="inline-flex items-center gap-2 rounded-full bg-purple-900/60 border border-purple-500/40 px-4 py-1 text-xs font-bold text-purple-200 mb-3">
+        <div className="mb-3 inline-flex items-center gap-2 rounded-full border border-purple-500/40 bg-purple-900/60 px-4 py-1 text-xs font-bold text-purple-200">
           <Zap className="h-3.5 w-3.5 text-[#FF8C00]" />
-          <span>Acesso Restrito ao Assinante</span>
+          <span>Acesso restrito ao assinante</span>
         </div>
-
-        <h2 className="font-display text-2xl font-extrabold sm:text-3xl text-white">
-          Ferramenta Bloqueada — Libere seu Acesso
+        <h2 className="font-display text-2xl font-extrabold text-white sm:text-3xl">
+          Ferramenta bloqueada — libere seu acesso
         </h2>
-        <p className="mt-2 text-sm text-slate-300 leading-relaxed max-w-xl">
-          Para utilizar o assistente de IA, a automação de transmissões ao vivo no TikTok Shop e
-          respostas em tempo real, você precisa adquirir uma licença ativa.
+        <p className="mt-2 max-w-xl text-sm leading-relaxed text-slate-300">
+          Assine com segurança pelo Stripe. O acesso é liberado automaticamente pelo webhook assim
+          que o pagamento for confirmado.
         </p>
-
-        {/* Abas: Comprar Link ou Ativar Já Pago */}
-        <div className="mt-6 flex items-center rounded-full bg-white/10 p-1 border border-white/15">
-          <button
-            onClick={() => setActiveTab("checkout")}
-            className={`flex items-center gap-2 rounded-full px-5 py-2 text-xs font-bold transition-all ${
-              activeTab === "checkout"
-                ? "bg-[#FF8C00] text-white shadow-md"
-                : "text-slate-300 hover:text-white"
-            }`}
-          >
-            <Sparkles className="h-3.5 w-3.5" />
-            <span>Adquirir no Checkout (Link)</span>
-          </button>
-          <button
-            onClick={() => setActiveTab("activate")}
-            className={`flex items-center gap-2 rounded-full px-5 py-2 text-xs font-bold transition-all ${
-              activeTab === "activate"
-                ? "bg-[#7C3AED] text-white shadow-md"
-                : "text-slate-300 hover:text-white"
-            }`}
-          >
-            <Mail className="h-3.5 w-3.5" />
-            <span>Já paguei? Verificar Acesso</span>
-          </button>
+        <div className="mt-6 inline-flex items-center gap-2 rounded-full border border-white/15 bg-[#FF8C00] px-5 py-2 text-xs font-bold text-white shadow-md">
+          <Sparkles className="h-3.5 w-3.5" />
+          <span>Assinar com Stripe</span>
         </div>
       </div>
 
-      {/* Conteúdo Aba Checkout Links */}
-      {activeTab === "checkout" && (
-        <div className="relative z-10 mt-8 w-full max-w-4xl">
-          <div className="grid gap-4 sm:grid-cols-3">
-            {PITCHAI_PLANS.map((plan) => (
-              <div
-                key={plan.priceId}
-                className={`relative flex flex-col justify-between rounded-2xl border p-5 transition-all ${
-                  plan.highlight
-                    ? "border-[#FF8C00] bg-gradient-to-b from-[#2A004D] to-[#180033] shadow-[0_0_30px_rgba(255,140,0,0.3)] scale-105"
-                    : "border-white/10 bg-white/5 hover:border-white/20"
-                }`}
-              >
-                {plan.badge && (
-                  <div className="absolute -top-3 left-1/2 -translate-x-1/2 whitespace-nowrap rounded-full bg-[#FF8C00] px-3 py-0.5 text-[10px] font-black text-white shadow">
-                    {plan.badge}
-                  </div>
-                )}
-
-                <div>
-                  <h3 className="font-bold text-lg text-white">{plan.name}</h3>
-                  <div className="mt-2 flex items-baseline gap-1">
-                    <span className="text-3xl font-extrabold text-white">
-                      {formatBRL(plan.amountCents)}
-                    </span>
-                    <span className="text-xs text-slate-400">
-                      {plan.months === 1 ? "/mês" : plan.months === 3 ? "/3 meses" : "/ano"}
-                    </span>
-                  </div>
-
-                  <ul className="mt-4 space-y-2 text-xs text-slate-300 border-t border-white/10 pt-3">
-                    <li className="flex items-center gap-1.5">
-                      <CheckCircle2 className="h-3.5 w-3.5 text-emerald-400 shrink-0" />
-                      <span>Pitch automático na Live</span>
-                    </li>
-                    <li className="flex items-center gap-1.5">
-                      <CheckCircle2 className="h-3.5 w-3.5 text-emerald-400 shrink-0" />
-                      <span>Respostas de Chat e IA</span>
-                    </li>
-                    <li className="flex items-center gap-1.5">
-                      <CheckCircle2 className="h-3.5 w-3.5 text-emerald-400 shrink-0" />
-                      <span>Auto-Fixar Oferta na Vitrine</span>
-                    </li>
-                  </ul>
-                </div>
-
-                <div className="mt-6">
-                  <a
-                    href={checkoutUrlWithEmail(plan)}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className={`w-full py-3 px-4 rounded-xl font-extrabold text-xs text-center flex items-center justify-center gap-2 transition-all shadow-md ${
-                      plan.highlight
-                        ? "bg-[#FF8C00] hover:bg-[#E07B00] text-white shadow-lg"
-                        : "bg-white/10 hover:bg-white/20 text-white"
-                    }`}
-                  >
-                    <span>Comprar Plano {plan.name}</span>
-                    <ExternalLink className="h-3.5 w-3.5" />
-                  </a>
-                </div>
-              </div>
-            ))}
-          </div>
-
-          <p className="mt-6 text-center text-xs text-slate-400 flex items-center justify-center gap-1.5">
-            <ShieldAlert className="h-3.5 w-3.5 text-emerald-400" />
-            <span>Pagamento 100% seguro. Liberado na hora via Webhook ou Validação.</span>
-          </p>
-        </div>
-      )}
-
-      {/* Conteúdo Aba Ativar Licença */}
-      {activeTab === "activate" && (
-        <div className="relative z-10 mt-8 w-full max-w-md rounded-2xl border border-white/15 bg-white/5 p-6 backdrop-blur-md">
-          <h3 className="font-bold text-base text-white flex items-center gap-2">
-            <Mail className="h-4 w-4 text-[#FF8C00]" />
-            <span>Verificar Meu Pagamento</span>
-          </h3>
-          <p className="mt-1 text-xs text-slate-300">
-            Digite o mesmo e-mail que você usou na hora do pagamento. Verificamos automaticamente —
-            sem precisar de código ou chave de licença.
-          </p>
-
-          <form onSubmit={handleActivate} className="mt-4 space-y-3">
-            <div>
-              <label className="block text-[11px] font-bold text-slate-300 mb-1">
-                E-mail da Compra (PerfectPay / Checkout)
-              </label>
-              <Input
-                type="email"
-                placeholder="seu.email@exemplo.com"
-                value={emailInput}
-                onChange={(e) => setEmailInput(e.target.value)}
-                required
-                className="border-white/20 bg-black/40 text-white placeholder:text-slate-500"
-              />
-            </div>
-
-            {statusMsg && (
-              <div
-                className={`rounded-xl p-3 text-xs font-semibold ${
-                  statusMsg.type === "success"
-                    ? "bg-emerald-500/20 border border-emerald-500/40 text-emerald-300"
-                    : "bg-red-500/20 border border-red-500/40 text-red-300"
-                }`}
-              >
-                {statusMsg.text}
-              </div>
-            )}
-
-            <Button
-              type="submit"
-              disabled={loading || !emailInput}
-              className="w-full bg-[#7C3AED] hover:bg-[#6D28D9] text-white font-bold text-xs py-3 rounded-xl gap-2"
+      <div className="relative z-10 mt-8 w-full max-w-4xl">
+        <div className="grid gap-4 sm:grid-cols-3">
+          {PITCHAI_PLANS.map((plan) => (
+            <div
+              key={plan.priceId}
+              className={
+                "relative flex flex-col justify-between rounded-2xl border p-5 transition-all " +
+                (plan.highlight
+                  ? "scale-105 border-[#FF8C00] bg-gradient-to-b from-[#2A004D] to-[#180033] shadow-[0_0_30px_rgba(255,140,0,0.3)]"
+                  : "border-white/10 bg-white/5 hover:border-white/20")
+              }
             >
-              {loading ? (
-                <>
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                  <span>Validando Pagamento...</span>
-                </>
-              ) : (
-                <>
-                  <CheckCircle2 className="h-4 w-4" />
-                  <span>Validar e Liberar Acesso</span>
-                </>
+              {plan.badge && (
+                <div className="absolute -top-3 left-1/2 -translate-x-1/2 whitespace-nowrap rounded-full bg-[#FF8C00] px-3 py-0.5 text-[10px] font-black text-white shadow">
+                  {plan.badge}
+                </div>
               )}
-            </Button>
-          </form>
-
-          <div className="mt-4 border-t border-white/10 pt-3 text-[11px] text-slate-400 flex items-center gap-1.5">
-            <HelpCircle className="h-3.5 w-3.5 text-[#FF8C00] shrink-0" />
-            <span>Precisa de ajuda? O pagamento pode levar até 2 minutos para processar.</span>
-          </div>
+              <div>
+                <h3 className="text-lg font-bold text-white">{plan.name}</h3>
+                <div className="mt-2 flex items-baseline gap-1">
+                  <span className="text-3xl font-extrabold text-white">
+                    {formatBRL(plan.amountCents)}
+                  </span>
+                  <span className="text-xs text-slate-400">
+                    {plan.months === 1 ? "/mês" : plan.months === 3 ? "/3 meses" : "/ano"}
+                  </span>
+                </div>
+                <ul className="mt-4 space-y-2 border-t border-white/10 pt-3 text-xs text-slate-300">
+                  <li className="flex items-center gap-1.5">
+                    <CheckCircle2 className="h-3.5 w-3.5 shrink-0 text-emerald-400" />
+                    <span>Pitch automático na live</span>
+                  </li>
+                  <li className="flex items-center gap-1.5">
+                    <CheckCircle2 className="h-3.5 w-3.5 shrink-0 text-emerald-400" />
+                    <span>Respostas de chat com IA</span>
+                  </li>
+                  <li className="flex items-center gap-1.5">
+                    <CheckCircle2 className="h-3.5 w-3.5 shrink-0 text-emerald-400" />
+                    <span>Automação da vitrine</span>
+                  </li>
+                </ul>
+              </div>
+              <a
+                href={checkoutUrl(plan)}
+                target="_blank"
+                rel="noopener noreferrer"
+                className={
+                  "mt-6 flex w-full items-center justify-center gap-2 rounded-xl px-4 py-3 text-center text-xs font-extrabold shadow-md transition-all " +
+                  (plan.highlight
+                    ? "bg-[#FF8C00] text-white shadow-lg hover:bg-[#E07B00]"
+                    : "bg-white/10 text-white hover:bg-white/20")
+                }
+              >
+                <span>Comprar plano {plan.name}</span>
+                <ExternalLink className="h-3.5 w-3.5" />
+              </a>
+            </div>
+          ))}
         </div>
-      )}
+        <p className="mt-6 flex items-center justify-center gap-1.5 text-center text-xs text-slate-400">
+          <ShieldAlert className="h-3.5 w-3.5 text-emerald-400" />
+          <span>Pagamento processado pelo Stripe e acesso liberado automaticamente.</span>
+        </p>
+      </div>
     </div>
   );
 }

@@ -67,7 +67,7 @@ export const grantCompedAccess = createServerFn({ method: "POST" })
         `comped_access/${uid}`,
         {
           email: data.email,
-          plan: "pro",
+          plan: "pitchai_trimestral",
           status: "comped",
           grantedUntil: until,
           note: data.note || null,

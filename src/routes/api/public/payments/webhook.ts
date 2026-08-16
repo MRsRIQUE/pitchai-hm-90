@@ -1,13 +1,14 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { type StripeEnv, verifyWebhook } from "@/lib/stripe.server";
-import { PRICE_TO_PLAN } from "@/lib/live/plans";
+import { entitlementPlanId, findPitchaiPlan } from "@/lib/live/plans";
 import { fsSet, fsQuery, setSubscription } from "@/lib/firebase.server";
 
-function planFromSub(sub: any): "free" | "pro" | "max" {
+function planFromSub(sub: any): string {
   const item = sub.items?.data?.[0];
-  const key: string | undefined =
-    item?.price?.lookup_key || item?.price?.metadata?.lovable_external_id;
-  if (key && PRICE_TO_PLAN[key]) return PRICE_TO_PLAN[key];
+  const key: string | undefined = item?.price?.lookup_key;
+  if (key && findPitchaiPlan(key)) return entitlementPlanId(key);
+  const metadataPlan = sub.metadata?.plan;
+  if (findPitchaiPlan(metadataPlan)) return entitlementPlanId(metadataPlan);
   return "free";
 }
 
@@ -75,8 +76,7 @@ async function registerReferralCommission(args: {
   const rate = 0.6;
   // Gera um ID único mesmo se `periodEnd` vier null (caso de `customer.subscription.created`).
   // Antes usava `${subscriptionId}:${periodEnd ?? "current"}` que colidia em reenvios do webhook.
-  const invoiceId =
-    `${subscriptionId}:${periodEnd ?? "init_" + Date.now()}`;
+  const invoiceId = `${subscriptionId}:${periodEnd ?? "init_" + Date.now()}`;
 
   try {
     await fsSet(
@@ -167,11 +167,15 @@ export const Route = createFileRoute("/api/public/payments/webhook")({
     handlers: {
       POST: async ({ request }) => {
         const rawEnv = new URL(request.url).searchParams.get("env");
-        if (rawEnv !== "sandbox" && rawEnv !== "live") {
+        const inferredEnv: StripeEnv = process.env.STRIPE_SECRET_KEY?.startsWith("sk_live_")
+          ? "live"
+          : "sandbox";
+        const stripeEnv = rawEnv || inferredEnv;
+        if (stripeEnv !== "sandbox" && stripeEnv !== "live") {
           return Response.json({ error: "invalid_env" }, { status: 400 });
         }
         try {
-          await handleWebhook(request, rawEnv);
+          await handleWebhook(request, stripeEnv);
           return Response.json({ received: true });
         } catch (e) {
           console.error("[stripe-webhook] error:", e);

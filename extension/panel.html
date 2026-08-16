@@ -7,32 +7,88 @@
     <link rel="stylesheet" href="panel.css" />
   </head>
   <body>
-    <!-- Onboarding do primeiro uso (some após concluir) -->
-    <div class="pnl-onboarding" id="pnl-onboarding" hidden>
+    <!-- Experiência de primeiro uso: animação em tela cheia + tutorial -->
+    <div
+      class="pnl-onboarding"
+      id="pnl-onboarding"
+      hidden
+      role="dialog"
+      aria-modal="true"
+      aria-label="Tutorial do Pitch AI"
+    >
+      <div class="pnl-onb-grid" aria-hidden="true"></div>
+      <div class="pnl-onb-orb orb-one" aria-hidden="true"></div>
+      <div class="pnl-onb-orb orb-two" aria-hidden="true"></div>
       <div class="pnl-onb-card">
-        <h2>Bem-vindo(a) à Pitch AI</h2>
-        <p class="pnl-sub">Sua vendedora com IA para a LIVE do TikTok Shop. Veja como começar em 3 passos:</p>
-        <ol class="pnl-onb-steps">
-          <li>
-            <b>1</b>
-            <span>Conecte sua conta
-              <small>Abra o painel no site, copie seu código de conexão e cole na barra roxa aqui em cima.</small>
-            </span>
-          </li>
-          <li>
-            <b>2</b>
-            <span>Leia sua vitrine
-              <small>Na aba “Auto-Fixar Produto”, clique em “Atualizar Vitrine Agora” para a IA ver seus produtos.</small>
-            </span>
-          </li>
-          <li>
-            <b>3</b>
-            <span>Ligue as respostas por voz
-              <small>Na aba “Respostas da IA”, ative “Ligar Respostas por Voz”. Pronto, a IA já atende sua live!</small>
-            </span>
-          </li>
-        </ol>
-        <button class="pnl-btn primary" id="pnl-onb-done" style="width: 100%; height: 42px">Começar agora</button>
+        <section class="pnl-onb-intro" id="pnl-onb-intro">
+          <div class="pnl-onb-logo-wrap">
+            <span class="pnl-onb-ring ring-one"></span>
+            <span class="pnl-onb-ring ring-two"></span>
+            <img src="icon.png" class="pnl-onb-logo" alt="Pitch AI" />
+          </div>
+          <p class="pnl-onb-kicker">SUA LIVE, MAIS SIMPLES</p>
+          <h2>Preparando sua Pitch AI</h2>
+          <p>A extensão vai localizar automaticamente tudo o que precisa na tela.</p>
+          <div class="pnl-onb-scan"><span></span></div>
+        </section>
+
+        <section class="pnl-onb-tutorial" id="pnl-onb-tutorial" hidden>
+          <div class="pnl-onb-topline">
+            <span>GUIA RÁPIDO</span>
+            <span id="pnl-onb-count">1 de 4</span>
+          </div>
+
+          <article class="pnl-onb-slide active" data-onb-step="0">
+            <div class="pnl-onb-icon">🔗</div>
+            <h2>Conecte sua conta uma vez</h2>
+            <p>
+              Abra o painel web e clique em conectar. A extensão recebe o código automaticamente;
+              colar o código continua disponível como alternativa.
+            </p>
+            <div class="pnl-onb-tip">
+              Seu acesso de cortesia ou assinatura será reconhecido do mesmo jeito.
+            </div>
+          </article>
+          <article class="pnl-onb-slide" data-onb-step="1" hidden>
+            <div class="pnl-onb-icon">✨</div>
+            <h2>A tela é reconhecida sozinha</h2>
+            <p>
+              Produtos, chat, resposta, vendas, análises, avisos e botões da LIVE são encontrados
+              automaticamente — sem configurar áreas da tela.
+            </p>
+            <div class="pnl-onb-tip">
+              Se o TikTok mudar alguma parte, a extensão tenta localizar novamente.
+            </div>
+          </article>
+          <article class="pnl-onb-slide" data-onb-step="2" hidden>
+            <div class="pnl-onb-icon">🧪</div>
+            <h2>Teste antes de entrar ao vivo</h2>
+            <p>
+              Use a Demonstração guiada para ver uma vitrine, uma pergunta, uma venda e um pitch de
+              voz funcionando sem precisar iniciar uma LIVE real.
+            </p>
+            <div class="pnl-onb-tip">
+              Você pode repetir o teste quando quiser em “Avançado / Diagnóstico”.
+            </div>
+          </article>
+          <article class="pnl-onb-slide" data-onb-step="3" hidden>
+            <div class="pnl-onb-icon">🎙️</div>
+            <h2>Pronto para vender</h2>
+            <p>
+              Abra a página da sua LIVE, deixe “Respostas por voz” ligado e mantenha o painel
+              aberto. A Pitch AI cuida do restante.
+            </p>
+            <div class="pnl-onb-tip">
+              A confirmação manual de respostas é opcional e fica nas opções avançadas.
+            </div>
+          </article>
+
+          <div class="pnl-onb-dots" id="pnl-onb-dots" aria-hidden="true"></div>
+          <div class="pnl-onb-actions">
+            <button class="pnl-btn ghost" id="pnl-onb-back" type="button">Voltar</button>
+            <button class="pnl-btn primary" id="pnl-onb-next" type="button">Continuar</button>
+          </div>
+        </section>
       </div>
     </div>
 
@@ -42,7 +98,7 @@
         <img src="icon.png" class="pnl-img-logo" alt="" />
         <div class="pnl-brand-text">
           <span class="pnl-logo">Pitch AI <b>LIVE</b></span>
-          <span class="pnl-ver">v0.15.1</span>
+          <span class="pnl-ver">v0.16.1</span>
         </div>
       </div>
       <div class="pnl-header-actions">
@@ -69,15 +125,29 @@
           placeholder="Cole aqui seu código de conexão (copie no site)"
           style="width: 260px; font-family: var(--font-mono); height: 32px; font-size: 11px"
         />
-        <button class="pnl-btn primary" id="pnl-pull" style="height: 32px; padding: 0 10px" title="Baixar suas configurações salvas no site">⬇ Sincronizar</button>
-        <button class="pnl-btn ghost" id="pnl-push" style="height: 32px; padding: 0 10px" title="Salvar suas configurações atuais na nuvem">⬆ Enviar</button>
+        <button
+          class="pnl-btn primary"
+          id="pnl-pull"
+          style="height: 32px; padding: 0 10px"
+          title="Baixar suas configurações salvas no site"
+        >
+          ⬇ Sincronizar
+        </button>
+        <button
+          class="pnl-btn ghost"
+          id="pnl-push"
+          style="height: 32px; padding: 0 10px"
+          title="Salvar suas configurações atuais na nuvem"
+        >
+          ⬆ Enviar
+        </button>
       </div>
     </div>
 
     <!-- Navegação por Abas para facilidade do usuário -->
     <nav class="pnl-tabs-nav">
       <button class="pnl-tab-btn active" data-tab="tab-ia">⚡ Respostas da IA</button>
-      <button class="pnl-tab-btn" data-tab="tab-produtos">🛍️ Auto-Fixar Produto</button>
+      <button class="pnl-tab-btn" data-tab="tab-produtos">📌 Fixar Produto</button>
       <button class="pnl-tab-btn" data-tab="tab-voz">🎙️ Voz & Audio</button>
       <details class="pnl-more-menu">
         <summary class="pnl-tab-btn pnlt-more">⋯ Mais</summary>
@@ -92,12 +162,12 @@
       <!-- ABA 1: RESPOSTAS DA IA E REGRAS DA LIVE -->
       <div class="pnl-tab-content active" id="tab-ia">
         <div class="pnl-grid">
-          
           <div class="pnl-help-box">
             <span>💡</span>
             <div>
               <strong>Como funciona a IA na sua Live:</strong>
-              Ela lê as perguntas do chat do TikTok e responde com voz ao vivo. Você pode ativar filtros de segurança e confirmar cada resposta antes de a IA falar.
+              Ela lê as perguntas do chat do TikTok e responde com voz ao vivo. Você pode ativar
+              filtros de segurança e confirmar cada resposta antes de a IA falar.
             </div>
           </div>
 
@@ -117,7 +187,10 @@
               <div class="pnl-row">
                 <div>
                   <h3>Ligar Respostas por Voz</h3>
-                  <p>A IA lê o chat e responde os espectadores com voz natural. É o mesmo botão “👁️ Ligar IA” da barra da live.</p>
+                  <p>
+                    A IA lê o chat e responde os espectadores com voz natural. É o mesmo botão “👁️
+                    Ligar IA” da barra da live.
+                  </p>
                 </div>
                 <button class="pnl-toggle" data-key="respostasIA"></button>
               </div>
@@ -125,7 +198,10 @@
               <div class="pnl-row">
                 <div>
                   <h3>Confirmar respostas antes de falar</h3>
-                  <p>Antes de a IA falar, você vê a resposta e aprova. Bom para os primeiros dias de live. É o mesmo botão “👀 Confirmar” da barra da live.</p>
+                  <p>
+                    Antes de a IA falar, você vê a resposta e aprova. Bom para os primeiros dias de
+                    live. É o mesmo botão “👀 Confirmar” da barra da live.
+                  </p>
                 </div>
                 <button class="pnl-toggle" data-key="revisarAntesDeEnviar"></button>
               </div>
@@ -193,8 +269,8 @@
                 <div>
                   <h3>Proteção padrão do Pitch AI</h3>
                   <p>
-                    Já vem com <b id="pnl-bl-total">…</b> palavras bloqueadas de fábrica. Se
-                    alguém escrever uma delas no chat, a IA não responde nem repete.
+                    Já vem com <b id="pnl-bl-total">…</b> palavras bloqueadas de fábrica. Se alguém
+                    escrever uma delas no chat, a IA não responde nem repete.
                   </p>
                 </div>
                 <button class="pnl-toggle" data-key="filtros.usarListaPadrao"></button>
@@ -224,15 +300,17 @@
 
               <label class="mono">Minhas palavras bloqueadas (uma por linha)</label>
               <p class="pnl-sub" style="margin: 2px 0 6px">
-                As suas palavras <b>somam</b> com a proteção padrão — elas não substituem a lista
-                de fábrica.
+                As suas palavras <b>somam</b> com a proteção padrão — elas não substituem a lista de
+                fábrica.
               </p>
               <textarea
                 id="pnl-blacklist"
                 rows="3"
                 placeholder="exemplo:&#10;golpe&#10;concorrente&#10;fake"
               ></textarea>
-              <label class="mono" style="margin-top: 10px; display: block">Palavras Permitidas / Prioritárias (Opcional)</label>
+              <label class="mono" style="margin-top: 10px; display: block"
+                >Palavras Permitidas / Prioritárias (Opcional)</label
+              >
               <p class="pnl-sub" style="margin: 2px 0 6px">
                 Assuntos que a IA deve tratar como prioridade ao responder.
               </p>
@@ -243,19 +321,18 @@
               ></textarea>
             </div>
           </details>
-
         </div>
       </div>
 
       <!-- ABA 2: AUTO-FIXAR PRODUTO -->
       <div class="pnl-tab-content" id="tab-produtos">
         <div class="pnl-grid">
-          
           <div class="pnl-help-box">
             <span>🛍️</span>
             <div>
-              <strong>Rodízio Automático de Vitrine:</strong>
-              O Pitch AI altera o produto fixado na live no TikTok para manter a audiência engajada. A vitrine é lida automaticamente; clique em "Atualizar" para re-ler quando quiser.
+              <strong>Fixação Automática de Produto:</strong>
+              O Pitch AI lê a vitrine uma vez, desfixa o produto em destaque e fixa novamente um dos
+              produtos selecionados abaixo.
             </div>
           </div>
 
@@ -264,8 +341,8 @@
               <div class="pnl-card-title">
                 <span class="pnl-card-icon">📌</span>
                 <div>
-                  <h3>Rodízio de Produtos Fixados</h3>
-                  <p>Alterna automaticamente o pin do produto na tela</p>
+                  <h3>Fixar Produto</h3>
+                  <p>Desfixa e fixa novamente o produto selecionado na LIVE</p>
                 </div>
               </div>
               <button class="pnl-toggle" data-key="autoFixar.enabled"></button>
@@ -275,18 +352,45 @@
               <button class="pnl-btn primary" id="pnl-autofix-load" style="flex: 1">
                 🔄 Atualizar Vitrine Agora
               </button>
+              <button
+                class="pnl-btn success"
+                data-cmd="pin:now"
+                id="pnl-autofix-now"
+                style="flex: 1"
+              >
+                📌 Desfixar e Fixar Agora
+              </button>
             </div>
 
-            <p class="pnl-sub" id="pnl-autofix-hint" style="background: var(--surface-2); padding: 8px 12px; border-radius: 8px; font-weight: 500; border: 1px solid var(--line)"></p>
+            <p class="pnl-sub" id="pnl-autofix-action-status"></p>
 
-            <div class="pnl-row" style="margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--line)">
+            <p
+              class="pnl-sub"
+              id="pnl-autofix-hint"
+              style="
+                background: var(--surface-2);
+                padding: 8px 12px;
+                border-radius: 8px;
+                font-weight: 500;
+                border: 1px solid var(--line);
+              "
+            ></p>
+
+            <div
+              class="pnl-row"
+              style="margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--line)"
+            >
               <div>
-                <h3>Tempo de cada produto na tela</h3>
-                <p>A extensão vai sortear um tempo entre o mínimo e o máximo.</p>
+                <h3>Intervalo para refixar o produto</h3>
+                <p>A extensão sorteia um intervalo entre o mínimo e o máximo.</p>
               </div>
               <div class="pnl-inline">
-                <label>Mín (s)<input type="number" min="5" max="600" data-key="autoFixar.minSec" /></label>
-                <label>Máx (s)<input type="number" min="10" max="1200" data-key="autoFixar.maxSec" /></label>
+                <label
+                  >Mín (s)<input type="number" min="5" max="600" data-key="autoFixar.minSec"
+                /></label>
+                <label
+                  >Máx (s)<input type="number" min="10" max="1200" data-key="autoFixar.maxSec"
+                /></label>
               </div>
             </div>
           </section>
@@ -298,7 +402,7 @@
                 <span class="pnl-card-icon">📦</span>
                 <div>
                   <h3>Produtos Detectados na Vitrine</h3>
-                  <p>Marque os produtos que deseja incluir no rodízio</p>
+                  <p>Marque os produtos que a extensão poderá fixar</p>
                 </div>
               </div>
               <button class="pnl-btn success" id="pnl-add">+ Adicionar Manualmente</button>
@@ -306,14 +410,12 @@
 
             <div id="pnl-products"></div>
           </section>
-
         </div>
       </div>
 
       <!-- ABA 3: VOZ & ÁUDIO -->
       <div class="pnl-tab-content" id="tab-voz">
         <div class="pnl-grid">
-          
           <section class="pnl-card">
             <div class="pnl-card-header">
               <div class="pnl-card-title">
@@ -325,7 +427,9 @@
               </div>
             </div>
 
-            <label style="font-weight: 600; margin-bottom: 4px; display: block">Selecione a Voz:</label>
+            <label style="font-weight: 600; margin-bottom: 4px; display: block"
+              >Selecione a Voz:</label
+            >
             <select id="pnl-voice" style="height: 42px; font-size: 13px; font-weight: 500">
               <option value="nova">Nova · Feminina jovem e natural (Recomendado)</option>
               <option value="shimmer">Shimmer · Feminina calorosa e amigável</option>
@@ -344,7 +448,9 @@
               </div>
               <div class="pnl-inline" style="width: 200px">
                 <input type="range" min="0.7" max="1.2" step="0.05" id="pnl-speed" />
-                <span id="pnl-speed-val" class="mono" style="font-weight: 600; width: 45px">1.00x</span>
+                <span id="pnl-speed-val" class="mono" style="font-weight: 600; width: 45px"
+                  >1.00x</span
+                >
               </div>
             </div>
 
@@ -355,7 +461,9 @@
               </div>
               <div class="pnl-inline" style="width: 200px">
                 <input type="range" min="0.2" max="2" step="0.05" id="pnl-gain" />
-                <span id="pnl-gain-val" class="mono" style="font-weight: 600; width: 45px">1.00x</span>
+                <span id="pnl-gain-val" class="mono" style="font-weight: 600; width: 45px"
+                  >1.00x</span
+                >
               </div>
             </div>
           </section>
@@ -414,24 +522,27 @@
               </div>
             </div>
           </details>
-
         </div>
       </div>
 
       <!-- ABA 4: ESTÚDIO & TRANSMISSÃO -->
       <div class="pnl-tab-content" id="tab-estudio">
         <div class="pnl-grid">
-          
           <section class="pnl-card">
             <div class="pnl-card-header">
               <div class="pnl-card-title">
                 <span class="pnl-card-icon">🎥</span>
                 <div>
-                  <h3>Estúdio de Vídeo da Live</h3>
-                  <p>Pré-visualização e fonte do sinal de transmissão</p>
+                  <h3>Prévia local de câmera e tela</h3>
+                  <p>Opcional: confira a imagem. Esta prévia não envia vídeo ao TikTok.</p>
                 </div>
               </div>
-              <span id="pnl-live-time" class="mono" style="font-size: 16px; font-weight: 700; color: #a78bfa">00:00</span>
+              <span
+                id="pnl-live-time"
+                class="mono"
+                style="font-size: 16px; font-weight: 700; color: #a78bfa"
+                >00:00</span
+              >
             </div>
 
             <video id="pnl-video" playsinline muted></video>
@@ -443,8 +554,8 @@
                 <button class="pnl-btn" id="pnl-src-file">⬆ Vídeo</button>
               </div>
               <div class="pnl-inline">
-                <button class="pnl-btn primary" id="pnl-live-start">● Iniciar Live</button>
-                <button class="pnl-btn danger" id="pnl-live-stop">■ Parar</button>
+                <button class="pnl-btn primary" id="pnl-live-start">▶ Pré-visualizar</button>
+                <button class="pnl-btn danger" id="pnl-live-stop">■ Pausar prévia</button>
               </div>
             </div>
             <p class="pnl-sub" id="pnl-src-info" style="margin-top: 8px; font-weight: 500"></p>
@@ -456,13 +567,29 @@
               <div class="pnl-card-title">
                 <span class="pnl-card-icon">⏰</span>
                 <div>
-                  <h3>Agendamento &amp; Encerramento Automático</h3>
-                  <p>Inicie ou encerre a transmissão sem precisar estar no computador</p>
+                  <h3>Controle da LIVE no TikTok</h3>
+                  <p>Use os controles reais detectados no Gerenciador de LIVE</p>
                 </div>
               </div>
             </div>
 
             <div class="pnl-list">
+              <div class="pnl-row" style="margin-bottom: 14px">
+                <div>
+                  <h3>Estado da LIVE no TikTok</h3>
+                  <p id="pnl-live-detection">Procurando automaticamente os controles da LIVE…</p>
+                </div>
+                <button class="pnl-btn ghost" id="pnl-live-remap">🔎 Localizar agora</button>
+              </div>
+              <div class="pnl-live-actions">
+                <button class="pnl-btn primary" id="pnl-tiktok-start">
+                  ▶ Iniciar LIVE no TikTok
+                </button>
+                <button class="pnl-btn danger" id="pnl-tiktok-end">
+                  ■ Encerrar LIVE no TikTok
+                </button>
+              </div>
+              <p class="pnl-sub" id="pnl-live-action-status"></p>
               <div class="pnl-row">
                 <div>
                   <h3>Agendar Horário de Início</h3>
@@ -481,86 +608,123 @@
                 <button class="pnl-toggle" data-key="encerrarTempo.enabled"></button>
               </div>
               <div class="pnl-inline" style="margin-top: 6px">
-                <label>Duração Total (minutos):
-                  <input type="number" min="1" max="1440" data-key="encerrarTempo.minutes" style="width: 100px; margin-left: 8px" />
+                <label
+                  >Duração Total (minutos):
+                  <input
+                    type="number"
+                    min="1"
+                    max="1440"
+                    data-key="encerrarTempo.minutes"
+                    style="width: 100px; margin-left: 8px"
+                  />
                 </label>
               </div>
             </div>
           </section>
-
         </div>
       </div>
 
       <!-- ABA 5: AVANÇADO E DIAGNÓSTICO -->
       <div class="pnl-tab-content" id="tab-avancado">
         <div class="pnl-grid">
-          
+          <section class="pnl-card">
+            <div class="pnl-card-header">
+              <div class="pnl-card-title">
+                <span class="pnl-card-icon">👀</span>
+                <div>
+                  <h3>Confirmar respostas antes de falar</h3>
+                  <p>Opção avançada — normalmente pode ficar desligada</p>
+                </div>
+              </div>
+              <p class="pnl-sub" style="margin-top: 8px">
+                A contagem começa somente quando a extensão detectar que a LIVE realmente iniciou.
+                Ao atingir o limite, ela encerra a transmissão automaticamente.
+              </p>
+              <button class="pnl-toggle" data-key="revisarAntesDeEnviar"></button>
+            </div>
+            <p class="pnl-sub">
+              Quando ligado, aparece uma confirmação pequena na página da LIVE. Respostas não
+              confirmadas são descartadas após 25 segundos para não acumular.
+            </p>
+          </section>
+
           <!-- Diagnóstico de Leitura da Tela -->
           <section class="pnl-card">
             <div class="pnl-card-header">
               <div class="pnl-card-title">
                 <span class="pnl-card-icon">🔎</span>
                 <div>
-                  <h3>Diagnóstico de Leitura do TikTok</h3>
-                  <p>Verifique se a extensão está lendo a tela corretamente</p>
+                  <h3>Leitura automática do TikTok</h3>
+                  <p>A extensão encontra e recupera cada área sem apontamento manual</p>
                 </div>
               </div>
-              <button class="pnl-btn ghost" id="pnl-remap">🔄 Recarregar Mapeamento</button>
+              <button class="pnl-btn ghost" id="pnl-remap">🔄 Procurar novamente</button>
             </div>
 
             <div id="pnl-map" style="margin-top: 10px"></div>
+            <details style="margin-top: 12px">
+              <summary class="pnl-btn ghost">
+                Recuperação manual (somente se o TikTok mudar)
+              </summary>
+              <div class="pnl-actions" style="margin-top: 8px">
+                <button class="pnl-btn" data-cmd="pick:startLive">Apontar Iniciar LIVE</button>
+                <button class="pnl-btn" data-cmd="pick:endLive">Apontar Encerrar LIVE</button>
+                <button class="pnl-btn" data-cmd="pick:violation">Apontar Avisos</button>
+                <button class="pnl-btn" data-cmd="pick:products">Apontar Produtos</button>
+              </div>
+            </details>
+            <p class="pnl-sub mono" id="pnl-map-ack" style="margin-top: 10px"></p>
           </section>
 
-          <!-- Apontamento Seguro por Clique -->
-          <details class="pnl-card">
-            <summary>
-              <div class="pnl-sum-txt">
-                <h3>🎯 Apontar Elementos na Tela (Se algo não responder)</h3>
-                <p>Ensine a IA onde fica o chat ou os produtos na sua tela</p>
+          <!-- Demonstração guiada -->
+          <section class="pnl-card pnl-demo">
+            <div class="pnl-card-header">
+              <div class="pnl-card-title">
+                <span class="pnl-card-icon">🧪</span>
+                <div>
+                  <h3>Demonstração guiada</h3>
+                  <p>Confira o fluxo completo sem iniciar uma LIVE real</p>
+                </div>
               </div>
-            </summary>
-            <div>
-              <p class="pnl-sub" style="margin-bottom: 10px">Clique em um dos botões abaixo e depois clique no elemento correspondente na página da Live no TikTok.</p>
-              <div class="pnl-actions">
-                <button class="pnl-btn" data-cmd="pick:chat">🎯 Apontar Chat</button>
-                <button class="pnl-btn" data-cmd="pick:products">🎯 Apontar Vitrine</button>
-                <button class="pnl-btn" data-cmd="pick:sales">🎯 Apontar Vendas</button>
-                <button class="pnl-btn" data-cmd="pick:endLive">🎯 Apontar Encerrar</button>
-                <button class="pnl-btn danger" data-cmd="pick:reset">Resetar Apontamentos</button>
-              </div>
-              <p class="pnl-sub mono" id="pnl-map-ack" style="margin-top: 10px"></p>
+              <button class="pnl-btn primary" data-demo="tour" id="pnl-demo-tour">
+                ▶ Iniciar teste completo
+              </button>
             </div>
-          </details>
-
-          <!-- Modo Demo Seguro -->
-          <details class="pnl-card pnl-demo">
-            <summary>
-              <div class="pnl-sum-txt">
-                <h3>🧪 Modo Simulação (Demo)</h3>
-                <p>Testar a IA sem precisar de uma live real no TikTok</p>
-              </div>
-            </summary>
             <div>
               <div class="pnl-list">
                 <div class="pnl-row">
                   <div>
-                    <h3>Ativar Simulação</h3>
-                    <p>Liga eventos de teste para conferir som e respostas.</p>
+                    <h3>Manter modo de teste ligado</h3>
+                    <p>Gera mensagens e vendas simuladas até você desligar.</p>
                   </div>
                   <button class="pnl-toggle" data-key="demo.enabled"></button>
                 </div>
               </div>
-              <p class="pnl-diag-title">Simular Eventos Agora:</p>
+              <p class="pnl-diag-title">Testes rápidos:</p>
               <div class="pnl-actions">
-                <button class="pnl-btn" data-demo="mensagem">💬 Simular Mensagem</button>
-                <button class="pnl-btn" data-demo="venda">🛒 Simular Venda</button>
+                <button class="pnl-btn" data-demo="mensagem">💬 Pergunta</button>
+                <button class="pnl-btn" data-demo="venda">🛒 Venda</button>
                 <button class="pnl-btn" data-demo="voz">🔊 Testar Voz</button>
-                <button class="pnl-btn" data-demo="pitch">📣 Simular Pitch</button>
               </div>
-              <p class="pnl-sub" id="pnl-demo-hint" style="margin-top: 10px"></p>
+              <p class="pnl-sub" id="pnl-demo-hint" style="margin-top: 10px">
+                O teste completo cria uma vitrine, recebe uma pergunta, registra uma venda e executa
+                um pitch.
+              </p>
             </div>
-          </details>
+          </section>
 
+          <section class="pnl-card">
+            <div class="pnl-card-header">
+              <div class="pnl-card-title">
+                <span class="pnl-card-icon">🎓</span>
+                <div>
+                  <h3>Precisa rever o início?</h3>
+                  <p>Abra novamente o tutorial de uso</p>
+                </div>
+              </div>
+              <button class="pnl-btn ghost" id="pnl-open-tutorial">Ver tutorial</button>
+            </div>
+          </section>
         </div>
       </div>
     </main>

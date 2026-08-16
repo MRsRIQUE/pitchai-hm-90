@@ -14,10 +14,10 @@ function CheckoutReturn() {
     <div className="marketing-page min-h-screen flex items-center justify-center px-4">
       <div className="marketing-panel max-w-md rounded-3xl p-8 text-center">
         <CheckCircle2 className="w-16 h-16 text-[#00E676] mx-auto mb-4" />
-        <h1 className="marketing-title text-4xl mb-2">Pagamento confirmado!</h1>
+        <h1 className="marketing-title text-4xl mb-2">Checkout concluído!</h1>
         <p className="text-white/70 mb-6">
           {session_id
-            ? "Sua assinatura foi ativada. Em alguns segundos os novos limites já estarão valendo."
+            ? "O Stripe confirmou o checkout. Em alguns segundos o webhook ativará sua assinatura e os novos limites."
             : "Estamos processando seu pagamento."}
         </p>
         <div className="flex gap-3 justify-center">

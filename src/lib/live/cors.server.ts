@@ -4,8 +4,6 @@ const ALLOWED_PATTERNS: RegExp[] = [
   /^https:\/\/([a-z0-9-]+\.)*tiktok\.com$/i,
   /^https:\/\/([a-z0-9-]+\.)*tiktokglobalshop\.com$/i,
   /^https:\/\/([a-z0-9-]+\.)*byteoversea\.com$/i,
-  /^https:\/\/([a-z0-9-]+\.)*lovable\.app$/i,
-  /^https:\/\/([a-z0-9-]+\.)*lovableproject\.com$/i,
   /^chrome-extension:\/\/[a-p]{32}$/i,
   /^http:\/\/localhost(:\d+)?$/i,
 ];

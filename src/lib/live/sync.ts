@@ -26,6 +26,16 @@ export type LiveSessionRow = {
   tts_seconds: number;
   estimated_cost_cents: number;
   sales_snapshot: any | null;
+  live_metrics: {
+    gmv?: string;
+    items_sold?: string;
+    viewers?: string;
+    avg_watch?: string;
+    product_clicks?: string;
+    visitor_percent?: string;
+    captured_at?: string;
+  } | null;
+  violation_count?: number;
   notes: string | null;
 };
 
@@ -42,48 +52,43 @@ async function currentUser(): Promise<{ uid: string; email?: string | null } | n
   });
 }
 
+async function requestSyncToken(regenerate = false): Promise<{
+  sync_token: string;
+  config: Partial<LiveConfig>;
+  repaired?: boolean;
+}> {
+  const user = getFirebaseAuth().currentUser;
+  if (!user) throw new Error("Entre novamente para conectar a extensão.");
+  const idToken = await user.getIdToken();
+  const response = await fetch("/api/account/sync-token", {
+    method: regenerate ? "POST" : "GET",
+    headers: { Authorization: `Bearer ${idToken}` },
+  });
+  const data = (await response.json().catch(() => ({}))) as {
+    sync_token?: string;
+    config?: Partial<LiveConfig>;
+    repaired?: boolean;
+    error?: string;
+  };
+  if (!response.ok || !data.sync_token) {
+    throw new Error(data.error || "Não foi possível conectar a extensão.");
+  }
+  return {
+    sync_token: data.sync_token,
+    config: data.config ?? {},
+    repaired: data.repaired,
+  };
+}
+
 /** Garante que existe um sync token para o usuário logado e devolve a config. */
 export async function ensureMyLiveConfig(): Promise<{
   sync_token: string;
   config: Partial<LiveConfig>;
+  repaired?: boolean;
 } | null> {
   const user = await currentUser();
   if (!user) return null;
-  const uid = user.uid;
-  const db = getFirebaseDb();
-
-  try {
-    const userDoc = await getDoc(doc(db, "users", uid));
-    const existingToken = (userDoc.data() as any)?.syncToken as string | undefined;
-
-    if (existingToken) {
-      const cfgDoc = await getDoc(doc(db, "live_configs_by_token", existingToken));
-      return {
-        sync_token: existingToken,
-        config: (cfgDoc.data() as any)?.config ?? {},
-      };
-    }
-
-    const newToken = crypto.randomUUID();
-    await setDoc(doc(db, "sync_tokens", newToken), {
-      uid,
-      createdAt: new Date().toISOString(),
-    });
-    await setDoc(doc(db, "live_configs_by_token", newToken), {
-      uid,
-      config: {},
-      updatedAt: new Date().toISOString(),
-    });
-    await setDoc(
-      doc(db, "users", uid),
-      { syncToken: newToken, email: user.email ?? null, createdAt: new Date().toISOString() },
-      { merge: true },
-    );
-    return { sync_token: newToken, config: {} };
-  } catch (err) {
-    console.warn("[sync.ts] ensureMyLiveConfig falhou:", err);
-    return null;
-  }
+  return requestSyncToken(false);
 }
 
 /** Envia a config atual para o Firestore (doc público por token). */
@@ -245,36 +250,10 @@ export async function pullVitrine(options?: { signal?: AbortSignal }): Promise<{
 }
 
 export async function regenerateSyncToken(): Promise<string | null> {
-  const uid = (await currentUser())?.uid ?? null;
-  if (!uid) return null;
-  const db = getFirebaseDb();
-
-  try {
-    const existing = await ensureMyLiveConfig();
-    const oldToken = existing?.sync_token;
-    const oldConfig = existing?.config ?? {};
-
-    const newToken = crypto.randomUUID();
-    await setDoc(doc(db, "sync_tokens", newToken), {
-      uid,
-      createdAt: new Date().toISOString(),
-    });
-    await setDoc(doc(db, "live_configs_by_token", newToken), {
-      uid,
-      config: oldConfig,
-      updatedAt: new Date().toISOString(),
-    });
-    await setDoc(doc(db, "users", uid), { syncToken: newToken }, { merge: true });
-
-    if (oldToken) {
-      await deleteDoc(doc(db, "sync_tokens", oldToken)).catch(() => {});
-      await deleteDoc(doc(db, "live_configs_by_token", oldToken)).catch(() => {});
-    }
-    return newToken;
-  } catch (err) {
-    console.warn("[sync.ts] regenerateSyncToken falhou:", err);
-    return null;
-  }
+  const user = await currentUser();
+  if (!user) return null;
+  const result = await requestSyncToken(true);
+  return result.sync_token;
 }
 
 export async function listMySessions(limit = 50): Promise<LiveSessionRow[]> {

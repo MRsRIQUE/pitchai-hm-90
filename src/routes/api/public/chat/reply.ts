@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { guardApiRequest } from "@/lib/live/api-auth.server";
+import { guardApiRequest, recordAiUsageTokens } from "@/lib/live/api-auth.server";
 import { corsHeaders } from "@/lib/live/cors.server";
 import { isNonEmptyText, validateContentForPublish } from "@/lib/live/validation.server";
 
@@ -43,60 +43,52 @@ function matchesAny(text: string, words: string[]) {
 import { GoogleGenAI, ThinkingLevel } from "@google/genai";
 
 async function callModel(
-  key: string,
+  apiKey: string,
   system: string,
   messages: { role: string; content: string }[],
   options?: { model?: string; highThinking?: boolean },
 ) {
   const modelName = options?.model || "gemini-3.5-flash";
-
-  if (process.env.GEMINI_API_KEY) {
-    const ai = new GoogleGenAI({
-      apiKey: process.env.GEMINI_API_KEY,
-      httpOptions: { headers: { "User-Agent": "aistudio-build" } },
-    });
-
-    const conversationPrompt = messages
-      .map((m) => `${m.role === "assistant" ? "Assistente" : "Usuário"}: ${m.content}`)
-      .join("\n");
-
-    const config: Record<string, unknown> = {
-      systemInstruction: system,
-    };
-
-    if (options?.highThinking || modelName === "gemini-3.1-pro-preview") {
-      config.thinkingConfig = { thinkingLevel: ThinkingLevel.HIGH };
-    }
-
-    const response = await ai.models.generateContent({
-      model: modelName,
-      contents: conversationPrompt,
-      config,
-    });
-
-    const text = response.text || "";
-    return new Response(
-      JSON.stringify({
-        choices: [{ message: { content: text } }],
-      }),
-      { status: 200, headers: { "Content-Type": "application/json" } },
-    );
+  const ai = new GoogleGenAI({
+    apiKey,
+    httpOptions: { headers: { "User-Agent": "pitchai" } },
+  });
+  const conversationPrompt = messages
+    .map((m) => (m.role === "assistant" ? "Assistente: " : "Usuário: ") + m.content)
+    .join("\n");
+  const config: Record<string, unknown> = { systemInstruction: system };
+  if (options?.highThinking || modelName === "gemini-3.1-pro-preview") {
+    config.thinkingConfig = { thinkingLevel: ThinkingLevel.HIGH };
   }
 
-  return fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${key}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      model: "google/gemini-2.5-flash",
-      messages: [{ role: "system", content: system }, ...messages],
-      max_tokens: 160,
-    }),
-  });
-}
+  let response;
+  let lastError: unknown;
+  const models = [modelName, "gemini-3.1-flash-lite", "gemini-2.5-flash"].filter(
+    (model, index, all) => all.indexOf(model) === index,
+  );
+  for (const model of models) {
+    try {
+      response = await ai.models.generateContent({ model, contents: conversationPrompt, config });
+      break;
+    } catch (error) {
+      lastError = error;
+    }
+  }
+  if (!response) throw lastError || new Error("Nenhum modelo Gemini disponível");
 
+  const usage = response.usageMetadata;
+  return new Response(
+    JSON.stringify({
+      choices: [{ message: { content: response.text || "" } }],
+      usage: {
+        prompt_tokens: usage?.promptTokenCount ?? 0,
+        completion_tokens: usage?.candidatesTokenCount ?? 0,
+        total_tokens: usage?.totalTokenCount ?? 0,
+      },
+    }),
+    { status: 200, headers: { "Content-Type": "application/json" } },
+  );
+}
 export const Route = createFileRoute("/api/public/chat/reply")({
   server: {
     handlers: {
@@ -117,14 +109,22 @@ export const Route = createFileRoute("/api/public/chat/reply")({
             message: guard.message,
             remaining: 0,
             locked: true,
+            plan: guard.plan,
+            tokenUsed: guard.tokenUsed,
+            tokenLimit: guard.tokenLimit,
+            tokenRemaining: guard.tokenRemaining,
+            quotaPeriod: guard.quotaPeriod,
+            quotaResetAt: guard.quotaResetAt,
+            quotaScope: guard.quotaScope,
+            upgrade: guard.upgrade,
           });
         }
 
-        const key = process.env.LOVABLE_API_KEY || process.env.GEMINI_API_KEY;
-        if (!key)
+        const modelKey = process.env.GEMINI_API_KEY || process.env.GCP_API_KEY;
+        if (!modelKey)
           return json(500, {
             error: "missing_api_key",
-            message: "Missing LOVABLE_API_KEY or GEMINI_API_KEY",
+            message: "Missing GEMINI_API_KEY or GCP_API_KEY",
           });
 
         let body: ReplyBody;
@@ -197,7 +197,7 @@ export const Route = createFileRoute("/api/public/chat/reply")({
         const userLine = author ? `${author}: ${message}` : message;
         const messages = [...history, { role: "user", content: userLine }];
 
-        let upstream = await callModel(key, system, messages);
+        let upstream = await callModel(modelKey, system, messages);
         if (!upstream.ok) {
           const err = await upstream.text().catch(() => "");
           return new Response(err || "AI failed", {
@@ -208,17 +208,26 @@ export const Route = createFileRoute("/api/public/chat/reply")({
 
         let data = (await upstream.json().catch(() => ({}))) as {
           choices?: { message?: { content?: string } }[];
+          usage?: {
+            prompt_tokens?: number;
+            completion_tokens?: number;
+            total_tokens?: number;
+          };
         };
         let raw = data.choices?.[0]?.message?.content?.trim().slice(0, 500) ?? "";
+        let tokensInput = Math.max(0, Number(data.usage?.prompt_tokens) || 0);
+        let tokensOutput = Math.max(0, Number(data.usage?.completion_tokens) || 0);
 
         // Resposta vazia NÃO é "ignorar" — é falha. Faz uma segunda tentativa
         // antes de desistir, e se ainda vier vazio devolve erro (a extensão
         // reenfileira) em vez de marcar a pergunta como ignorada.
         if (!isNonEmptyText(raw)) {
-          upstream = await callModel(key, system, messages);
+          upstream = await callModel(modelKey, system, messages);
           if (upstream.ok) {
             data = (await upstream.json().catch(() => ({}))) as typeof data;
             raw = data.choices?.[0]?.message?.content?.trim().slice(0, 500) ?? "";
+            tokensInput += Math.max(0, Number(data.usage?.prompt_tokens) || 0);
+            tokensOutput += Math.max(0, Number(data.usage?.completion_tokens) || 0);
           }
         }
         if (!isNonEmptyText(raw)) {
@@ -236,6 +245,26 @@ export const Route = createFileRoute("/api/public/chat/reply")({
 
         const finalReply = ignore ? "" : validation.content;
 
+        // Alguns gateways antigos não devolvem usage; nesses casos usamos uma
+        // estimativa conservadora por caracteres para nunca deixar uso sem cobrança.
+        if (tokensInput === 0) {
+          tokensInput = Math.ceil(
+            (system.length + messages.reduce((sum, item) => sum + item.content.length, 0)) / 4,
+          );
+        }
+        if (tokensOutput === 0) tokensOutput = Math.ceil(raw.length / 4);
+
+        let tokenQuota;
+        try {
+          tokenQuota = await recordAiUsageTokens(guard, tokensInput, tokensOutput);
+        } catch (error) {
+          console.error("[chat/reply] Falha ao registrar tokens:", error);
+          return json(503, {
+            error: "usage_unavailable",
+            message: "Não foi possível registrar o consumo. Tente novamente em instantes.",
+          });
+        }
+
         return json(200, {
           reply: finalReply,
           ignore,
@@ -243,6 +272,17 @@ export const Route = createFileRoute("/api/public/chat/reply")({
           prioritized,
           remaining: guard.remaining,
           plan: guard.plan,
+          tokenUsed: tokenQuota.used,
+          tokenLimit: tokenQuota.limit,
+          tokenRemaining: tokenQuota.remaining,
+          quotaPeriod: tokenQuota.period,
+          quotaResetAt: tokenQuota.resetAt,
+          quotaScope: tokenQuota.scope,
+          quotaReached: tokenQuota.exceeded,
+          upgrade: tokenQuota.upgrade,
+          upgradeMessage: tokenQuota.exceeded
+            ? `Sua franquia ${tokenQuota.scope === "daily" ? "diária" : "mensal"} de tokens chegou ao limite. ${tokenQuota.upgrade.message}`
+            : null,
         });
       },
     },

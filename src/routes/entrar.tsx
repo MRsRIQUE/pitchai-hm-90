@@ -8,7 +8,6 @@ import {
   signInWithEmailAndPassword,
   createUserWithEmailAndPassword,
   sendPasswordResetEmail,
-  type User,
 } from "firebase/auth";
 import { getFirebaseAuth, googleProvider } from "@/lib/firebase";
 import { ensureAccountProfile } from "@/lib/account-profile";
@@ -65,6 +64,12 @@ function translateAuthError(err: unknown): string {
     "auth/cancelled-popup-request": "Login com Google cancelado.",
     "auth/popup-blocked":
       "O navegador bloqueou a janela do Google. Permita pop-ups e tente novamente.",
+    "auth/unauthorized-domain":
+      "Este endereço do Pitch AI ainda não está autorizado para login com Google.",
+    "auth/operation-not-allowed":
+      "O login com Google está temporariamente desativado. Fale com o suporte.",
+    "auth/internal-error":
+      "O Google não conseguiu concluir o login. Feche outras janelas de acesso e tente novamente.",
   };
   if (map[code]) return map[code];
   if (!code && err instanceof Error && err.message) return err.message;
@@ -146,13 +151,11 @@ function EntrarPage() {
       if (mode === "login") {
         const { user } = await signInWithEmailAndPassword(fbAuth, email, password);
         await ensureAccountProfile(user);
-        await activateIfPending(user);
         toast.success("Login efetuado com sucesso!");
         navigate({ to: dest });
       } else if (mode === "signup") {
         const { user } = await createUserWithEmailAndPassword(fbAuth, email, password);
         await ensureAccountProfile(user);
-        await activateIfPending(user);
         toast.success("Conta criada! Redirecionando...");
         navigate({ to: dest });
       } else {
@@ -179,40 +182,17 @@ function EntrarPage() {
       const fbAuth = getFirebaseAuth();
       const { user } = await signInWithPopup(fbAuth, googleProvider);
       await ensureAccountProfile(user);
-      await activateIfPending(user);
       toast.success("Autenticado com Google com sucesso!");
       navigate({ to: dest });
     } catch (err) {
+      console.warn(
+        "[entrar] Falha no login Google:",
+        (err as { code?: string })?.code || "sem código",
+      );
       toast.error(translateAuthError(err));
     } finally {
       authActionInProgress.current = false;
       setBusy(false);
-    }
-  }
-
-  /**
-   * Ativa automaticamente a licença Pro se este e-mail tiver um pagamento
-   * aprovado pendente (compra feita antes de criar a conta). Silencioso:
-   * na grande maioria dos logins não há nada a ativar, então erros/404 são
-   * esperados e não devem interromper o fluxo de login.
-   */
-  async function activateIfPending(user: User) {
-    try {
-      if (!user.email) return;
-      const idToken = await user.getIdToken();
-      const res = await fetch("/api/public/payments/activate", {
-        method: "POST",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${idToken}` },
-        body: JSON.stringify({ email: user.email }),
-      });
-      if (res.ok) {
-        const data = await res.json().catch(() => null);
-        if (data?.success) {
-          toast.success("Pagamento identificado! Sua licença Pro foi ativada automaticamente.");
-        }
-      }
-    } catch (err) {
-      console.warn("[entrar] Verificação de pagamento pendente falhou:", err);
     }
   }
 

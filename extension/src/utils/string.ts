@@ -8,7 +8,7 @@
  */
 export function cleanName(raw: string | null | undefined): string {
   if (!raw) return "";
-  
+
   return String(raw)
     .replace(/\s+/g, " ") // Substitui múltiplos espaços por um único
     .replace(/[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}]/gu, "") // Remove emojis
@@ -21,7 +21,7 @@ export function cleanName(raw: string | null | undefined): string {
  */
 export function normKey(name: string | null | undefined): string {
   if (!name) return "";
-  
+
   return cleanName(name)
     .toLowerCase()
     .normalize("NFD") // Normaliza para decompor caracteres acentuados
@@ -36,20 +36,20 @@ export function normKey(name: string | null | undefined): string {
  */
 export function isBadProductName(name: string | null | undefined): boolean {
   if (!name) return true;
-  
+
   const cleaned = cleanName(name);
   const key = normKey(cleaned);
-  
+
   // Nome muito curto ou vazio
   if (!key || key.length < 4) return true;
-  
+
   // Regex para nomes de navegação/chrome do TikTok
   const BAD_NAMES = [
     /(gerenciador\s+de\s+live|pesquisar\s+id|todas\s+as\s+categorias|todo\s+o\s+estoque|lista\s+de\s+produtos\s+nesta\s+live|portugu[eê]s\s+do\s+brasil|\bsair\b|pitcha[ií]\s+live)/i,
     /^(adicionar|fixar|destacar|editar|excluir|todos|produtos?|vitrine|estoque|pedidos?)$/i,
     /^(frete gr[áa]tis|ao vivo|live|novo|new|promo|oferta|mais vendido|best ?seller|cupom|em alta|estoque|dispon[íi]vel|esgotado|vendidos?|\d+[.,]?\d*\s*(vendidos?|sold)|\d+%|\d+)$/i,
   ];
-  
+
   return BAD_NAMES.some((rx) => rx.test(cleaned));
 }
 
@@ -58,26 +58,27 @@ export function isBadProductName(name: string | null | undefined): boolean {
  */
 export function inferNameFromProductText(text: string, price?: string): string {
   let s = cleanName(text);
-  
+
   // Remove números no início (ex: "1. Produto")
   s = s.replace(/^\d+\s+/, "");
-  
+
   // Se houver preço, remove o preço e tudo depois
   if (price) {
     s = s.split(price)[0] || s;
   }
-  
+
   // Remove termos de metadados (ex: "em estoque", "frete grátis")
-  s = s.split(
-    /\b(?:em\s+estoque|demonstra[çc][ãa]o\s+solicitada|termina\s+em|frete\s+gr[áa]tis)\b/i,
-  )[0] || s;
-  
+  s =
+    s.split(
+      /\b(?:em\s+estoque|demonstra[çc][ãa]o\s+solicitada|termina\s+em|frete\s+gr[áa]tis)\b/i,
+    )[0] || s;
+
   // Remove preço no formato "R$ 100"
   s = s.replace(/\s+R\$\s?\d[\d.,].*$/i, "");
-  
+
   // Remove números soltos no final
   s = s.replace(/\s+\d+\s*$/, "");
-  
+
   return cleanName(s);
 }
 
@@ -124,9 +125,11 @@ export const CTA_RX = /(fixar|apresentar|adicionar|destacar|vender|comprar)/i;
 /**
  * Regex para detectar badges do TikTok
  */
-export const BADGE_RX = /^(frete gr[áa]tis|ao vivo|live|novo|new|promo|oferta|mais vendido|best ?seller|cupom|em alta|estoque|dispon[íi]vel|esgotado|vendidos?|\d+[.,]?\d*\s*(vendidos?|sold)|\d+%|\d+)$/i;
+export const BADGE_RX =
+  /^(frete gr[áa]tis|ao vivo|live|novo|new|promo|oferta|mais vendido|best ?seller|cupom|em alta|estoque|dispon[íi]vel|esgotado|vendidos?|\d+[.,]?\d*\s*(vendidos?|sold)|\d+%|\d+)$/i;
 
 /**
  * Regex para detectar nomes de navegação do TikTok
  */
-export const JUNK_NAME_RX = /^(adicionar|fixar|destacar|editar|excluir|vender|ver mais|todos|produtos?|vitrine|estoque|pedidos?|apresentar|remover|comprar|carrinho)$/i;
+export const JUNK_NAME_RX =
+  /^(adicionar|fixar|destacar|editar|excluir|vender|ver mais|todos|produtos?|vitrine|estoque|pedidos?|apresentar|remover|comprar|carrinho)$/i;

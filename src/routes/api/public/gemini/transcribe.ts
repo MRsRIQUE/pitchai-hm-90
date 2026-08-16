@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { GoogleGenAI } from "@google/genai";
 import { corsHeaders } from "@/lib/live/cors.server";
-import { guardAiRequest } from "@/lib/live/api-auth.server";
+import { guardAiRequest, recordAiUsageTokens } from "@/lib/live/api-auth.server";
 
 // 10MB base64 (~7.5MB binario) — limite suficiente para transcrever curtos clips ao vivo.
 const MAX_AUDIO_BASE64_LENGTH = 10 * 1024 * 1024;
@@ -21,10 +21,20 @@ export const Route = createFileRoute("/api/public/gemini/transcribe")({
 
         const guard = await guardAiRequest(request, "tts_speak");
         if (!guard.ok) {
-          return json(guard.status ?? 401, { error: "unauthorized", message: guard.message });
+          return json(guard.status ?? 401, {
+            error: guard.status === 429 ? "quota_exceeded" : "unauthorized",
+            message: guard.message,
+            locked: guard.status === 429,
+            plan: guard.plan,
+            tokenUsed: guard.tokenUsed,
+            tokenLimit: guard.tokenLimit,
+            tokenRemaining: guard.tokenRemaining,
+            quotaResetAt: guard.quotaResetAt,
+            upgrade: guard.upgrade,
+          });
         }
 
-        const apiKey = process.env.GEMINI_API_KEY || process.env.LOVABLE_API_KEY;
+        const apiKey = process.env.GEMINI_API_KEY || process.env.GCP_API_KEY;
         if (!apiKey) {
           return json(500, {
             error: "missing_api_key",
@@ -76,9 +86,21 @@ export const Route = createFileRoute("/api/public/gemini/transcribe")({
             },
           });
 
+          const usage = response.usageMetadata;
+          const tokensInput = usage?.promptTokenCount ?? Math.ceil(audioBase64.length / 16);
+          const tokensOutput =
+            usage?.candidatesTokenCount ?? Math.ceil((response.text?.length ?? 0) / 4);
+          const tokenQuota = await recordAiUsageTokens(guard, tokensInput, tokensOutput);
+
           return json(200, {
             transcription: response.text ?? "",
             modelUsed: "gemini-3.5-flash",
+            tokenUsed: tokenQuota.used,
+            tokenLimit: tokenQuota.limit,
+            tokenRemaining: tokenQuota.remaining,
+            quotaReached: tokenQuota.exceeded,
+            quotaResetAt: tokenQuota.resetAt,
+            upgrade: tokenQuota.upgrade,
           });
         } catch (err: unknown) {
           const message = err instanceof Error ? err.message : String(err);

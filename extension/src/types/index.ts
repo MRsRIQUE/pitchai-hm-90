@@ -43,14 +43,18 @@ export const VoiceConfigSchema = z.object({
   id: z.string().default("nova"),
   speed: z.number().min(0.7).max(1.2).default(1.0),
   gain: z.number().min(0.2).max(2).default(1.0),
-  monitor: z.object({
-    enabled: z.boolean().default(false),
-    volume: z.number().min(0).max(1).default(0.6),
-  }).default({}),
-  pushToTalk: z.object({
-    enabled: z.boolean().default(false),
-    key: z.string().default("Space"),
-  }).default({}),
+  monitor: z
+    .object({
+      enabled: z.boolean().default(false),
+      volume: z.number().min(0).max(1).default(0.6),
+    })
+    .default({}),
+  pushToTalk: z
+    .object({
+      enabled: z.boolean().default(false),
+      key: z.string().default("Space"),
+    })
+    .default({}),
 });
 
 export type VoiceConfig = z.infer<typeof VoiceConfigSchema>;
@@ -93,10 +97,13 @@ export type FiltrosConfig = z.infer<typeof FiltrosConfigSchema>;
 
 /** Schema para configuração de voz por contexto */
 export const VozContextosConfigSchema = z.record(
-  z.object({
-    id: z.string().optional(),
-    speed: z.number().optional(),
-  }).partial().nullable()
+  z
+    .object({
+      id: z.string().optional(),
+      speed: z.number().optional(),
+    })
+    .partial()
+    .nullable(),
 );
 
 export type VozContextosConfig = z.infer<typeof VozContextosConfigSchema>;
@@ -126,9 +133,11 @@ export const AIContextSchema = z.object({
   niche: z.string().optional(),
   tone: z.string().default("empolgado e amigável"),
   targetAudience: z.string().optional(),
-  rules: z.string().default(
-    "Nunca prometa resultados irreais. Não fale de política ou religião. Nunca invente preços ou promoções que não estejam cadastradas."
-  ),
+  rules: z
+    .string()
+    .default(
+      "Nunca prometa resultados irreais. Não fale de política ou religião. Nunca invente preços ou promoções que não estejam cadastradas.",
+    ),
   extraContext: z.string().optional(),
 });
 
@@ -148,7 +157,7 @@ export const ConfigSchema = z.object({
   violacao: z.boolean().default(true),
   autoMod: z.boolean().default(true),
   notificacoesVenda: z.boolean().default(true),
-  
+
   // Configurações específicas
   voz: VoiceConfigSchema.default({}),
   autoFixar: AutoFixarConfigSchema.default({}),
@@ -159,12 +168,12 @@ export const ConfigSchema = z.object({
   demo: DemoConfigSchema.default({}),
   somVenda: SomVendaConfigSchema.default({}),
   aiContext: AIContextSchema.default({}),
-  
+
   // Dados dinâmicos
   produtos: z.array(ProductSchema).default([]),
   roteirosPorProduto: z.record(z.string()).default({}),
   ultimoRoteiro: z.string().optional(),
-  
+
   // Metadados
   version: z.string().optional(),
   lastUpdated: z.number().optional(),
@@ -229,13 +238,14 @@ export const DEFAULT_CONFIG: Config = {
     niche: "",
     tone: "empolgado e amigável",
     targetAudience: "",
-    rules: "Nunca prometa resultados irreais. Não fale de política ou religião. Nunca invente preços ou promoções que não estejam cadastradas.",
+    rules:
+      "Nunca prometa resultados irreais. Não fale de política ou religião. Nunca invente preços ou promoções que não estejam cadastradas.",
     extraContext: "",
   },
   produtos: [],
   roteirosPorProduto: {},
   ultimoRoteiro: "",
-  version: "0.15.1",
+  version: "0.16.1",
   lastUpdated: Date.now(),
 };
 
@@ -429,11 +439,7 @@ export {
   JUNK_NAME_RX,
 } from "../utils/string";
 
-export {
-  encryptConfigObj,
-  decryptConfigObj,
-  signRequest,
-} from "../utils/crypto";
+export { encryptConfigObj, decryptConfigObj, signRequest } from "../utils/crypto";
 
 export {
   getApiBase,

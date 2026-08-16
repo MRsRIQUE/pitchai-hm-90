@@ -13,7 +13,9 @@
   const VIOLATION_RX =
     /(viola[çc][ãa]o|violation|infra[çc][ãa]o|aviso|warning|penalidad|restri[çc][ãa]o|adverten|bloqueio|conte[úu]do impr[óo]prio|pol[íi]tica da comunidade)/i;
   const END_RX =
-    /(encerrar|finalizar|terminar|encerrar transmiss[ãa]o|finalizar live|end live|end broadcast|stop live|parar (a )?(live|transmiss[ãa]o))/i;
+    /(encerrar|finalizar|terminar|fechar live|encerrar transmiss[ãa]o|finalizar live|end live|end broadcast|stop live|hang up|power off|parar (a )?(live|transmiss[ãa]o))/i;
+  const START_RX =
+    /(iniciar|come[çc]ar|transmitir|entrar ao vivo|iniciar transmiss[ãa]o|iniciar live|abrir live|go live|start live|start broadcast)/i;
   const JUNK_CLASS_RX = /(video|player|nav|header|footer|sidebar-menu|modal-mask)/i;
 
   // ---------- utils ----------
@@ -101,6 +103,10 @@
         el.getAttribute("data-e2e") || "",
         el.getAttribute("data-tid") || "",
         el.getAttribute("aria-label") || "",
+        el.getAttribute("title") || "",
+        el.getAttribute("data-icon") || "",
+        el.getAttribute("data-testid") || "",
+        el.getAttribute("name") || "",
         el.id || "",
       ]
         .join(" ")
@@ -442,6 +448,26 @@
   }
 
   function scoreViolation(el) {
+    // O Gerenciador atual renderiza "Avisos" como um botão sem texto/aria,
+    // contendo somente um triângulo SVG dentro de um badge. A combinação
+    // estrutural é específica o bastante e evita depender do XPath antigo.
+    try {
+      const button = el.matches?.("button") ? el : el.closest?.("button");
+      if (
+        button &&
+        button.closest?.('[data-tid="m4b_badge"]') &&
+        button.matches?.('[data-tid="m4b_button"]') &&
+        button.querySelector?.('img[src^="data:image/svg+xml"]') &&
+        isVisible(button)
+      )
+        return el === button ? 12 : 10;
+    } catch {}
+    // Botão atual de "Lembrete de violação" do Gerenciador. Ele é somente um
+    // ícone e não expõe texto/aria-label até receber hover, por isso a posição
+    // estrutural conhecida é uma evidência necessária nesta versão do TikTok.
+    try {
+      if (el === byXPath(HINT_XPATHS.violation) && isVisible(el)) return 12;
+    } catch {}
     const t = txt(el);
     if (!t || t.length > 160) return 0;
     if (!VIOLATION_RX.test(t) && !VIOLATION_RX.test(attrBag(el))) return 0;
@@ -457,6 +483,14 @@
   }
 
   function scoreEndLive(el) {
+    try {
+      const control = el.matches?.(".arco-icon-im_close_chat")
+        ? el.closest?.(".cursor-pointer") || el.parentElement
+        : el.querySelector?.(".arco-icon-im_close_chat")
+          ? el
+          : null;
+      if (control && isVisible(control)) return el === control ? 12 : 10;
+    } catch {}
     const label = `${txt(el)} ${attrBag(el)}`.toLowerCase();
     if (!END_RX.test(label)) return 0;
     if (/cancelar|cancel|voltar/.test(label)) return 0;
@@ -474,9 +508,43 @@
     return s;
   }
 
+  function scoreStartLive(el) {
+    const label = `${txt(el)} ${attrBag(el)}`.toLowerCase();
+    if (!START_RX.test(label) || !isVisible(el)) return 0;
+    if (/tutorial|ajuda|agenda|agendar/.test(label)) return 0;
+    let s = 6;
+    if (el.tagName === "BUTTON" || el.getAttribute?.("role") === "button") s += 3;
+    if (txt(el).length <= 36) s += 2;
+    return s;
+  }
+
+  function scoreChatReply(el) {
+    if (!isVisible(el)) return 0;
+    const placeholder = el.getAttribute?.("placeholder") || "";
+    const role = el.getAttribute?.("role") || "";
+    const label = `${placeholder} ${attrBag(el)} ${role} ${txt(el)}`.toLowerCase();
+    const isEditor =
+      el.tagName === "INPUT" ||
+      el.tagName === "TEXTAREA" ||
+      el.isContentEditable ||
+      role === "textbox";
+    if (!isEditor) return 0;
+    if (/pesquisar|buscar|search|filtro|produto|id do produto/.test(label)) return 0;
+    let s = 4;
+    if (/digite|escreva|mensagem|coment[áa]rio|responder|chat|reply|message/.test(label)) s += 6;
+    if (el.tagName === "TEXTAREA" || el.isContentEditable) s += 2;
+    return s;
+  }
+
   // cada alvo pertence a um SETOR (ver regions.js) e só é aceito dentro dele
   const TARGETS = {
     chat: { pool: "ul, ol, div", score: scoreChat, min: 9, sample: true, region: "chat" },
+    chatReply: {
+      pool: "input, textarea, [contenteditable='true'], [role='textbox']",
+      score: scoreChatReply,
+      min: 5,
+      region: "chat",
+    },
     products: { pool: "ul, ol, div, section", score: scoreProductList, min: 8, region: "products" },
     sales: { pool: "ul, ol, div, section", score: scoreSales, min: 6, region: "activity" },
     violation: {
@@ -487,8 +555,15 @@
       loose: true,
     },
     endLive: {
-      pool: "button, [role='button'], a",
+      pool: "button, [role='button'], a, div.cursor-pointer, .arco-icon-im_close_chat",
       score: scoreEndLive,
+      min: 7,
+      region: ["studio", "topbar"],
+      loose: true,
+    },
+    startLive: {
+      pool: "button, [role='button'], a",
+      score: scoreStartLive,
       min: 7,
       region: ["studio", "topbar"],
       loose: true,
@@ -551,22 +626,17 @@
   function loadManual() {
     return new Promise((res) => {
       if (manualLoaded) return res(manual);
+      manual = {};
+      manualLoaded = true;
       try {
-        chrome.storage.local.get([MANUAL_KEY], (r) => {
-          const raw = r?.[MANUAL_KEY] || {};
-          manual = raw.host === location.host ? raw.sig || {} : {};
-          manualLoaded = true;
-          res(manual);
-        });
-      } catch {
-        manualLoaded = true;
-        res(manual);
-      }
+        chrome.storage.local.remove(MANUAL_KEY);
+      } catch {}
+      res(manual);
     });
   }
   function saveManual() {
     try {
-      chrome.storage.local.set({ [MANUAL_KEY]: { host: location.host, sig: manual } });
+      chrome.storage.local.remove(MANUAL_KEY);
     } catch {}
   }
 
@@ -671,14 +741,10 @@
     emit();
   }
 
-  /** Guarda o elemento apontado pelo usuário — tem prioridade sobre o auto-scan. */
-  async function setManual(target, el) {
-    if (!TARGETS[target] || !(el instanceof HTMLElement)) return false;
+  /** Compatibilidade com versões antigas: apontamentos agora são ignorados. */
+  async function setManual() {
     await loadManual();
-    manual[target] = signatureOf(el);
-    saveManual();
-    setResult(target, el, 99, "manual", "apontado pelo usuário");
-    return true;
+    return false;
   }
   async function clearManual(target) {
     await loadManual();
@@ -900,14 +966,9 @@
   }
   /** Substitui os apontamentos manuais e reaplica. */
   async function importManual(sig) {
-    manual = sig && typeof sig === "object" ? { ...sig } : {};
+    manual = {};
     manualLoaded = true;
     saveManual();
-    Object.keys(manual).forEach((t) => {
-      try {
-        invalidate(t);
-      } catch {}
-    });
     return remapAll();
   }
   /** Relê do storage (usado quando o painel importa/baixa um mapeamento). */

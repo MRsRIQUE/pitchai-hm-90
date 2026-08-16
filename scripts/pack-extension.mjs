@@ -20,6 +20,7 @@ const outZip = path.join(rootDir, "public", "pitchai-extension.zip");
 const FILES = [
   "manifest.json",
   "blocklist.js",
+  "account-bridge.js",
   "content.js",
   "dom-map.js",
   "hook.js",
@@ -59,9 +60,13 @@ const psQuote = (value) => `'${String(value).replaceAll("'", "''")}'`;
 // Empacota em modo binário. Linux/macOS usam zip; Windows possui fallback
 // nativo para que `npm run build:extension` funcione também no ambiente local.
 try {
-  execFileSync("zip", ["-X", "-q", "-j", "-FS", outZip, ...FILES.map((f) => path.join(extDir, f))], {
-    cwd: extDir,
-  });
+  execFileSync(
+    "zip",
+    ["-X", "-q", "-j", "-FS", outZip, ...FILES.map((f) => path.join(extDir, f))],
+    {
+      cwd: extDir,
+    },
+  );
 } catch (err) {
   if (process.platform !== "win32") {
     console.error("[pack-extension] Falha ao executar 'zip':", err.message);

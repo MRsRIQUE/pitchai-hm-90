@@ -1,13 +1,23 @@
 import crypto from "node:crypto";
 import {
+  fsGet,
+  getAiTokenUsage,
   getSyncTokenOwner,
   getUserUsage,
+  incrementAiTokenUsage,
   incrementUsageBestEffort,
   isAdmin,
 } from "@/lib/firebase.server";
 import { verifyFirebaseIdToken } from "@/lib/firebase.server";
 import { PRICE_TO_PLAN, type PlanTier } from "@/lib/live/plans";
 import { resolveUserAccess } from "@/lib/live/access.server";
+import {
+  getUpgradeOffer,
+  PLAN_QUOTA_SCHEMA_VERSION,
+  resolvePlanQuota,
+  type PlanQuota,
+  type UpgradeOffer,
+} from "@/lib/live/quotas";
 
 const seenNonces = new Map<string, number>();
 const MAX_NONCES = 10000;
@@ -99,6 +109,91 @@ export interface GuardResult {
   plan?: string;
   remaining?: number;
   tier?: PlanTier;
+  tokenUsed?: number;
+  tokenLimit?: number;
+  tokenRemaining?: number;
+  dailyTokenUsed?: number;
+  dailyTokenLimit?: number;
+  quotaPeriod?: string;
+  quotaResetAt?: string;
+  quotaScope?: "daily" | "monthly";
+  upgrade?: UpgradeOffer;
+}
+
+type TokenQuotaStatus = {
+  used: number;
+  limit: number;
+  remaining: number;
+  dailyUsed: number;
+  dailyLimit: number;
+  period: string;
+  resetAt: string;
+  exceeded: boolean;
+  scope?: "daily" | "monthly";
+  upgrade: UpgradeOffer;
+};
+
+let quotaSettingsCache: { value: Record<string, unknown>; expiresAt: number } | null = null;
+
+async function loadPlanQuota(plan: string): Promise<PlanQuota> {
+  if (!quotaSettingsCache || quotaSettingsCache.expiresAt <= Date.now()) {
+    const doc = await fsGet("admin_settings/plan_quotas", { mode: "server" }).catch(() => null);
+    const stored = (doc?.data as Record<string, unknown> | undefined) ?? {};
+    quotaSettingsCache = {
+      // Configurações antigas tinham a mesma franquia em todos os planos e
+      // não sustentavam um upgrade real. A v2 começa com os novos padrões.
+      value: Number(stored.quotaSchemaVersion) === PLAN_QUOTA_SCHEMA_VERSION ? stored : {},
+      expiresAt: Date.now() + 60_000,
+    };
+  }
+  return resolvePlanQuota(plan, quotaSettingsCache.value);
+}
+
+function quotaClock(now = new Date()) {
+  const day = now.toISOString().slice(0, 10);
+  const month = day.slice(0, 7);
+  const nextDay = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + 1));
+  const nextMonth = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1));
+  return { day, month, nextDay: nextDay.toISOString(), nextMonth: nextMonth.toISOString() };
+}
+
+async function getTokenQuotaStatus(userId: string, plan: string): Promise<TokenQuotaStatus> {
+  const clock = quotaClock();
+  const [quota, usage] = await Promise.all([
+    loadPlanQuota(plan),
+    getAiTokenUsage(userId, clock.day, clock.month, { mode: "server" }),
+  ]);
+  const monthlyRemaining = Math.max(0, quota.monthlyTokenLimit - usage.monthly.totalTokens);
+  const dailyExceeded = usage.daily.totalTokens >= quota.dailyTokenLimit;
+  const monthlyExceeded = usage.monthly.totalTokens >= quota.monthlyTokenLimit;
+  const scope = monthlyExceeded ? "monthly" : dailyExceeded ? "daily" : undefined;
+  return {
+    used: usage.monthly.totalTokens,
+    limit: quota.monthlyTokenLimit,
+    remaining: monthlyRemaining,
+    dailyUsed: usage.daily.totalTokens,
+    dailyLimit: quota.dailyTokenLimit,
+    period: clock.month,
+    resetAt: scope === "daily" ? clock.nextDay : clock.nextMonth,
+    exceeded: Boolean(scope),
+    scope,
+    upgrade: getUpgradeOffer(plan, quotaSettingsCache?.value),
+  };
+}
+
+function applyTokenQuota(result: GuardResult, quota: TokenQuotaStatus): GuardResult {
+  return {
+    ...result,
+    tokenUsed: quota.used,
+    tokenLimit: quota.limit,
+    tokenRemaining: quota.remaining,
+    dailyTokenUsed: quota.dailyUsed,
+    dailyTokenLimit: quota.dailyLimit,
+    quotaPeriod: quota.period,
+    quotaResetAt: quota.resetAt,
+    quotaScope: quota.scope,
+    upgrade: quota.upgrade,
+  };
 }
 
 async function resolveBySyncToken(token: string): Promise<string | null> {
@@ -172,7 +267,39 @@ async function resolveAndAuthorize(
       status: 403,
       message:
         "O recurso de áudio e voz da IA está bloqueado no plano Mensal. Faça upgrade para o plano Trimestral ou Anual para utilizar vozes em tempo real.",
+      userId: authorizedUserId,
+      plan,
+      upgrade: getUpgradeOffer(plan),
     };
+  }
+
+  let tokenQuota: TokenQuotaStatus;
+  try {
+    tokenQuota = await getTokenQuotaStatus(authorizedUserId, plan);
+  } catch (error) {
+    console.error("[api-auth] Falha ao consultar franquia de tokens:", error);
+    return {
+      ok: false,
+      status: 503,
+      message: "Não foi possível confirmar sua franquia de tokens. Tente novamente em instantes.",
+      userId: authorizedUserId,
+      plan,
+    };
+  }
+
+  if (tokenQuota.exceeded) {
+    const scopeLabel = tokenQuota.scope === "daily" ? "diária" : "mensal";
+    return applyTokenQuota(
+      {
+        ok: false,
+        status: 429,
+        message: `Sua franquia ${scopeLabel} de tokens chegou ao limite. ${tokenQuota.upgrade.message}`,
+        userId: authorizedUserId,
+        plan,
+        remaining: 0,
+      },
+      tokenQuota,
+    );
   }
 
   const day = new Date().toISOString().split("T")[0];
@@ -180,23 +307,64 @@ async function resolveAndAuthorize(
   const usage = await getUserUsage(authorizedUserId, day, { mode: "server" }).catch(() => null);
   const used = (usage ?? {})[endpoint] ?? 0;
   if (used >= limit) {
-    return {
-      ok: false,
-      status: 429,
-      message: `Cota diária de IA esgotada para o plano '${plan}'. Faça upgrade para continuar.`,
-      userId: authorizedUserId,
-      plan,
-      remaining: 0,
-    };
+    return applyTokenQuota(
+      {
+        ok: false,
+        status: 429,
+        message: `Cota diária de IA esgotada para o plano '${plan}'. Faça upgrade para continuar.`,
+        userId: authorizedUserId,
+        plan,
+        remaining: 0,
+      },
+      tokenQuota,
+    );
   }
 
   const { count } = await incrementUsageBestEffort(authorizedUserId, day, endpoint);
+  return applyTokenQuota(
+    {
+      ok: true,
+      userId: authorizedUserId,
+      plan,
+      remaining: Math.max(0, limit - count),
+      tier: PRICE_TO_PLAN[plan] || "free",
+    },
+    tokenQuota,
+  );
+}
+
+/** Registra os tokens reais devolvidos pelo provedor e informa o saldo pós-chamada. */
+export async function recordAiUsageTokens(
+  guard: GuardResult,
+  tokensInput: number,
+  tokensOutput: number,
+): Promise<TokenQuotaStatus> {
+  if (!guard.userId || !guard.plan) throw new Error("Guard sem usuário ou plano");
+  const clock = quotaClock();
+  const quota = await loadPlanQuota(guard.plan);
+  const usage = await incrementAiTokenUsage(
+    guard.userId,
+    clock.day,
+    clock.month,
+    tokensInput,
+    tokensOutput,
+    { mode: "server" },
+  );
+  const monthlyRemaining = Math.max(0, quota.monthlyTokenLimit - usage.monthly.totalTokens);
+  const dailyExceeded = usage.daily.totalTokens >= quota.dailyTokenLimit;
+  const monthlyExceeded = usage.monthly.totalTokens >= quota.monthlyTokenLimit;
+  const scope = monthlyExceeded ? "monthly" : dailyExceeded ? "daily" : undefined;
   return {
-    ok: true,
-    userId: authorizedUserId,
-    plan,
-    remaining: Math.max(0, limit - count),
-    tier: PRICE_TO_PLAN[plan] || "free",
+    used: usage.monthly.totalTokens,
+    limit: quota.monthlyTokenLimit,
+    remaining: monthlyRemaining,
+    dailyUsed: usage.daily.totalTokens,
+    dailyLimit: quota.dailyTokenLimit,
+    period: clock.month,
+    resetAt: scope === "daily" ? clock.nextDay : clock.nextMonth,
+    exceeded: Boolean(scope),
+    scope,
+    upgrade: getUpgradeOffer(guard.plan, quotaSettingsCache?.value),
   };
 }
 
@@ -265,11 +433,35 @@ export async function getSyncTokenStatus(token: string) {
   const remainingChat = Math.max(0, chatLimit - chatUsed);
   const remainingTts = Math.max(0, (allowAudio ? ttsLimit : 0) - ttsUsed);
 
-  if (remainingChat <= 0 && remainingTts <= 0) {
+  let tokenQuota: TokenQuotaStatus;
+  try {
+    tokenQuota = await getTokenQuotaStatus(userId, plan);
+  } catch {
     return {
       ok: true,
       valid: true,
-      locked: true,
+      // A indisponibilidade da cota não invalida a assinatura nem deve
+      // bloquear os controles locais da live. Só as chamadas de IA fecham.
+      locked: false,
+      aiLocked: true,
+      reason: "quota_unavailable",
+      userId,
+      plan,
+      message: "Não foi possível confirmar sua franquia de tokens. Tente novamente em instantes.",
+    };
+  }
+
+  if (tokenQuota.exceeded || (remainingChat <= 0 && remainingTts <= 0)) {
+    const quotaMessage = tokenQuota.exceeded
+      ? `Sua franquia ${tokenQuota.scope === "daily" ? "diária" : "mensal"} de tokens chegou ao limite. ${tokenQuota.upgrade.message}`
+      : `Cota diária de IA esgotada para o plano '${plan}'. Faça upgrade para continuar.`;
+    return {
+      ok: true,
+      valid: true,
+      // A franquia limita somente chat/voz. Controles locais da live, como
+      // fixar produto, proteção e encerramento, continuam autorizados.
+      locked: false,
+      aiLocked: true,
       reason: "quota_exceeded",
       userId,
       plan,
@@ -277,7 +469,16 @@ export async function getSyncTokenStatus(token: string) {
       remainingTts,
       chatLimit,
       ttsLimit,
-      message: `Cota diária de IA esgotada para o plano '${plan}'. Faça upgrade para continuar.`,
+      tokenUsed: tokenQuota.used,
+      tokenLimit: tokenQuota.limit,
+      tokenRemaining: tokenQuota.remaining,
+      dailyTokenUsed: tokenQuota.dailyUsed,
+      dailyTokenLimit: tokenQuota.dailyLimit,
+      quotaPeriod: tokenQuota.period,
+      quotaResetAt: tokenQuota.resetAt,
+      quotaScope: tokenQuota.scope,
+      upgrade: tokenQuota.upgrade,
+      message: quotaMessage,
     };
   }
 
@@ -285,6 +486,7 @@ export async function getSyncTokenStatus(token: string) {
     ok: true,
     valid: true,
     locked: false,
+    aiLocked: false,
     reason: null,
     userId,
     plan,
@@ -292,6 +494,14 @@ export async function getSyncTokenStatus(token: string) {
     remainingTts,
     chatLimit,
     ttsLimit,
+    tokenUsed: tokenQuota.used,
+    tokenLimit: tokenQuota.limit,
+    tokenRemaining: tokenQuota.remaining,
+    dailyTokenUsed: tokenQuota.dailyUsed,
+    dailyTokenLimit: tokenQuota.dailyLimit,
+    quotaPeriod: tokenQuota.period,
+    quotaResetAt: tokenQuota.resetAt,
+    upgrade: tokenQuota.upgrade,
     message: "Extensão autorizada e operando normalmente.",
   };
 }

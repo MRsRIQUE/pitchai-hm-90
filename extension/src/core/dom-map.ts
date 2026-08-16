@@ -3,13 +3,7 @@
  * Módulo TypeScript para mapeamento automático de elementos do DOM
  */
 
-import {
-  TargetID,
-  TargetConfig,
-  TargetState,
-  TargetHealth,
-  DomMapStatus,
-} from "../types";
+import { TargetID, TargetConfig, TargetState, TargetHealth, DomMapStatus } from "../types";
 import type { RegionID } from "../types";
 
 // ============================================================================
@@ -24,8 +18,10 @@ const MAX_SCAN = 6000;
 const PRICE_RX = /(R\$|US\$|\$|€|£)\s?\d[\d.,]*/i;
 const AUTHOR_RX = /^[^:]{2,32}:\s?\S/;
 const SALE_RX = /(comprou|compra|pedido|order|vendid|adicionou ao carrinho|x\s?\d+)/i;
-const VIOLATION_RX = /(viola[çc][ãa]o|violation|infra[çc][ãa]o|aviso|warning|penalidad|restri[çc][ãa]o|adverten|bloqueio|conte[úu]do impr[óo]prio|pol[íi]tica da comunidade)/i;
-const END_RX = /(encerrar|finalizar|terminar|encerrar transmiss[ãa]o|finalizar live|end live|end broadcast|stop live|parar (a )?(live|transmiss[ãa]o))/i;
+const VIOLATION_RX =
+  /(viola[çc][ãa]o|violation|infra[çc][ãa]o|aviso|warning|penalidad|restri[çc][ãa]o|adverten|bloqueio|conte[úu]do impr[óo]prio|pol[íi]tica da comunidade)/i;
+const END_RX =
+  /(encerrar|finalizar|terminar|encerrar transmiss[ãa]o|finalizar live|end live|end broadcast|stop live|parar (a )?(live|transmiss[ãa]o))/i;
 const JUNK_CLASS_RX = /(video|player|nav|header|footer|sidebar-menu|modal-mask)/i;
 
 // ============================================================================
@@ -65,17 +61,17 @@ interface InternalState {
  */
 export function allDocs(): (Document | HTMLDocument)[] {
   const docs: (Document | HTMLDocument)[] = [document];
-  
+
   const walk = (doc: Document, depth: number): void => {
     if (depth > 3) return;
-    
+
     let frames: HTMLIFrameElement[] = [];
     try {
       frames = Array.from(doc.querySelectorAll<HTMLIFrameElement>("iframe"));
     } catch {
       frames = [];
     }
-    
+
     for (const f of frames) {
       let d: Document | null = null;
       try {
@@ -89,13 +85,13 @@ export function allDocs(): (Document | HTMLDocument)[] {
       }
     }
   };
-  
+
   try {
     walk(document, 0);
   } catch {
     // Ignora erros
   }
-  
+
   return docs;
 }
 
@@ -107,18 +103,18 @@ export function allRoots(): (Document | ShadowRoot)[] {
   const seen = new Set<Document | ShadowRoot>(roots);
   const queue = roots.slice();
   let guard = 0;
-  
+
   while (queue.length && guard++ < 4000) {
     const root = queue.shift() as Document | ShadowRoot | undefined;
     if (!root) continue;
-    
+
     let hosts: Element[] = [];
     try {
       hosts = Array.from(root.querySelectorAll<Element>("*")).slice(0, 4000);
     } catch {
       hosts = [];
     }
-    
+
     for (const h of hosts) {
       const sr = h.shadowRoot;
       if (sr && !seen.has(sr)) {
@@ -128,7 +124,7 @@ export function allRoots(): (Document | ShadowRoot)[] {
       }
     }
   }
-  
+
   return roots;
 }
 
@@ -186,7 +182,7 @@ export function attrBag(el: Element): string {
 export function insidePlayer(el: Element): boolean {
   let n: Element | null = el;
   let hops = 0;
-  
+
   while (n && hops++ < 6) {
     if (n.tagName === "VIDEO") return true;
     const bag = attrBag(n);
@@ -195,13 +191,13 @@ export function insidePlayer(el: Element): boolean {
     }
     n = n.parentElement;
   }
-  
+
   try {
     if ((el as HTMLElement).querySelector("video")) return true;
   } catch {
     // Ignora erros
   }
-  
+
   return false;
 }
 
@@ -215,7 +211,7 @@ export function stableClasses(el: Element): string[] {
   } catch {
     list = [];
   }
-  
+
   return list.filter(
     (c) =>
       c.length >= 4 &&
@@ -237,7 +233,8 @@ export function cssEscape(s: string): string {
   }
 }
 
-const VOLATILE_TXT_RX = /^\s*$|^[\d.,%+-]+$|\d{1,2}[:h]\d{2}|(R\$|US\$|\$|€|£)\s?\d|\b(agora|há|ago|min|seg|hoje)\b/i;
+const VOLATILE_TXT_RX =
+  /^\s*$|^[\d.,%+-]+$|\d{1,2}[:h]\d{2}|(R\$|US\$|\$|€|£)\s?\d|\b(agora|há|ago|min|seg|hoje)\b/i;
 
 /**
  * Obtém texto próprio (somente nós de texto diretos)
@@ -260,12 +257,12 @@ export function ownTextOf(el: Element): string {
 export function depthBetween(ancestor: Element, node: Element): number {
   let d = 0;
   let n: Element | null = node;
-  
+
   while (n && n !== ancestor && d < 25) {
     n = n.parentElement;
     d++;
   }
-  
+
   return n === ancestor ? d : -1;
 }
 
@@ -280,13 +277,16 @@ export function depthBetween(ancestor: Element, node: Element): number {
 export function anchorsOf(el: Element): Array<{ t: string; depth: number; tag: string }> {
   const out: Array<{ t: string; depth: number; tag: string }> = [];
   let kids: Element[] = [];
-  
+
   try {
-    kids = Array.from(el.querySelectorAll<Element>("h1,h2,h3,h4,span,div,p,button,label,a")).slice(0, 600);
+    kids = Array.from(el.querySelectorAll<Element>("h1,h2,h3,h4,span,div,p,button,label,a")).slice(
+      0,
+      600,
+    );
   } catch {
     kids = [];
   }
-  
+
   for (const k of kids) {
     if (out.length >= 4) break;
     const t = ownTextOf(k);
@@ -297,28 +297,34 @@ export function anchorsOf(el: Element): Array<{ t: string; depth: number; tag: s
     if (depth < 1) continue;
     out.push({ t, depth, tag: k.tagName });
   }
-  
+
   return out;
 }
 
 /**
  * Reencontra o container a partir das âncoras textuais salvas
  */
-export function fromAnchors(sig: { tag?: string; anchors?: Array<{ t: string; depth: number; tag: string }> }): Element | null {
+export function fromAnchors(sig: {
+  tag?: string;
+  anchors?: Array<{ t: string; depth: number; tag: string }>;
+}): Element | null {
   const anchors = Array.isArray(sig?.anchors) ? sig.anchors : [];
   if (!anchors.length) return null;
-  
+
   const roots = allRoots();
-  
+
   for (const a of anchors) {
     for (const root of roots) {
       let nodes: Element[] = [];
       try {
-        nodes = Array.from(root.querySelectorAll<Element>((a.tag || "*").toLowerCase())).slice(0, 4000);
+        nodes = Array.from(root.querySelectorAll<Element>((a.tag || "*").toLowerCase())).slice(
+          0,
+          4000,
+        );
       } catch {
         nodes = [];
       }
-      
+
       for (const n of nodes) {
         if (ownTextOf(n) !== a.t) continue;
         let p: Element | null = n;
@@ -330,7 +336,7 @@ export function fromAnchors(sig: { tag?: string; anchors?: Array<{ t: string; de
       }
     }
   }
-  
+
   return null;
 }
 
@@ -349,27 +355,27 @@ export function signatureOf(el: Element): {
 } {
   const parts: string[] = [];
   const bag: string[] = [];
-  
+
   for (const a of ["data-e2e", "data-tid", "id"] as const) {
     const v = el.getAttribute?.(a);
     if (v && v.length < 60) {
       bag.push(`[${a}="${cssEscape(v)}"]`.replace(/\\/g, ""));
     }
   }
-  
+
   const cls = stableClasses(el)
     .slice(0, 3)
     .map((c) => `.${cssEscape(c)}`);
-  
+
   const selector = bag.length
     ? el.tagName.toLowerCase() + bag.join("")
     : cls.length
       ? el.tagName.toLowerCase() + cls.join("")
       : "";
-  
+
   let n: Element | null = el;
   let hops = 0;
-  
+
   while (n && n.parentElement && hops++ < 24) {
     const p = n.parentElement;
     const idx = Array.prototype.indexOf.call(p.children, n) + 1;
@@ -377,7 +383,7 @@ export function signatureOf(el: Element): {
     n = p;
     if (n === document.body) break;
   }
-  
+
   return {
     selector,
     path: parts.join(">"),
@@ -391,9 +397,9 @@ export function signatureOf(el: Element): {
  */
 export function fromSignature(sig: ReturnType<typeof signatureOf> | null): Element | null {
   if (!sig) return null;
-  
+
   const roots = allRoots();
-  
+
   // Tentar por seletor
   if (sig.selector) {
     for (const d of roots) {
@@ -405,11 +411,11 @@ export function fromSignature(sig: ReturnType<typeof signatureOf> | null): Eleme
       }
     }
   }
-  
+
   // Tentar por âncoras textuais
   const byAnchor = fromAnchors(sig);
   if (byAnchor) return byAnchor;
-  
+
   // Tentar por caminho posicional
   if (sig.path) {
     for (const d of roots) {
@@ -422,7 +428,7 @@ export function fromSignature(sig: ReturnType<typeof signatureOf> | null): Eleme
       }
     }
   }
-  
+
   return null;
 }
 
@@ -453,7 +459,10 @@ export function regionNodes(region: RegionID | RegionID[] | undefined): Element[
   for (const id of ids) {
     let n: Element | null = null;
     try {
-      n = (window as unknown as { PitchaiRegions?: { get?: (id: RegionID) => Element | null } }).PitchaiRegions?.get?.(id) || null;
+      n =
+        (
+          window as unknown as { PitchaiRegions?: { get?: (id: RegionID) => Element | null } }
+        ).PitchaiRegions?.get?.(id) || null;
     } catch {
       n = null;
     }
@@ -480,7 +489,7 @@ export function regionNode(region: RegionID | RegionID[] | undefined): Element |
 export function candidatePool(selector: string, region?: RegionID | RegionID[]): Element[] {
   const out: Element[] = [];
   const scopes = regionNodes(region);
-  
+
   if (scopes.length) {
     for (const scope of scopes) {
       out.push(scope);
@@ -491,7 +500,7 @@ export function candidatePool(selector: string, region?: RegionID | RegionID[]):
     }
     if (out.length > scopes.length) return out;
   }
-  
+
   for (const d of allRoots()) {
     const list = elementsOf(d, selector);
     for (const el of list) {
@@ -499,7 +508,7 @@ export function candidatePool(selector: string, region?: RegionID | RegionID[]):
       if (out.length >= MAX_SCAN) return out;
     }
   }
-  
+
   return out;
 }
 
@@ -513,17 +522,17 @@ export function candidatePool(selector: string, region?: RegionID | RegionID[]):
 export function scoreChat(el: Element): number {
   const kids = el.children;
   const n = kids.length;
-  
+
   if (n < 4 || n > 500) return 0;
   if (insidePlayer(el)) return 0;
   if (!isVisible(el)) return 0;
-  
+
   let s = 0;
   const bag = attrBag(el);
-  
+
   if (/(comment|chat|message|barrage|danmaku)/.test(bag)) s += 6;
   if (JUNK_CLASS_RX.test(bag)) s -= 4;
-  
+
   try {
     const st = getComputedStyle(el as HTMLElement);
     if (/auto|scroll/.test(st.overflowY)) s += 4;
@@ -531,11 +540,11 @@ export function scoreChat(el: Element): number {
   } catch {
     // Ignora erros
   }
-  
+
   let short = 0;
   let authored = 0;
   const sample = Math.min(n, 24);
-  
+
   for (let i = n - sample; i < n; i++) {
     const t = txt(kids[i]);
     if (!t) continue;
@@ -544,13 +553,13 @@ export function scoreChat(el: Element): number {
       authored++;
     }
   }
-  
+
   if (!sample) return 0;
-  
+
   s += (short / sample) * 6;
   s += (authored / sample) * 7;
   s += Math.min(n, 60) / 15;
-  
+
   // Um chat não é a página inteira
   try {
     const r = el.getBoundingClientRect();
@@ -559,7 +568,7 @@ export function scoreChat(el: Element): number {
   } catch {
     // Ignora erros
   }
-  
+
   return s;
 }
 
@@ -576,14 +585,14 @@ export function childSignature(el: Element): string {
 export function looksLikeProductCard(el: Element): boolean {
   const t = txt(el);
   if (t.length < 6 || t.length > 500) return false;
-  
+
   let hasImg = false;
   try {
     hasImg = !!el.querySelector("img, [style*='background-image']");
   } catch {
     // Ignora erros
   }
-  
+
   return PRICE_RX.test(t) || (hasImg && t.length > 10);
 }
 
@@ -592,33 +601,33 @@ export function looksLikeProductCard(el: Element): boolean {
  */
 export function scoreProductList(el: Element): number {
   const kids = Array.from(el.children || []);
-  
+
   if (kids.length < 2 || kids.length > 200) return 0;
   if (!isVisible(el)) return 0;
   if (insidePlayer(el)) return 0;
-  
+
   const sigs = new Map<string, number>();
   kids.forEach((k) => sigs.set(childSignature(k), (sigs.get(childSignature(k)) || 0) + 1));
-  
+
   const dominant = Math.max(...sigs.values());
   if (dominant < 2) return 0;
-  
+
   const good = kids.filter(looksLikeProductCard).length;
   if (good < 2) return 0;
-  
+
   let s = 0;
   const bag = attrBag(el);
-  
+
   if (/(product|goods|shop|vitrine|item-list)/.test(bag)) s += 6;
   if (/(comment|chat|message)/.test(bag)) s -= 6;
-  
+
   s += (good / kids.length) * 8;
   s += (dominant / kids.length) * 4;
   s += Math.min(good, 20) / 5;
-  
+
   const priced = kids.filter((k) => PRICE_RX.test(txt(k))).length;
   s += (priced / kids.length) * 4;
-  
+
   return s;
 }
 
@@ -627,24 +636,24 @@ export function scoreProductList(el: Element): number {
  */
 export function scoreSales(el: Element): number {
   const kids = Array.from(el.children || []);
-  
+
   if (kids.length < 1 || kids.length > 200) return 0;
   if (!isVisible(el)) return 0;
-  
+
   const hits = kids.filter((k) => SALE_RX.test(txt(k))).length;
   // Sem nenhuma evidência de venda não é feed de vendas
   if (!hits) return 0;
-  
+
   let s = 0;
   const bag = attrBag(el);
-  
+
   if (/(activity|order|sale|venda|pedido|transaction)/.test(bag)) s += 6;
   if (/(comment|chat|message)/.test(bag)) s -= 5;
   if (/(product|goods|showcase|catalog|shelf|vitrine)/.test(bag)) s -= 6;
-  
+
   if (kids.length) s += (hits / kids.length) * 8;
   s += Math.min(hits, 10) / 2;
-  
+
   return s;
 }
 
@@ -652,22 +661,41 @@ export function scoreSales(el: Element): number {
  * Calcula score para violação
  */
 export function scoreViolation(el: Element): number {
+  // Na interface atual, "Avisos" é um botão sem texto/aria: apenas um SVG
+  // triangular dentro de `m4b_badge`. Use a assinatura estrutural antes das
+  // evidências textuais e mantenha o fallback para versões antigas.
+  try {
+    const button = el.matches("button") ? el : el.closest("button");
+    if (
+      button &&
+      button.closest('[data-tid="m4b_badge"]') &&
+      button.matches('[data-tid="m4b_button"]') &&
+      button.querySelector('img[src^="data:image/svg+xml"]') &&
+      isVisible(button)
+    ) {
+      return el === button ? 12 : 10;
+    }
+  } catch {
+    // Continua para a detecção textual legada.
+  }
   const t = txt(el);
   if (!t || t.length > 160) return 0;
   if (!VIOLATION_RX.test(t) && !VIOLATION_RX.test(attrBag(el))) return 0;
   if (!isVisible(el)) return 0;
-  
+
   let s = 5;
   if (VIOLATION_RX.test(t)) s += 3;
   if (el.children.length <= 3) s += 2;
-  
+
   try {
-    const c = getComputedStyle(el as HTMLElement).color + getComputedStyle(el as HTMLElement).backgroundColor;
+    const c =
+      getComputedStyle(el as HTMLElement).color +
+      getComputedStyle(el as HTMLElement).backgroundColor;
     if (/rgb\((2[0-5]\d|1[89]\d),\s*\d{1,2},/.test(c)) s += 2;
   } catch {
     // Ignora erros
   }
-  
+
   return s;
 }
 
@@ -675,16 +703,26 @@ export function scoreViolation(el: Element): number {
  * Calcula score para botão de encerrar live
  */
 export function scoreEndLive(el: Element): number {
+  try {
+    const control = el.matches(".arco-icon-im_close_chat")
+      ? el.closest(".cursor-pointer") || el.parentElement
+      : el.querySelector(".arco-icon-im_close_chat")
+        ? el
+        : null;
+    if (control && isVisible(control)) return el === control ? 12 : 10;
+  } catch {
+    // Continua para a detecção textual legada.
+  }
   const label = `${txt(el)} ${attrBag(el)}`.toLowerCase();
   if (!END_RX.test(label)) return 0;
   if (/cancelar|cancel|voltar/.test(label)) return 0;
   if (!isVisible(el)) return 0;
-  
+
   let s = 6;
   if (el.tagName === "BUTTON") s += 3;
   if ((el as HTMLElement).closest?.("aside, footer, header")) s += 3;
   if (txt(el).length <= 30) s += 2;
-  
+
   // Botão vermelho de encerrar é a assinatura visual mais comum
   try {
     const bg = getComputedStyle(el as HTMLElement).backgroundColor || "";
@@ -693,7 +731,7 @@ export function scoreEndLive(el: Element): number {
   } catch {
     // Ignora erros
   }
-  
+
   return s;
 }
 
@@ -716,7 +754,7 @@ const TARGETS: Record<TargetID, TargetDefinition> = {
     loose: true,
   },
   endLive: {
-    pool: "button, [role='button'], a",
+    pool: "button, [role='button'], a, div.cursor-pointer, .arco-icon-im_close_chat",
     score: scoreEndLive,
     min: 7,
     region: ["studio", "topbar"],
@@ -727,8 +765,10 @@ const TARGETS: Record<TargetID, TargetDefinition> = {
 // Dicas legadas (XPaths antigos) — entram só como candidatos extras
 const HINT_XPATHS: Record<TargetID, string | undefined> = {
   chat: "/html/body/div[2]/div/div[2]/main/div/div/div/div/div/div/div[2]/div[2]/div[3]/div/div[2]",
-  sales: "/html/body/div[2]/div/div[2]/main/div/div/div/div/div/div/div[2]/div[3]/div[2]/div/div[2]/div/div/div/div[1]/div/div[1]/div/div/div",
-  violation: "/html/body/div[2]/div/div[2]/main/div/div/div/div/div/div/div[1]/div/div[2]/span/button/span/span",
+  sales:
+    "/html/body/div[2]/div/div[2]/main/div/div/div/div/div/div/div[2]/div[3]/div[2]/div/div[2]/div/div/div/div[1]/div/div[1]/div/div/div",
+  violation:
+    "/html/body/div[2]/div/div[2]/main/div/div/div/div/div/div/div[1]/div/div[2]/span/button/span/span",
   endLive: "/html/body/div[2]/div/div[2]/aside/div/div/div/div/div[1]/button",
   products: "/html/body/div[2]/div/div[2]/main/div/div/div/div/div/div/div[1]/div/div[3]",
 };
@@ -738,13 +778,7 @@ const HINT_XPATHS: Record<TargetID, string | undefined> = {
  */
 export function byXPath(path: string): HTMLElement | null {
   try {
-    const r = document.evaluate(
-      path,
-      document,
-      null,
-      XPathResult.FIRST_ORDERED_NODE_TYPE,
-      null,
-    );
+    const r = document.evaluate(path, document, null, XPathResult.FIRST_ORDERED_NODE_TYPE, null);
     return r.singleNodeValue instanceof HTMLElement ? r.singleNodeValue : null;
   } catch {
     return null;
@@ -779,15 +813,18 @@ async function loadCache(): Promise<Partial<Record<TargetID, ReturnType<typeof s
   return new Promise((res) => {
     if (cacheLoaded) return res(cache);
     try {
-      (chrome.storage.local as { get: (keys: string[], callback: (result: Record<string, unknown>) => void) => void }).get(
-        [CACHE_KEY],
-        (r) => {
-          const raw = r?.[CACHE_KEY] as Record<string, unknown> | undefined || {};
-          cache = (raw.host === location.host ? raw.sig : {}) as Partial<Record<TargetID, ReturnType<typeof signatureOf>>>;
-          cacheLoaded = true;
-          res(cache);
-        },
-      );
+      (
+        chrome.storage.local as {
+          get: (keys: string[], callback: (result: Record<string, unknown>) => void) => void;
+        }
+      ).get([CACHE_KEY], (r) => {
+        const raw = (r?.[CACHE_KEY] as Record<string, unknown> | undefined) || {};
+        cache = (raw.host === location.host ? raw.sig : {}) as Partial<
+          Record<TargetID, ReturnType<typeof signatureOf>>
+        >;
+        cacheLoaded = true;
+        res(cache);
+      });
     } catch {
       cacheLoaded = true;
       res(cache);
@@ -815,15 +852,18 @@ async function loadManual(): Promise<Partial<Record<TargetID, ReturnType<typeof 
   return new Promise((res) => {
     if (manualLoaded) return res(manual);
     try {
-      (chrome.storage.local as { get: (keys: string[], callback: (result: Record<string, unknown>) => void) => void }).get(
-        [MANUAL_KEY],
-        (r) => {
-          const raw = r?.[MANUAL_KEY] as Record<string, unknown> | undefined || {};
-          manual = (raw.host === location.host ? raw.sig : {}) as Partial<Record<TargetID, ReturnType<typeof signatureOf>>>;
-          manualLoaded = true;
-          res(manual);
-        },
-      );
+      (
+        chrome.storage.local as {
+          get: (keys: string[], callback: (result: Record<string, unknown>) => void) => void;
+        }
+      ).get([MANUAL_KEY], (r) => {
+        const raw = (r?.[MANUAL_KEY] as Record<string, unknown> | undefined) || {};
+        manual = (raw.host === location.host ? raw.sig : {}) as Partial<
+          Record<TargetID, ReturnType<typeof signatureOf>>
+        >;
+        manualLoaded = true;
+        res(manual);
+      });
     } catch {
       manualLoaded = true;
       res(manual);
@@ -875,10 +915,10 @@ async function pickGrowing(cands: ScoredElement[]): Promise<ScoredElement | null
   const mid = cands.map((c) => (c.el as HTMLElement).children.length);
   await sleep(1000);
   const end = cands.map((c) => (c.el as HTMLElement).children.length);
-  
+
   let best: ScoredElement | null = null;
   let bestVal = -Infinity;
-  
+
   cands.forEach((c, i) => {
     const growth = Math.max(0, end[i] - counts[i]) + Math.max(0, mid[i] - counts[i]) * 0.5;
     const val = c.score + Math.min(growth, 10) * 1.2;
@@ -887,7 +927,7 @@ async function pickGrowing(cands: ScoredElement[]): Promise<ScoredElement | null
       best = { ...c, score: val, grew: growth > 0 };
     }
   });
-  
+
   return best;
 }
 
@@ -901,20 +941,24 @@ async function pickGrowing(cands: ScoredElement[]): Promise<ScoredElement | null
 async function scan(target: TargetID): Promise<ScoredElement | null> {
   const def = TARGETS[target];
   if (!def) return null;
-  
+
   const seen = new Set<Element>();
   const scored: ScoredElement[] = [];
-  
+
   // Garante que os setores estejam resolvidos antes de procurar o alvo
   try {
-    await (window as unknown as { PitchaiRegions?: { resolveAll?: (options: { force: boolean }) => Promise<unknown> } }).PitchaiRegions?.resolveAll?.({ force: false });
+    await (
+      window as unknown as {
+        PitchaiRegions?: { resolveAll?: (options: { force: boolean }) => Promise<unknown> };
+      }
+    ).PitchaiRegions?.resolveAll?.({ force: false });
   } catch {
     // Ignora erros
   }
-  
+
   const scopes = regionNodes(def.region);
   const scope = scopes[0] || null;
-  
+
   const inRegion = (el: Element): boolean => {
     if (!scopes.length) return true;
     try {
@@ -923,10 +967,10 @@ async function scan(target: TargetID): Promise<ScoredElement | null> {
       return false;
     }
   };
-  
+
   // Alvos "loose" (violação, encerrar) podem estar fora do setor — só perdem bônus
   const reject = (el: Element): boolean => !def.loose && scopes.length > 0 && !inRegion(el);
-  
+
   // Verificar dica de XPath
   const hint = HINT_XPATHS[target] ? byXPath(HINT_XPATHS[target]!) : null;
   if (hint && !reject(hint)) {
@@ -934,37 +978,38 @@ async function scan(target: TargetID): Promise<ScoredElement | null> {
     if (s >= def.min) scored.push({ el: hint, score: s + 1, via: "hint-xpath" });
     seen.add(hint);
   }
-  
+
   // Verificar pool de candidatos
   const pool = candidatePool(def.pool, def.region);
   for (const el of pool) {
     if (seen.has(el)) continue;
     seen.add(el);
     if (reject(el)) continue;
-    
+
     let s = 0;
     try {
       s = def.score(el);
     } catch {
       s = 0;
     }
-    
+
     if (s <= 0) continue;
     if (inRegion(el) && scope) s += 4; // Bônus por estar no setor certo
-    if (s >= def.min) scored.push({ el, score: s, via: scope && inRegion(el) ? "setor" : "auto-scan" });
+    if (s >= def.min)
+      scored.push({ el, score: s, via: scope && inRegion(el) ? "setor" : "auto-scan" });
   }
-  
+
   if (!scored.length) return null;
-  
+
   scored.sort((a, b) => b.score - a.score);
-  
+
   let winner = scored[0];
   if (def.sample && scored.length > 1 && scored[1].score > scored[0].score - 4) {
     const top = scored.slice(0, 4);
     const picked = await pickGrowing(top);
     if (picked) winner = picked;
   }
-  
+
   return winner;
 }
 
@@ -1027,12 +1072,12 @@ export async function resolve(
   if (!options.force && st.node && st.node.isConnected) return st.node;
   const existing = inflight[target];
   if (existing) return existing;
-  
+
   inflight[target] = (async () => {
     await loadManual();
     await loadCache();
     const def = TARGETS[target];
-    
+
     // 1. Verificar manual
     if (manual[target]) {
       const el = fromSignature(manual[target]);
@@ -1041,7 +1086,7 @@ export async function resolve(
         return el;
       }
     }
-    
+
     // 2. Verificar cache
     if (!options.force && cache[target]) {
       const el = fromSignature(cache[target]);
@@ -1058,20 +1103,20 @@ export async function resolve(
         }
       }
     }
-    
+
     // 3. Realizar scan
     const found = await scan(target);
     if (found) {
       setResult(target, found.el, found.score, found.via, `score ${found.score.toFixed(1)}`);
       return found.el;
     }
-    
+
     setResult(target, null, 0, null, "não encontrado");
     return null;
   })().finally(() => {
     delete inflight[target];
   });
-  
+
   return inflight[target];
 }
 
@@ -1094,7 +1139,7 @@ export async function remapAll(): Promise<Record<TargetID, boolean>> {
     delete cache[k as TargetID];
   });
   saveCache();
-  
+
   const out: Record<TargetID, boolean> = {} as Record<TargetID, boolean>;
   for (const k of Object.keys(TARGETS) as TargetID[]) {
     out[k] = !!(await resolve(k, { force: true }));
@@ -1107,7 +1152,7 @@ export async function remapAll(): Promise<Record<TargetID, boolean>> {
  */
 export function status(): DomMapStatus {
   const out: DomMapStatus = {} as DomMapStatus;
-  
+
   for (const k of Object.keys(TARGETS) as TargetID[]) {
     const s = state[k];
     out[k] = {
@@ -1124,7 +1169,7 @@ export function status(): DomMapStatus {
       hasManual: !!manual[k],
     };
   }
-  
+
   return out;
 }
 
@@ -1138,20 +1183,20 @@ export function status(): DomMapStatus {
 export function healthOf(target: TargetID): TargetHealth {
   const def = TARGETS[target];
   const st = state[target];
-  
+
   if (!def || !st?.node) return { ok: false, score: 0, reason: "sem nó" };
   if (!st.node.isConnected) return { ok: false, score: 0, reason: "removido do DOM" };
   if (!isVisible(st.node)) return { ok: false, score: 0, reason: "invisível" };
-  
+
   let sc = 0;
   try {
     sc = def.score(st.node);
   } catch {
     sc = 0;
   }
-  
+
   if (st.via === "manual") return { ok: true, score: sc, reason: "manual" };
-  
+
   // Tolerância para oscilação
   const floor = def.min * 0.55;
   return { ok: sc >= floor, score: sc, reason: sc >= floor ? "ok" : "score caiu" };
@@ -1165,7 +1210,7 @@ let healing = false;
 export async function healAll(options: { force?: boolean } = {}): Promise<void> {
   if (healing) return;
   healing = true;
-  
+
   try {
     for (const k of Object.keys(TARGETS) as TargetID[]) {
       const h = healthOf(k);
@@ -1197,23 +1242,23 @@ let unsubRegions: (() => void) | null = null;
  */
 export function startWatchdog(): void {
   if (watchdog) return;
-  
+
   watchdog = setInterval(() => {
     healAll().catch(() => {});
   }, 15000);
-  
+
   // Re-render pesado do TikTok → remapeia logo
   try {
     mo = new MutationObserver((records) => {
       let removedTracked = false;
-      
+
       for (const r of records) {
         if (!r.removedNodes || !r.removedNodes.length) continue;
-        
+
         for (const k of Object.keys(TARGETS) as TargetID[]) {
           const n = state[k].node;
           if (!n) continue;
-          
+
           for (const rm of r.removedNodes) {
             if (rm === n || (rm as Element).contains?.(n)) {
               removedTracked = true;
@@ -1224,34 +1269,39 @@ export function startWatchdog(): void {
         }
         if (removedTracked) break;
       }
-      
+
       if (!removedTracked) return;
-      
+
       clearTimeout(churnTimer as unknown as number);
       churnTimer = setTimeout(() => {
         healAll().catch(() => {});
       }, 800);
     });
-    
+
     mo.observe(document.documentElement, { childList: true, subtree: true });
   } catch {
     // Ignora erros
   }
-  
+
   // Setor mudou de lugar → alvos daquele setor precisam ser reavaliados
   try {
-    unsubRegions = (window as unknown as { PitchaiRegions?: { onChange?: (cb: () => void) => () => void } }).PitchaiRegions?.onChange?.(() => {
-      clearTimeout(churnTimer as unknown as number);
-      churnTimer = setTimeout(() => {
-        healAll().catch(() => {});
-      }, 1200);
-    }) || null;
+    unsubRegions =
+      (
+        window as unknown as { PitchaiRegions?: { onChange?: (cb: () => void) => () => void } }
+      ).PitchaiRegions?.onChange?.(() => {
+        clearTimeout(churnTimer as unknown as number);
+        churnTimer = setTimeout(() => {
+          healAll().catch(() => {});
+        }, 1200);
+      }) || null;
   } catch {
     // Ignora erros
   }
-  
+
   try {
-    (window as unknown as { PitchaiRegions?: { startWatcher?: () => void } }).PitchaiRegions?.startWatcher?.();
+    (
+      window as unknown as { PitchaiRegions?: { startWatcher?: () => void } }
+    ).PitchaiRegions?.startWatcher?.();
   } catch {
     // Ignora erros
   }
@@ -1294,7 +1344,9 @@ export function stopWatchdog(): void {
 /**
  * Exporta os apontamentos manuais
  */
-export async function exportManual(): Promise<Partial<Record<TargetID, ReturnType<typeof signatureOf>>>> {
+export async function exportManual(): Promise<
+  Partial<Record<TargetID, ReturnType<typeof signatureOf>>>
+> {
   await loadManual();
   return JSON.parse(JSON.stringify(manual || {}));
 }
@@ -1302,11 +1354,13 @@ export async function exportManual(): Promise<Partial<Record<TargetID, ReturnTyp
 /**
  * Importa os apontamentos manuais
  */
-export async function importManual(sig: Partial<Record<TargetID, ReturnType<typeof signatureOf>>>): Promise<Record<TargetID, boolean>> {
+export async function importManual(
+  sig: Partial<Record<TargetID, ReturnType<typeof signatureOf>>>,
+): Promise<Record<TargetID, boolean>> {
   manual = sig && typeof sig === "object" ? { ...sig } : {};
   manualLoaded = true;
   saveManual();
-  
+
   Object.keys(manual).forEach((t) => {
     try {
       invalidate(t as TargetID);
@@ -1314,7 +1368,7 @@ export async function importManual(sig: Partial<Record<TargetID, ReturnType<type
       // Ignora erros
     }
   });
-  
+
   return remapAll();
 }
 
@@ -1325,7 +1379,7 @@ export async function reloadManual(): Promise<Record<TargetID, boolean>> {
   manualLoaded = false;
   manual = {};
   await loadManual();
-  
+
   Object.keys(manual).forEach((t) => {
     try {
       invalidate(t as TargetID);
@@ -1333,7 +1387,7 @@ export async function reloadManual(): Promise<Record<TargetID, boolean>> {
       // Ignora erros
     }
   });
-  
+
   return remapAll();
 }
 

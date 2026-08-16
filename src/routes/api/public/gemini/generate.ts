@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { GoogleGenAI, ThinkingLevel } from "@google/genai";
 import { corsHeaders } from "@/lib/live/cors.server";
-import { guardAiRequest } from "@/lib/live/api-auth.server";
+import { guardAiRequest, recordAiUsageTokens } from "@/lib/live/api-auth.server";
 import { validateContentForPublish } from "@/lib/live/validation.server";
 
 const MAX_PROMPT_CHARS = 20_000;
@@ -22,10 +22,20 @@ export const Route = createFileRoute("/api/public/gemini/generate")({
 
         const guard = await guardAiRequest(request, "chat_reply");
         if (!guard.ok) {
-          return json(guard.status ?? 401, { error: "unauthorized", message: guard.message });
+          return json(guard.status ?? 401, {
+            error: guard.status === 429 ? "quota_exceeded" : "unauthorized",
+            message: guard.message,
+            locked: guard.status === 429,
+            plan: guard.plan,
+            tokenUsed: guard.tokenUsed,
+            tokenLimit: guard.tokenLimit,
+            tokenRemaining: guard.tokenRemaining,
+            quotaResetAt: guard.quotaResetAt,
+            upgrade: guard.upgrade,
+          });
         }
 
-        const apiKey = process.env.GEMINI_API_KEY || process.env.LOVABLE_API_KEY;
+        const apiKey = process.env.GEMINI_API_KEY || process.env.GCP_API_KEY;
         if (!apiKey) {
           return json(500, {
             error: "missing_api_key",
@@ -108,10 +118,23 @@ export const Route = createFileRoute("/api/public/gemini/generate")({
             });
           }
 
+          const usage = response.usageMetadata;
+          const tokensInput =
+            usage?.promptTokenCount ??
+            Math.ceil((prompt.length + (systemInstruction?.length ?? 0)) / 4);
+          const tokensOutput = usage?.candidatesTokenCount ?? Math.ceil(generatedText.length / 4);
+          const tokenQuota = await recordAiUsageTokens(guard, tokensInput, tokensOutput);
+
           return json(200, {
             text: outputValidation.content,
             modelUsed: model,
             thinkingEnabled: !!config.thinkingConfig,
+            tokenUsed: tokenQuota.used,
+            tokenLimit: tokenQuota.limit,
+            tokenRemaining: tokenQuota.remaining,
+            quotaReached: tokenQuota.exceeded,
+            quotaResetAt: tokenQuota.resetAt,
+            upgrade: tokenQuota.upgrade,
           });
         } catch (err: unknown) {
           const message = err instanceof Error ? err.message : String(err);

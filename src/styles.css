@@ -270,6 +270,27 @@ html[data-tier="2xl"] {
 }
 
 @layer utilities {
+  /* Desktop-first content rails shared by the app and its secondary pages.
+     They keep a small safety gutter, but otherwise use the available monitor
+     instead of reproducing the old phone-sized column in the middle. */
+  .desktop-rail {
+    width: min(100%, 1920px);
+    margin-inline: auto;
+    padding-inline: clamp(1rem, 2.25vw, 3rem);
+  }
+
+  .desktop-rail-narrow {
+    width: min(100%, 1440px);
+    margin-inline: auto;
+    padding-inline: clamp(1rem, 2.25vw, 3rem);
+  }
+
+  .desktop-card-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 280px), 1fr));
+    gap: clamp(1rem, 1.5vw, 1.5rem);
+  }
+
   /* App shell — width follows the active tier (set by useDevice via --shell-max). */
   .app-shell {
     width: 100%;

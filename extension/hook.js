@@ -23,7 +23,7 @@
   const PRODUCT_CHROME_RX =
     /(gerenciador\s+de\s+live|pesquisar\s+id|todas\s+as\s+categorias|todo\s+o\s+estoque|lista\s+de\s+produtos\s+nesta\s+live|portugu[eê]s\s+do\s+brasil|\bsair\b|pitcha[ií]\s+live)/i;
   const BAD_PRODUCT_RX =
-    /^(adicionar|fixar|destacar|editar|excluir|todos|produtos?|vitrine|estoque|pedidos?)$/i;
+    /^(adicionar|fixar|desafixar|destacar|editar|excluir|remover|todos|produtos?|vitrine|estoque|pedidos?|comprar|carrinho|adicionado ao carrinho|cliques?)$/i;
 
   function deep(o, ...paths) {
     for (const path of paths) {
@@ -88,15 +88,15 @@
     const price = priceOf(src) || priceOf(o);
     // basta um id de produto: preço e imagem podem chegar depois pelo DOM
     const productEvidence = !!(
-        price ||
-        src.cover != null ||
-        src.image != null ||
-        src.images != null ||
-        src.product_status != null ||
-        src.sku_list != null ||
-        src.stock != null ||
-        base
-      );
+      price ||
+      src.cover != null ||
+      src.image != null ||
+      src.images != null ||
+      src.product_status != null ||
+      src.sku_list != null ||
+      src.stock != null ||
+      base
+    );
     const validId = id != null && String(id).length >= 5;
     // Algumas rotas entregam o id apenas numa segunda resposta. Ainda aceitamos
     // nome + preço + evidência de catálogo e consolidamos pelo nome no content script.

@@ -1,5 +1,7 @@
 (function () {
   const KEY = "pitchai.config.v1";
+  const PENDING_SYNC_KEY = "pitchai.pendingSyncToken";
+  const SYNC_UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
   function resolveApiBase() {
     if (window.location.origin && window.location.origin.includes("run.app")) {
       return window.location.origin;
@@ -7,7 +9,7 @@
     if (window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1") {
       return window.location.origin;
     }
-    return "https://pitchai-moon-e5ad.vercel.app";
+    return "https://pitchai-hm.vercel.app";
   }
   const API_BASE = resolveApiBase();
 
@@ -60,9 +62,7 @@
       }
     });
     if (stored && typeof stored === "string") {
-      const bytes = new Uint8Array(
-        (stored.match(/.{1,2}/g) || []).map((b) => parseInt(b, 16)),
-      );
+      const bytes = new Uint8Array((stored.match(/.{1,2}/g) || []).map((b) => parseInt(b, 16)));
       if (bytes.length === 16) return bytes;
     }
     const salt = crypto.getRandomValues(new Uint8Array(16));
@@ -307,7 +307,7 @@
   }
 
   const BAD_PRODUCT_RX =
-    /(gerenciador\s+de\s+live|pesquisar\s+id|todas\s+as\s+categorias|todo\s+o\s+estoque|lista\s+de\s+produtos\s+nesta\s+live|portugu[eê]s\s+do\s+brasil|\bsair\b|pitcha[ií]\s+live)/i;
+    /(gerenciador\s+de\s+live|pesquisar\s+id|todas\s+as\s+categorias|todo\s+o\s+estoque|lista\s+de\s+produtos\s+nesta\s+live|portugu[eê]s\s+do\s+brasil|\bsair\b|pitcha[ií]\s+live|^(?:carrinho|adicionado ao carrinho|cliques?|fixar|desafixar|editar|excluir|remover)(?:\s*\d+)?$)/i;
   function productKey(name) {
     return String(name || "")
       .toLowerCase()
@@ -344,7 +344,9 @@
     if (cfg.produtos.length !== before) save("produtos");
   }
   function sendDemoCommand(action) {
-    chrome.storage.local.set({ "pitchai.demo.cmd": { action, ts: Date.now() } });
+    const ts = Date.now();
+    chrome.storage.local.set({ "pitchai.demo.cmd": { action, ts } });
+    return ts;
   }
 
   let cfg;
@@ -464,13 +466,13 @@
     renderAutofixPicker();
   }
 
-  function rodizio() {
+  function produtosSelecionados() {
     const ids = Array.isArray(cfg.autoFixar?.ids) ? cfg.autoFixar.ids : [];
     return (cfg.produtos || []).filter((p) => ids.includes(p.id));
   }
-  function syncRodizioNames() {
+  function syncSelectedProductNames() {
     cfg.autoFixar ??= { ...DEFAULTS.autoFixar };
-    cfg.autoFixar.names = rodizio().map((p) => p.name);
+    cfg.autoFixar.names = produtosSelecionados().map((p) => p.name);
   }
 
   /**
@@ -562,7 +564,7 @@
     const hint = document.createElement("p");
     hint.className = "pnl-sub";
     hint.textContent =
-      "Marque “no rodízio” nos produtos que o auto-fixar deve alternar. Sem nenhum marcado, roda todos.";
+      "Marque os produtos que podem ser fixados. Sem nenhum marcado, a automação fica aguardando.";
     box.appendChild(hint);
     cfg.produtos.forEach((prod, i) => {
       const row = document.createElement("div");
@@ -583,7 +585,7 @@
         renderAutofixPicker();
       };
       const txt = document.createElement("span");
-      txt.textContent = "no rodízio";
+      txt.textContent = "fixar";
       wrap.append(pick, txt);
       const input = document.createElement("input");
       input.type = "text";
@@ -618,6 +620,21 @@
 
   document.addEventListener("DOMContentLoaded", async () => {
     cfg = await load();
+    const pendingToken = await new Promise((resolve) => {
+      try {
+        chrome.storage.local.get([PENDING_SYNC_KEY], (result) =>
+          resolve(result?.[PENDING_SYNC_KEY] || ""),
+        );
+      } catch {
+        resolve("");
+      }
+    });
+    if (SYNC_UUID_RE.test(String(pendingToken))) {
+      cfg.syncToken = String(pendingToken);
+      const encrypted = await encryptConfigObj(cfg);
+      await chrome.storage.local.set({ [KEY]: encrypted });
+      await chrome.storage.local.remove(PENDING_SYNC_KEY);
+    }
     try {
       const verEl = document.querySelector(".pnl-ver");
       if (verEl) verEl.textContent = "v" + chrome.runtime.getManifest().version;
@@ -631,7 +648,9 @@
       btn.addEventListener("click", (e) => {
         const target = btn.getAttribute("data-tab");
         if (!target) return;
-        document.querySelectorAll(".pnl-tab-btn").forEach((b) => b.classList.toggle("active", b === btn));
+        document
+          .querySelectorAll(".pnl-tab-btn")
+          .forEach((b) => b.classList.toggle("active", b === btn));
         document.querySelectorAll(".pnl-tab-content").forEach((c) => {
           c.classList.toggle("active", c.id === target);
         });
@@ -642,6 +661,17 @@
       });
     });
     // fecha o "Mais" ao clicar fora dele
+    const moreMenu = document.querySelector(".pnl-more-menu");
+    moreMenu?.addEventListener("toggle", () => {
+      if (!moreMenu.open) return;
+      const summary = moreMenu.querySelector("summary");
+      const menu = moreMenu.querySelector(".pnl-more-items");
+      const rect = summary?.getBoundingClientRect?.();
+      if (menu && rect) {
+        menu.style.top = `${Math.round(rect.bottom + 4)}px`;
+        menu.style.right = `${Math.max(8, Math.round(window.innerWidth - rect.right))}px`;
+      }
+    });
     document.addEventListener("click", (e) => {
       const more = document.querySelector(".pnl-more-menu");
       if (!more || !more.open) return;
@@ -695,9 +725,7 @@
       const name = prod?.name || value;
       cfg.autoFixar.query = name;
       if (prod?.id) {
-        const ids = new Set(cfg.autoFixar.ids || []);
-        ids.add(prod.id);
-        cfg.autoFixar.ids = Array.from(ids);
+        cfg.autoFixar.ids = [prod.id];
       }
       syncRodizioNames();
       save(["autoFixar.query", "autoFixar.ids", "autoFixar.names"]);
@@ -758,8 +786,8 @@
         btn.textContent = "Lendo vitrine…";
       }
       if (hint) hint.textContent = "Lendo vitrine…";
-      sendDemoCommand("catalogo");
-      const updated = await waitForCatalogUpdate(before);
+      const commandTs = sendDemoCommand("catalogo");
+      const updated = await waitForCatalogUpdate(before, commandTs);
       cfg = updated || (await load());
       render();
       const after = (cfg.produtos || []).length;
@@ -794,7 +822,9 @@
         const action = btn.getAttribute("data-demo");
         sendDemoCommand(action);
         const hint = document.getElementById("pnl-demo-hint");
-        if (hint) hint.textContent = `Enviando "${action}"…`;
+        if (hint)
+          hint.textContent =
+            action === "tour" ? "Iniciando demonstração guiada…" : `Executando "${action}"…`;
       });
     });
 
@@ -806,6 +836,12 @@
         if (!ack || !hint) return;
         hint.textContent = `${ack.ok ? "✓" : "✗"} ${ack.message}`;
         hint.style.color = ack.ok ? "#00E676" : "#FF6B35";
+        const tourBtn = document.getElementById("pnl-demo-tour");
+        if (tourBtn && ack.action === "tour") {
+          const finished = /concluída|não concluiu/i.test(ack.message || "");
+          tourBtn.textContent = finished ? "↻ Repetir teste completo" : "⏳ Teste em andamento";
+          tourBtn.disabled = !finished;
+        }
       });
     } catch {}
 
@@ -905,35 +941,30 @@
       tick = setInterval(() => {
         elapsed++;
         timeEl.textContent = fmt(elapsed);
-        if (cfg.encerrarTempo?.enabled && elapsed >= (cfg.encerrarTempo.minutes || 1) * 60)
-          stopLive("timer");
       }, 1000);
-      info.textContent = "● AO VIVO";
+      info.textContent = "Pré-visualização local ativa (não inicia o TikTok)";
     }
     function stopLive(reason) {
       live = false;
       clearInterval(tick);
       tick = null;
       video.pause();
-      info.textContent = reason === "timer" ? "Live encerrada pelo temporizador" : "Live encerrada";
+      info.textContent = "Pré-visualização pausada";
     }
     document.getElementById("pnl-live-start").addEventListener("click", () => startLive());
     document.getElementById("pnl-live-stop").addEventListener("click", () => stopLive());
 
-    // Agendamento
+    // O agendamento real roda no content script, mesmo com este painel fechado.
     setInterval(() => {
-      if (live || !cfg.agendar?.enabled || !cfg.agendar.at) {
+      if (!cfg.agendar?.enabled || !cfg.agendar.at) {
         if (agendaInfo) agendaInfo.textContent = "";
         return;
       }
       const ts = new Date(cfg.agendar.at).getTime();
       if (!ts) return;
       const falta = Math.ceil((ts - Date.now()) / 1000);
-      if (falta > 0) agendaInfo.textContent = `Começa em ${fmt(falta)}. Deixe o painel aberto.`;
-      else {
-        agendaInfo.textContent = "Iniciando…";
-        startLive();
-      }
+      if (falta > 0) agendaInfo.textContent = `Início automático em ${fmt(falta)}.`;
+      else agendaInfo.textContent = "Horário atingido · a extensão está iniciando automaticamente.";
     }, 1000);
 
     window.addEventListener("beforeunload", () => {
@@ -995,9 +1026,11 @@
     const MAP_STATUS_KEY = "pitchai.dommap.status";
     const MAP_LABELS = {
       chat: "Chat da live",
+      chatReply: "Área de resposta do chat",
       products: "Vitrine de produtos",
       sales: "Vendas",
       violation: "Avisos / violações",
+      startLive: "Botão iniciar LIVE",
       endLive: "Botão encerrar LIVE",
     };
     const VIA_LABEL = {
@@ -1006,6 +1039,7 @@
       rede: "lido da API do TikTok",
       "hint-xpath": "detecção automática",
       "auto-scan": "detecção automática",
+      setor: "detectado no setor",
     };
     const REGION_LABELS = {
       products: "Setor PRODUTOS",
@@ -1013,6 +1047,7 @@
       chat: "Setor CHAT",
       activity: "Setor ATIVIDADE",
       analytics: "Setor ANÁLISE",
+      topbar: "AVISOS E BOTÕES DA LIVE",
     };
     function row(label, ok, right) {
       return `<div class="pnl-diag-row">
@@ -1032,11 +1067,7 @@
         .map((k) => {
           const r = regions[k] || {};
           const ok = !!r.found;
-          const via = ok
-            ? r.via === "manual"
-              ? "apontado por você"
-              : "detectado"
-            : "não encontrado";
+          const via = ok ? "detectado automaticamente" : "procurando automaticamente…";
           const score = ok && typeof r.score === "number" ? ` · score ${r.score}` : "";
           return row(REGION_LABELS[k], ok, `${via}${score}`);
         })
@@ -1046,9 +1077,7 @@
         .map((k) => {
           const t = targets[k] || {};
           const ok = !!t.found;
-          const via = ok
-            ? VIA_LABEL[t.via] || t.via || "detectado"
-            : "não encontrado — aponte na tela";
+          const via = ok ? VIA_LABEL[t.via] || t.via || "detectado" : "procurando automaticamente…";
           const score = typeof t.score === "number" && !t.evidence ? ` · score ${t.score}` : "";
           const warn = ok && t.healthy === false ? " · recuperando…" : "";
           const detail = ok && t.evidence ? ` · ${t.evidence}` : "";
@@ -1086,11 +1115,72 @@
     pollMap();
     setInterval(pollMap, 4000);
 
+    const liveDetectionEl = document.getElementById("pnl-live-detection");
+    function renderLiveState(state) {
+      if (!liveDetectionEl) return;
+      if (!state?.known) {
+        liveDetectionEl.textContent =
+          "Procurando automaticamente Iniciar LIVE, Encerrar LIVE e Avisos…";
+        liveDetectionEl.style.color = "#f59e0b";
+        return;
+      }
+      if (state.active) {
+        const elapsed = state.startedAt
+          ? Math.max(0, Math.floor((Date.now() - state.startedAt) / 1000))
+          : 0;
+        liveDetectionEl.textContent = `● LIVE detectada · ${fmt(elapsed)} · automações ativas`;
+        liveDetectionEl.style.color = "#22c55e";
+      } else {
+        liveDetectionEl.textContent = "Pronta · botão Iniciar LIVE detectado automaticamente";
+        liveDetectionEl.style.color = "#a78bfa";
+      }
+      if (state.error) {
+        liveDetectionEl.textContent = state.error;
+        liveDetectionEl.style.color = "#ef4444";
+      }
+    }
+    function pollLiveState() {
+      try {
+        chrome.storage.local.get(["pitchai.live.state"], (result) =>
+          renderLiveState(result?.["pitchai.live.state"]),
+        );
+      } catch {}
+    }
+    pollLiveState();
+    setInterval(pollLiveState, 2000);
+    document.getElementById("pnl-live-remap")?.addEventListener("click", () => {
+      sendDemoCommand("remap");
+      if (liveDetectionEl) liveDetectionEl.textContent = "Localizando controles automaticamente…";
+      setTimeout(() => {
+        pollMap();
+        pollLiveState();
+      }, 1200);
+    });
+    const liveActionStatus = document.getElementById("pnl-live-action-status");
+    document.getElementById("pnl-tiktok-start")?.addEventListener("click", () => {
+      if (liveActionStatus) liveActionStatus.textContent = "Enviando comando ao Gerenciador…";
+      sendDemoCommand("live:start");
+    });
+    document.getElementById("pnl-tiktok-end")?.addEventListener("click", () => {
+      if (!window.confirm("Encerrar a LIVE ativa no TikTok agora?")) return;
+      if (liveActionStatus) liveActionStatus.textContent = "Solicitando encerramento da LIVE…";
+      sendDemoCommand("live:end");
+    });
+
     const ackEl = document.getElementById("pnl-map-ack");
     function showAck(ack) {
       if (!ackEl || !ack) return;
       ackEl.textContent = ack.message || "";
       ackEl.style.color = ack.ok ? "#00E676" : "#FF6B35";
+      const autofixStatus = document.getElementById("pnl-autofix-action-status");
+      if (autofixStatus && ack.action === "pin:now") {
+        autofixStatus.textContent = ack.message || "";
+        autofixStatus.style.color = ack.ok ? "#00E676" : "#FF6B35";
+      }
+      if (liveActionStatus && String(ack.action || "").startsWith("live:")) {
+        liveActionStatus.textContent = ack.message || "";
+        liveActionStatus.style.color = ack.ok ? "#00E676" : "#FF6B35";
+      }
     }
     try {
       chrome.storage.local.get(["pitchai.demo.ack"], (r) => showAck(r?.["pitchai.demo.ack"]));
@@ -1105,6 +1195,13 @@
           ackEl.textContent = "Executando…";
           ackEl.style.color = "#9aa0b4";
         }
+        if (btn.getAttribute("data-cmd") === "pin:now") {
+          const autofixStatus = document.getElementById("pnl-autofix-action-status");
+          if (autofixStatus) {
+            autofixStatus.textContent = "Desfixando e fixando o produto selecionado…";
+            autofixStatus.style.color = "#9aa0b4";
+          }
+        }
         sendDemoCommand(btn.getAttribute("data-cmd"));
         setTimeout(pollMap, 1500);
       });
@@ -1118,72 +1215,6 @@
       setTimeout(pollMap, 1500);
     });
 
-    // --- Exportar / importar apontamentos ---
-    const DM_MANUAL_KEY = "pitchai_dommap_manual_v1";
-    const RG_MANUAL_KEY = "pitchai_regions_manual_v1";
-    const mapJson = document.getElementById("pnl-map-json");
-    const mapIo = document.getElementById("pnl-map-io");
-    function setIo(msg, kind) {
-      if (!mapIo) return;
-      mapIo.textContent = msg;
-      mapIo.style.color = kind === "err" ? "#FF6B35" : kind === "ok" ? "#00E676" : "#9aa0b4";
-    }
-    document.getElementById("pnl-map-export")?.addEventListener("click", () => {
-      try {
-        chrome.storage.local.get([DM_MANUAL_KEY, RG_MANUAL_KEY, MAP_STATUS_KEY], (r) => {
-          const dm = r?.[DM_MANUAL_KEY] || {};
-          const rg = r?.[RG_MANUAL_KEY] || {};
-          const payload = {
-            version: 1,
-            host: dm.host || rg.host || "shop.tiktok.com",
-            exportedAt: Date.now(),
-            targets: dm.sig || {},
-            regions: rg.sig || {},
-            status: r?.[MAP_STATUS_KEY] || {},
-          };
-          const text = JSON.stringify(payload, null, 2);
-          if (mapJson) {
-            mapJson.value = text;
-            mapJson.select?.();
-          }
-          navigator.clipboard
-            ?.writeText(text)
-            .then(() => setIo("✓ copiado — é só colar no chat do Pitch AI", "ok"))
-            .catch(() => setIo("gerado abaixo — copie manualmente", "ok"));
-        });
-      } catch {
-        setIo("não consegui ler o mapeamento", "err");
-      }
-    });
-    document.getElementById("pnl-map-import")?.addEventListener("click", () => {
-      let data;
-      try {
-        data = JSON.parse(mapJson?.value || "");
-      } catch {
-        return setIo("JSON inválido", "err");
-      }
-      if (!data || typeof data !== "object" || data.version !== 1)
-        return setIo("formato não reconhecido (esperado version: 1)", "err");
-      const host = typeof data.host === "string" && data.host ? data.host : "shop.tiktok.com";
-      const clean = (o) => (o && typeof o === "object" && !Array.isArray(o) ? o : {});
-      try {
-        chrome.storage.local.set(
-          {
-            [DM_MANUAL_KEY]: { host, sig: clean(data.targets) },
-            [RG_MANUAL_KEY]: { host, sig: clean(data.regions) },
-          },
-          () => {
-            const n =
-              Object.keys(clean(data.targets)).length + Object.keys(clean(data.regions)).length;
-            setIo(`✓ ${n} apontamento(s) importado(s) — reaplicando…`, "ok");
-            setTimeout(pollMap, 2500);
-          },
-        );
-      } catch {
-        setIo("não consegui salvar", "err");
-      }
-    });
-
     document.getElementById("pnl-add").addEventListener("click", () => {
       cfg.produtos.push({
         id: crypto.randomUUID(),
@@ -1195,8 +1226,9 @@
       save("produtos");
       render();
     });
+    let webTarget = "/app";
     document.getElementById("pnl-web").addEventListener("click", () => {
-      window.open(API_BASE + "/app", "_blank");
+      window.open(new URL(webTarget, API_BASE).href, "_blank");
     });
 
     // Sync token + pull/push
@@ -1240,14 +1272,25 @@
           body: JSON.stringify({ token: t }),
         });
         const data = await res.json().catch(() => ({}));
-        if (res.ok && data.valid && !data.locked) {
-          credsEl.textContent = `Conectado · Plano ${(data.plan || "free").toUpperCase()} · Resta ${data.remainingChat ?? 0} respostas e ${data.remainingTts ?? 0} de voz`;
+        if (res.ok && data.valid && !data.locked && !data.aiLocked) {
+          const tokenBalance = Number(data.tokenRemaining ?? 0).toLocaleString("pt-BR");
+          credsEl.textContent = `Conectado · Plano ${(data.plan || "free").toUpperCase()} · ${tokenBalance} tokens disponíveis`;
           credsEl.style.color = "#22c55e";
           setDot("ok");
-        } else if (data.reason === "quota_exceeded") {
-          credsEl.textContent = `Seu plano '${data.plan || "free"}' atingiu o limite (${data.remainingChat}/${data.chatLimit}). Faça upgrade no site.`;
+          webTarget = "/app";
+        } else if (data.aiLocked || data.reason === "quota_exceeded") {
+          credsEl.textContent =
+            data.upgrade?.message ||
+            `Cota de IA atingida no plano '${data.plan || "free"}'. Fixar produtos e controlar a live continuam liberados.`;
           credsEl.style.color = "#f97316";
           setDot("warn");
+          webTarget = data.upgrade?.url || "/planos";
+        } else if (data.valid) {
+          credsEl.textContent =
+            data.message || "Código válido, mas a licença está temporariamente bloqueada.";
+          credsEl.style.color = "#f97316";
+          setDot("warn");
+          webTarget = data.reason === "payment_required" ? "/planos" : "/app";
         } else {
           credsEl.textContent = `Código inválido ou expirado. Gere um novo no painel do site.`;
           credsEl.style.color = "#ef4444";
@@ -1337,29 +1380,91 @@
       verifyTimer = setTimeout(renderCreds, 450);
     });
 
-    // Onboarding do primeiro uso — mostra o guia só uma vez por instalação.
-    const ONBOARD_KEY = "pitchai.onboarded.v1";
+    // Primeiro uso: animação em tela cheia e tutorial navegável.
+    const ONBOARD_KEY = "pitchai.onboarded.v2";
     const onbEl = document.getElementById("pnl-onboarding");
-    const onbDone = document.getElementById("pnl-onb-done");
-    if (onbEl && onbDone) {
+    const onbIntro = document.getElementById("pnl-onb-intro");
+    const onbTutorial = document.getElementById("pnl-onb-tutorial");
+    const onbBack = document.getElementById("pnl-onb-back");
+    const onbNext = document.getElementById("pnl-onb-next");
+    const onbCount = document.getElementById("pnl-onb-count");
+    const onbDots = document.getElementById("pnl-onb-dots");
+    const onbSlides = Array.from(document.querySelectorAll("[data-onb-step]"));
+    let onbStep = 0;
+    let onbTimer = null;
+
+    function renderOnboardingStep() {
+      onbSlides.forEach((slide, index) => {
+        slide.hidden = index !== onbStep;
+        slide.classList.toggle("active", index === onbStep);
+      });
+      if (onbCount) onbCount.textContent = `${onbStep + 1} de ${onbSlides.length}`;
+      if (onbBack) onbBack.disabled = onbStep === 0;
+      if (onbNext)
+        onbNext.textContent = onbStep === onbSlides.length - 1 ? "Começar a usar" : "Continuar";
+      if (onbDots)
+        onbDots.innerHTML = onbSlides
+          .map((_, index) => `<span class="${index === onbStep ? "active" : ""}"></span>`)
+          .join("");
+    }
+
+    function startTutorial() {
+      clearTimeout(onbTimer);
+      if (onbIntro) onbIntro.hidden = true;
+      if (onbTutorial) onbTutorial.hidden = false;
+      renderOnboardingStep();
+    }
+
+    function openOnboarding(withIntro = true) {
+      if (!onbEl) return;
+      clearTimeout(onbTimer);
+      onbStep = 0;
+      onbEl.hidden = false;
+      if (onbIntro) {
+        onbIntro.hidden = !withIntro;
+        onbIntro.classList.remove("leaving");
+      }
+      if (onbTutorial) onbTutorial.hidden = withIntro;
+      if (withIntro) {
+        onbTimer = setTimeout(() => {
+          onbIntro?.classList.add("leaving");
+          onbTimer = setTimeout(startTutorial, 330);
+        }, 1650);
+      } else {
+        startTutorial();
+      }
+    }
+
+    function finishOnboarding() {
+      if (onbEl) onbEl.hidden = true;
+      clearTimeout(onbTimer);
+      try {
+        chrome.storage.local.set({ [ONBOARD_KEY]: true });
+      } catch {}
+      tokenInput?.focus();
+    }
+
+    if (onbEl && onbNext && onbBack && onbSlides.length) {
       try {
         chrome.storage.local.get([ONBOARD_KEY], (res) => {
-          if (!res || !res[ONBOARD_KEY]) onbEl.hidden = false;
+          if (!res || !res[ONBOARD_KEY]) openOnboarding(true);
         });
       } catch {
-        // Ambiente sem chrome.storage (ex.: painel aberto isolado): mostra por padrão.
-        onbEl.hidden = false;
+        openOnboarding(true);
       }
-      onbDone.addEventListener("click", () => {
-        onbEl.hidden = true;
-        try {
-          chrome.storage.local.set({ [ONBOARD_KEY]: true });
-        } catch {
-          /* ignora quando storage indisponível */
-        }
-        const tokenField = document.getElementById("pnl-sync-token");
-        if (tokenField) tokenField.focus();
+      onbBack.addEventListener("click", () => {
+        if (onbStep > 0) onbStep--;
+        renderOnboardingStep();
+      });
+      onbNext.addEventListener("click", () => {
+        if (onbStep < onbSlides.length - 1) {
+          onbStep++;
+          renderOnboardingStep();
+        } else finishOnboarding();
       });
     }
+    document
+      .getElementById("pnl-open-tutorial")
+      ?.addEventListener("click", () => openOnboarding(false));
   });
 })();

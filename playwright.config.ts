@@ -14,14 +14,14 @@ export default defineConfig({
   retries: process.env.CI ? 2 : 0,
   reporter: [["list"]],
   use: {
-    baseURL: process.env.E2E_BASE_URL ?? "http://localhost:8080",
+    baseURL: process.env.E2E_BASE_URL ?? "http://localhost:3000",
     trace: "retain-on-failure",
   },
   webServer: process.env.E2E_BASE_URL
     ? undefined
     : {
-        command: "npm run dev -- --port 8080",
-        url: "http://localhost:8080",
+        command: "npm run dev",
+        url: "http://localhost:3000/favicon.ico",
         reuseExistingServer: true,
         timeout: 120_000,
       },

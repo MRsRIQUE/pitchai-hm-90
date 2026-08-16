@@ -17,12 +17,12 @@ export async function loadConfig(): Promise<Config> {
   return new Promise((resolve) => {
     chrome.storage.local.get([STORAGE_KEYS.CONFIG], async (result) => {
       const stored = result[STORAGE_KEYS.CONFIG];
-      
+
       if (!stored) {
         resolve(DEFAULT_CONFIG);
         return;
       }
-      
+
       try {
         const decrypted = await decryptConfigObj(stored);
         const config = normalizeConfig(decrypted);
@@ -59,9 +59,7 @@ export async function updateConfig(
 
   // Se for um Partial<Config>, mescla com o atual
   const finalConfig: Config =
-    !updated || typeof updated === "function"
-      ? current
-      : { ...current, ...updated };
+    !updated || typeof updated === "function" ? current : { ...current, ...updated };
 
   await saveConfig(finalConfig);
   return finalConfig;
@@ -73,7 +71,7 @@ export async function updateConfig(
 export function normalizeConfig(data: unknown): Config {
   try {
     const parsed = data as Partial<Config>;
-    
+
     return {
       ...DEFAULT_CONFIG,
       ...parsed,
@@ -143,24 +141,21 @@ export function normalizeConfig(data: unknown): Config {
 // Sincronização com o Backend
 // ============================================================================
 
-import {
-  loadConfigFromBackend,
-  pushConfigToBackend,
-} from "../utils/network";
+import { loadConfigFromBackend, pushConfigToBackend } from "../utils/network";
 
 /**
  * Sincroniza a configuração com o backend
  */
 export async function syncConfigWithBackend(force: boolean = false): Promise<Config> {
   const config = await loadConfig();
-  
+
   if (!config.syncToken || !force) {
     return config;
   }
-  
+
   try {
     const backendConfig = await loadConfigFromBackend(config.syncToken);
-    
+
     if (backendConfig) {
       // Mescla a configuração do backend com a local
       // (prioriza a local para campos que não devem ser sobrescritos)
@@ -172,14 +167,14 @@ export async function syncConfigWithBackend(force: boolean = false): Promise<Con
         produtos: backendConfig.produtos || config.produtos,
         roteirosPorProduto: backendConfig.roteirosPorProduto || config.roteirosPorProduto,
       };
-      
+
       await saveConfig(merged);
       return merged;
     }
   } catch (error) {
     console.error("[config] Failed to sync with backend:", error);
   }
-  
+
   return config;
 }
 
@@ -190,7 +185,7 @@ export async function pushConfigToBackendSafe(config: Config): Promise<boolean> 
   if (!config.syncToken) {
     return false;
   }
-  
+
   try {
     const result = await pushConfigToBackend(config.syncToken, config);
     return result?.success ?? false;
@@ -211,11 +206,11 @@ export function onConfigChange(
   callback: (newConfig: Config, oldConfig: Config) => void,
 ): () => void {
   let oldConfig: Config = DEFAULT_CONFIG;
-  
+
   const listener = (changes: Record<string, chrome.storage.StorageChange>) => {
     if (changes[STORAGE_KEYS.CONFIG]) {
       const newValue = changes[STORAGE_KEYS.CONFIG].newValue;
-      
+
       if (newValue) {
         decryptConfigObj(newValue).then((decrypted) => {
           const newConfig = normalizeConfig(decrypted);
@@ -225,9 +220,9 @@ export function onConfigChange(
       }
     }
   };
-  
+
   chrome.storage.onChanged.addListener(listener);
-  
+
   // Retorna função para remover o listener
   return () => {
     chrome.storage.onChanged.removeListener(listener);
@@ -241,9 +236,7 @@ export function onConfigChange(
 /**
  * Obtém um valor específico da configuração
  */
-export async function getConfigValue<T extends keyof Config>(
-  key: T,
-): Promise<Config[T]> {
+export async function getConfigValue<T extends keyof Config>(key: T): Promise<Config[T]> {
   const config = await loadConfig();
   return config[key];
 }

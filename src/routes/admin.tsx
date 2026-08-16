@@ -13,6 +13,7 @@ import {
   fetchCosts,
   fetchPlans,
   fetchRanking,
+  fetchStripeAdminSnapshot,
   insertRankedProducts,
   parseRankingCSV,
   setCommissionStatus,
@@ -21,6 +22,7 @@ import {
   type AdminCommission,
   type Costs,
   type RankedProduct,
+  type StripeAdminSnapshot,
 } from "@/lib/live/admin";
 import { UsuariosTab } from "@/components/live/AdminUsuariosTab";
 import { AdminFirestoreUsageTab } from "@/components/live/AdminFirestoreUsageTab";
@@ -119,7 +121,7 @@ function Dashboard({ email, onLogout }: { email: string; onLogout: () => void })
   return (
     <div className="marketing-page min-h-dvh">
       <header className="border-b border-white/10 bg-black/40 backdrop-blur sticky top-0 z-10">
-        <div className="max-w-6xl mx-auto flex items-center justify-between px-4 py-3">
+        <div className="desktop-rail flex items-center justify-between py-3">
           <span className="text-lg font-bold">
             Pitch AI <span className="text-[#FF6B35]">Admin</span>
           </span>
@@ -130,7 +132,7 @@ function Dashboard({ email, onLogout }: { email: string; onLogout: () => void })
             </button>
           </div>
         </div>
-        <nav className="max-w-6xl mx-auto px-4 flex gap-1 overflow-x-auto">
+        <nav className="desktop-rail flex gap-1 overflow-x-auto">
           {(
             [
               "overview",
@@ -162,7 +164,7 @@ function Dashboard({ email, onLogout }: { email: string; onLogout: () => void })
           ))}
         </nav>
       </header>
-      <main className="max-w-6xl mx-auto px-4 py-6">
+      <main className="desktop-rail py-6">
         {tab === "overview" && <OverviewTab onNavigate={setTab} />}
         {tab === "ranking" && <RankingTab />}
         {tab === "indicacoes" && <IndicacoesTab />}
@@ -704,6 +706,11 @@ function PlanosTab() {
     queryKey: ["admin", "plans"],
     queryFn: fetchPlans,
   });
+  const stripe = useQuery({
+    queryKey: ["admin", "stripe"],
+    queryFn: fetchStripeAdminSnapshot,
+    refetchInterval: 30_000,
+  });
 
   const mrr = plans.reduce((s, p) => s + Number(p.preco_mensal) * p.assinantes, 0);
   const arr = mrr * 12;
@@ -712,6 +719,15 @@ function PlanosTab() {
 
   return (
     <div className="space-y-6">
+      <StripeOverview
+        data={stripe.data}
+        loading={stripe.isLoading}
+        error={stripe.error}
+        onRefresh={() => stripe.refetch()}
+        refreshing={stripe.isFetching}
+      />
+
+      <h2 className="text-sm font-semibold text-white/70">Projeção interna do Firestore</h2>
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         <Stat label="MRR" value={brl(mrr)} />
         <Stat label="ARR" value={brl(arr)} />
@@ -758,6 +774,208 @@ function PlanosTab() {
             ))}
           </div>
         )}
+      </Card>
+    </div>
+  );
+}
+
+function StripeOverview({
+  data,
+  loading,
+  error,
+  onRefresh,
+  refreshing,
+}: {
+  data?: StripeAdminSnapshot;
+  loading: boolean;
+  error: unknown;
+  onRefresh: () => void;
+  refreshing: boolean;
+}) {
+  const statusClass = (status: string) => {
+    if (["active", "paid"].includes(status)) return "text-[#00E676] bg-[#00E676]/10";
+    if (["past_due", "unpaid", "incomplete", "open"].includes(status))
+      return "text-amber-300 bg-amber-400/10";
+    return "text-white/60 bg-white/5";
+  };
+
+  if (error) {
+    return (
+      <Card title="Stripe" hint="Dados financeiros consultados diretamente no Stripe.">
+        <ErrorState error={error} />
+      </Card>
+    );
+  }
+  if (loading || !data) {
+    return (
+      <Card title="Stripe" hint="Dados financeiros consultados diretamente no Stripe.">
+        <p className="text-white/50 text-sm py-4">Consultando Stripe…</p>
+      </Card>
+    );
+  }
+
+  return (
+    <div className="space-y-4">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <div className="flex items-center gap-2">
+            <h2 className="text-lg font-semibold">Stripe</h2>
+            <span
+              className={`rounded-full px-2 py-0.5 text-[10px] font-bold uppercase ${
+                data.environment === "live"
+                  ? "bg-[#00E676]/15 text-[#00E676]"
+                  : "bg-amber-400/15 text-amber-300"
+              }`}
+            >
+              {data.environment === "live" ? "Produção" : "Modo teste"}
+            </span>
+          </div>
+          <p className="text-xs text-white/45">
+            Atualizado em {new Date(data.fetchedAt).toLocaleString("pt-BR")}
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={onRefresh}
+          disabled={refreshing}
+          className="rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-xs hover:bg-white/10 disabled:opacity-50"
+        >
+          {refreshing ? "Atualizando…" : "Atualizar Stripe"}
+        </button>
+      </div>
+
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        <Stat label="MRR no Stripe" value={brl(data.mrrCents / 100)} />
+        <Stat label="Recebido em 30 dias" value={brl(data.paidLast30DaysCents / 100)} />
+        <Stat label="Saldo disponível" value={brl(data.availableBalanceCents / 100)} />
+        <Stat label="Saldo pendente" value={brl(data.pendingBalanceCents / 100)} />
+      </div>
+
+      <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
+        <Stat label="Ativas" value={String(data.active)} />
+        <Stat label="Em teste" value={String(data.trialing)} />
+        <Stat label="Com problema" value={String(data.pastDue)} />
+        <Stat label="Canceladas" value={String(data.canceled)} />
+        <Stat label="Não sincronizadas" value={String(data.unsynced)} />
+      </div>
+
+      {data.unsynced > 0 && (
+        <div className="rounded-xl border border-amber-400/30 bg-amber-400/10 px-4 py-3 text-xs text-amber-200">
+          Há {data.unsynced} assinatura(s) ativa(s) no Stripe sem o mesmo ID no Firestore. Verifique
+          o webhook antes de liberar acesso manualmente.
+        </div>
+      )}
+
+      <Card
+        title="Assinaturas no Stripe"
+        hint="Fonte financeira real; atualizada a cada 30 segundos."
+      >
+        <div className="overflow-x-auto">
+          <table className="w-full min-w-[850px] text-xs text-left">
+            <thead className="border-b border-white/10 text-white/45">
+              <tr>
+                <th className="py-2 pr-3">Cliente</th>
+                <th className="py-2 pr-3">Plano</th>
+                <th className="py-2 pr-3">Valor/ciclo</th>
+                <th className="py-2 pr-3">Status</th>
+                <th className="py-2 pr-3">Próxima renovação</th>
+                <th className="py-2 pr-3">Firestore</th>
+                <th className="py-2 text-right">Stripe</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-white/5">
+              {data.subscriptions.length === 0 ? (
+                <tr>
+                  <td colSpan={7} className="py-5 text-center text-white/45">
+                    Nenhuma assinatura.
+                  </td>
+                </tr>
+              ) : (
+                data.subscriptions.map((sub) => (
+                  <tr key={sub.id}>
+                    <td className="py-2.5 pr-3">
+                      <div className="text-white">{sub.email || "Sem e-mail"}</div>
+                      <div className="font-mono text-[10px] text-white/35">{sub.id}</div>
+                    </td>
+                    <td className="py-2.5 pr-3 font-mono">{sub.plan}</td>
+                    <td className="py-2.5 pr-3">{brl(sub.amountCents / 100)}</td>
+                    <td className="py-2.5 pr-3">
+                      <span
+                        className={`rounded-full px-2 py-1 font-semibold ${statusClass(sub.status)}`}
+                      >
+                        {sub.status}
+                        {sub.cancelAtPeriodEnd ? " · cancela no fim" : ""}
+                      </span>
+                    </td>
+                    <td className="py-2.5 pr-3">
+                      {sub.currentPeriodEnd
+                        ? new Date(sub.currentPeriodEnd).toLocaleDateString("pt-BR")
+                        : "—"}
+                    </td>
+                    <td
+                      className={`py-2.5 pr-3 ${sub.firestoreSynced ? "text-[#00E676]" : "text-amber-300"}`}
+                    >
+                      {sub.firestoreSynced ? "Sincronizado" : "Divergente"}
+                    </td>
+                    <td className="py-2.5 text-right">
+                      <a
+                        href={sub.dashboardUrl}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="text-purple-300 hover:underline"
+                      >
+                        Abrir ↗
+                      </a>
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+      </Card>
+
+      <Card
+        title="Faturas recentes"
+        hint="Pagamentos, faturas abertas e falhas dos últimos 30 dias."
+      >
+        <div className="space-y-2">
+          {data.recentInvoices.length === 0 ? (
+            <p className="py-3 text-sm text-white/45">Nenhuma fatura nos últimos 30 dias.</p>
+          ) : (
+            data.recentInvoices.map((invoice) => (
+              <div
+                key={invoice.id}
+                className="grid gap-2 rounded-lg border border-white/5 bg-black/25 p-3 sm:grid-cols-[1fr_120px_100px_110px] sm:items-center"
+              >
+                <div>
+                  <div className="text-sm">{invoice.email || "Cliente sem e-mail"}</div>
+                  <div className="font-mono text-[10px] text-white/35">{invoice.id}</div>
+                </div>
+                <div className="font-mono">{brl(invoice.amountCents / 100)}</div>
+                <span
+                  className={`w-fit rounded-full px-2 py-1 text-[10px] font-semibold ${statusClass(invoice.status)}`}
+                >
+                  {invoice.status}
+                </span>
+                <div className="text-right text-white/55">
+                  {invoice.hostedUrl ? (
+                    <a
+                      href={invoice.hostedUrl}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="text-purple-300 hover:underline"
+                    >
+                      Ver fatura ↗
+                    </a>
+                  ) : (
+                    new Date(invoice.createdAt).toLocaleDateString("pt-BR")
+                  )}
+                </div>
+              </div>
+            ))
+          )}
+        </div>
       </Card>
     </div>
   );

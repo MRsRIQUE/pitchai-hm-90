@@ -7,15 +7,14 @@
   try {
     window.pitchAiExtensionInstalled = true;
     window.dispatchEvent(
-      new CustomEvent("pitchai-extension-detected", { detail: { version: "0.15.1" } }),
+      new CustomEvent("pitchai-extension-detected", {
+        detail: { version: chrome.runtime.getManifest().version },
+      }),
     );
 
     // Allowlist de origins aceitos pelo content script — evita que iframes/scripts
     // maliciosos injetem sync tokens fake ou captured network payloads.
-    const ALLOWED_ORIGINS = [
-      "https://shop.tiktok.com",
-      location.origin,
-    ];
+    const ALLOWED_ORIGINS = ["https://shop.tiktok.com", location.origin];
     function isAllowedOrigin(origin) {
       return ALLOWED_ORIGINS.indexOf(origin) !== -1;
     }
@@ -25,8 +24,7 @@
       if (event.data && event.data.type === "PITCHAI_SYNC_TOKEN" && event.data.token) {
         if (typeof chrome !== "undefined" && chrome?.storage?.local) {
           chrome.storage.local.get(["pitchai.config.v1"], async (res) => {
-            const current =
-              (await decryptConfigObj(res["pitchai.config.v1"] || {})) || {};
+            const current = (await decryptConfigObj(res["pitchai.config.v1"] || {})) || {};
             current.syncToken = event.data.token;
             const encrypted = await encryptConfigObj(current);
             chrome.storage.local.set({ "pitchai.config.v1": encrypted }, () => {
@@ -265,7 +263,7 @@
     if (window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1") {
       return window.location.origin;
     }
-    return "https://pitchai-moon-e5ad.vercel.app";
+    return "https://pitchai-hm.vercel.app";
   }
   const API_BASE = resolveApiBase();
 
@@ -320,9 +318,7 @@
       }
     });
     if (stored && typeof stored === "string") {
-      const bytes = new Uint8Array(
-        (stored.match(/.{1,2}/g) || []).map((b) => parseInt(b, 16)),
-      );
+      const bytes = new Uint8Array((stored.match(/.{1,2}/g) || []).map((b) => parseInt(b, 16)));
       if (bytes.length === 16) return bytes;
     }
     const salt = crypto.getRandomValues(new Uint8Array(16));
@@ -426,17 +422,24 @@
   // Trava de segurança da extensão e verificação de cota de tokens
   const extSecurity = {
     isLocked: true,
+    aiLocked: false,
+    syncToken: "",
     reason: "verification_pending",
     message: "Aguardando confirmação da licença.",
     plan: "free",
     remainingChat: 0,
     remainingTts: 0,
+    tokenRemaining: 0,
+    tokenLimit: 0,
+    upgrade: null,
     bannerEl: null,
   };
 
   async function checkExtensionLock(syncToken) {
+    extSecurity.syncToken = String(syncToken || "");
     if (!syncToken) {
       extSecurity.isLocked = true;
+      extSecurity.aiLocked = false;
       extSecurity.reason = "missing_token";
       extSecurity.message = "Sync token ausente. Insira seu token no painel da extensão.";
       updateLockUI();
@@ -452,27 +455,36 @@
       const data = await res.json().catch(() => ({}));
       if (res.ok && data.valid && !data.locked) {
         extSecurity.isLocked = false;
-        extSecurity.reason = null;
-        extSecurity.message = null;
+        extSecurity.aiLocked = Boolean(data.aiLocked || data.reason === "quota_exceeded");
+        extSecurity.reason = extSecurity.aiLocked ? "quota_exceeded" : null;
+        extSecurity.message = extSecurity.aiLocked ? data.message || "Cota de IA esgotada." : null;
         extSecurity.plan = data.plan || "free";
         extSecurity.remainingChat = data.remainingChat ?? 0;
         extSecurity.remainingTts = data.remainingTts ?? 0;
+        extSecurity.tokenRemaining = data.tokenRemaining ?? 0;
+        extSecurity.tokenLimit = data.tokenLimit ?? 0;
+        extSecurity.upgrade = data.upgrade || null;
         updateLockUI();
         return true;
       } else {
         extSecurity.isLocked = true;
+        extSecurity.aiLocked = false;
         extSecurity.reason = data.reason || "unauthorized";
         extSecurity.message =
           data.message || "Extensão travada por segurança. Token inválido ou cota esgotada.";
         extSecurity.plan = data.plan || "free";
         extSecurity.remainingChat = data.remainingChat ?? 0;
         extSecurity.remainingTts = data.remainingTts ?? 0;
+        extSecurity.tokenRemaining = data.tokenRemaining ?? 0;
+        extSecurity.tokenLimit = data.tokenLimit ?? 0;
+        extSecurity.upgrade = data.upgrade || null;
         updateLockUI();
         return false;
       }
     } catch {
       // Falha fechada: sem confirmação do servidor, nenhuma automação é liberada.
       extSecurity.isLocked = true;
+      extSecurity.aiLocked = false;
       extSecurity.reason = "verification_unavailable";
       extSecurity.message =
         "Não foi possível confirmar sua licença. Verifique a internet e tente novamente.";
@@ -495,25 +507,39 @@
         const text = document.createElement("span");
         text.id = "pitchai-lock-text";
         const btn = document.createElement("button");
+        btn.id = "pitchai-lock-action";
         btn.textContent = "Desbloquear no Pitch AI ↗";
         btn.style.cssText =
           "background:#eab308;color:#000;border:none;padding:4px 12px;border-radius:4px;font-weight:700;cursor:pointer;";
-        btn.onclick = () => window.open(`${API_BASE}/app`, "_blank");
         banner.append(text, btn);
         document.body?.prepend(banner);
       }
       const text = document.getElementById("pitchai-lock-text");
       if (text)
         text.textContent = `🔒 EXTENSÃO TRAVADA · ${extSecurity.message || "Insira seu Sync token válido."}`;
+      const btn = document.getElementById("pitchai-lock-action");
+      if (btn) {
+        const isQuota = extSecurity.reason === "quota_exceeded";
+        btn.textContent = isQuota
+          ? extSecurity.upgrade?.cta || "Ver plano com mais tokens ↗"
+          : "Desbloquear no Pitch AI ↗";
+        btn.onclick = () => {
+          const target = isQuota ? extSecurity.upgrade?.url || "/planos" : "/app";
+          window.open(new URL(target, API_BASE).href, "_blank");
+        };
+      }
     } else if (banner) {
       banner.remove();
     }
   }
 
   const STORAGE_KEY = "pitchai.config.v1";
+  const PENDING_SYNC_KEY = "pitchai.pendingSyncToken";
+  const SYNC_UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
   const DEMO_CMD_KEY = "pitchai.demo.cmd";
   let lastCmdTs = 0;
   const MAP_STATUS_KEY = "pitchai.dommap.status";
+  const LIVE_STATE_KEY = "pitchai.live.state";
   const DM = () => window.PitchaiDomMap;
   const RG = () => window.PitchaiRegions;
   function extVersion() {
@@ -675,8 +701,15 @@
     let changed = 0;
     for (const p of list) {
       if (isBadProductName(p.name)) continue;
-      const key = p.pid ? `#${p.pid}` : normKey(p.name);
+      let key = p.pid ? `#${p.pid}` : normKey(p.name);
       if (!key || key === "#") continue;
+      // A API pode repetir o mesmo produto em blocos/SKUs diferentes. Consolida
+      // pelo nome antes de guardar, evitando que cada clique em atualizar some
+      // outra variante da mesma mercadoria.
+      const equivalent = Array.from(net.products.entries()).find(([, existing]) =>
+        namesMatch(existing?.name || "", p.name || ""),
+      );
+      if (equivalent) key = equivalent[0];
       const prev = net.products.get(key);
       if (prev && productFingerprint(prev) === productFingerprint({ ...prev, ...p })) continue;
       if (prev) {
@@ -762,7 +795,6 @@
       ["pointermove", "mousemove"],
       ["pointerdown", "mousedown"],
       ["pointerup", "mouseup"],
-      [null, "click"],
     ];
     for (const [pointerType, mouseType] of seq) {
       if (pointerType) {
@@ -781,9 +813,15 @@
         } catch {}
       }
     }
+    // Um único evento de click. Antes o código disparava MouseEvent("click") e
+    // depois .click(), fazendo alguns botões React alternarem duas vezes.
     try {
       target.click();
-    } catch {}
+    } catch {
+      try {
+        target.dispatchEvent(new MouseEvent("click", { ...base, buttons: 0 }));
+      } catch {}
+    }
     return true;
   }
 
@@ -854,6 +892,25 @@
         res(normalizeConfig(decrypted));
       });
     });
+  }
+
+  async function loadConfigWithPendingSync() {
+    const config = await loadConfig();
+    const pending = await new Promise((resolve) => {
+      try {
+        chrome.storage.local.get([PENDING_SYNC_KEY], (result) =>
+          resolve(result?.[PENDING_SYNC_KEY] || ""),
+        );
+      } catch {
+        resolve("");
+      }
+    });
+    if (!SYNC_UUID_RE.test(String(pending || ""))) return config;
+    config.syncToken = String(pending);
+    const encrypted = await encryptConfigObj(config);
+    await chrome.storage.local.set({ [STORAGE_KEY]: encrypted });
+    await chrome.storage.local.remove(PENDING_SYNC_KEY);
+    return config;
   }
   async function saveConfig(cfg) {
     const encrypted = await encryptConfigObj(cfg);
@@ -935,26 +992,43 @@
   }
 
   // ---------- Live session tracking ----------
-  const session = { id: null, token: null, startedAt: 0 };
+  const session = {
+    id: null,
+    token: null,
+    startedAt: 0,
+    starting: null,
+    lastMetricsFingerprint: "",
+    lastMetricsAt: 0,
+  };
   async function sessionStart() {
-    const cfg = await loadConfig();
-    if (!cfg.syncToken || session.id) return;
-    try {
-      const r = await fetch(`${API_BASE}/api/public/live/session`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "start", token: cfg.syncToken }),
-      });
-      const data = await r.json().catch(() => ({}));
-      if (data?.session_id) {
-        session.id = data.session_id;
-        session.token = cfg.syncToken;
-        session.startedAt = Date.now();
-        console.log("[Pitch AI] session started", session.id);
+    if (demo?.isOn?.()) return null;
+    const cfg = await loadConfigWithPendingSync();
+    if (!cfg.syncToken) return null;
+    if (session.id) return session.id;
+    if (session.starting) return session.starting;
+    session.starting = (async () => {
+      try {
+        const r = await fetch(`${API_BASE}/api/public/live/session`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ action: "start", token: cfg.syncToken }),
+        });
+        const data = await r.json().catch(() => ({}));
+        if (data?.session_id) {
+          session.id = data.session_id;
+          session.token = cfg.syncToken;
+          session.startedAt = Date.now();
+          console.log("[Pitch AI] session started", session.id);
+        }
+        return session.id;
+      } catch (e) {
+        console.warn("[Pitch AI] session start failed", e);
+        return null;
+      } finally {
+        session.starting = null;
       }
-    } catch (e) {
-      console.warn("[Pitch AI] session start failed", e);
-    }
+    })();
+    return session.starting;
   }
   async function sessionEnd() {
     if (!session.id || !session.token) return;
@@ -968,8 +1042,11 @@
     session.id = null;
     session.token = null;
     session.startedAt = 0;
+    session.lastMetricsFingerprint = "";
+    session.lastMetricsAt = 0;
   }
   async function sessionEvent(payload) {
+    if (demo?.isOn?.()) return;
     if (!session.id || !session.token) return;
     try {
       await fetch(`${API_BASE}/api/public/live/session`, {
@@ -1042,11 +1119,13 @@
   const BADGE_RX =
     /^(frete gr[áa]tis|ao vivo|live|novo|new|promo|oferta|mais vendido|best ?seller|cupom|em alta|estoque|dispon[íi]vel|esgotado|vendidos?|\d+[.,]?\d*\s*(vendidos?|sold)|\d+%|\d+)$/i;
   const JUNK_NAME_RX =
-    /^(adicionar|fixar|destacar|editar|excluir|vender|ver mais|todos|produtos?|vitrine|estoque|pedidos?|apresentar|remover|comprar|carrinho)$/i;
+    /^(adicionar|fixar|desafixar|destacar|editar|excluir|vender|ver mais|todos|produtos?|vitrine|estoque|pedidos?|apresentar|remover|comprar|carrinho|adicionado ao carrinho|cliques?)(?:\s*\d+)?$/i;
   const PRODUCT_CHROME_RX =
     /(gerenciador\s+de\s+live|pesquisar\s+id|todas\s+as\s+categorias|todo\s+o\s+estoque|lista\s+de\s+produtos\s+nesta\s+live|portugu[eê]s\s+do\s+brasil|\bsair\b|pitcha[ií]\s+live)/i;
   const PRODUCT_META_RX =
     /(em\s+estoque|demonstra[çc][ãa]o\s+solicitada|termina\s+em|frete\s+gr[áa]tis|vendidos?|sold|estoque:?\s*\d+)/i;
+  const PRODUCT_UI_RX =
+    /^(?:carrinho|adicionado ao carrinho|cliques?|fixar|desafixar|editar|excluir|remover|mover para o topo|demonstra[çc][ãa]o solicitada)(?:\s*\d+)?$/i;
   // rótulos de menu de conta que grudam no nome do perfil (ex.: "arthurdias993Sair")
   const MENU_TAIL_RX =
     /\s*(sair|log ?out|perfil|meu perfil|minha conta|configura[çc][õo]es|central do vendedor|ajuda|notifica[çc][õo]es)\s*$/i;
@@ -1110,7 +1189,8 @@
     const key = normKey(cleaned);
     if (!key || key.length < 4) return true;
     if (PRODUCT_CHROME_RX.test(cleaned)) return true;
-    if (BADGE_RX.test(cleaned) || JUNK_NAME_RX.test(cleaned)) return true;
+    if (BADGE_RX.test(cleaned) || JUNK_NAME_RX.test(cleaned) || PRODUCT_UI_RX.test(cleaned))
+      return true;
     if (
       /^(todos|todas as categorias|todo o estoque|lista|produto|produtos|cat[aá]logo)$/i.test(
         cleaned,
@@ -1144,12 +1224,19 @@
     const kb = normKey(b);
     const longer = ka.length >= kb.length ? ka : kb;
     const shorter = ka.length >= kb.length ? kb : ka;
-    // precisa ser prefixo de verdade (truncamento por virtualização)
-    if (!longer.startsWith(shorter)) return false;
-    // se há palavras extras demais no maior, é produto distinto (não truncamento)
-    const tailWords = longer.slice(shorter.length).trim().split(/\s+/).filter(Boolean);
-    if (tailWords.length >= 4) return false;
-    return true;
+    // Prefixos longos são truncamentos comuns da lista virtualizada do TikTok.
+    if (longer.startsWith(shorter) && shorter.length >= 24) return true;
+    const ta = new Set(ka.split(/\s+/).filter((w) => w.length > 1));
+    const tb = new Set(kb.split(/\s+/).filter((w) => w.length > 1));
+    const shortSet = ta.size <= tb.size ? ta : tb;
+    const longSet = ta.size <= tb.size ? tb : ta;
+    if (shortSet.size < 4) return false;
+    let common = 0;
+    shortSet.forEach((word) => {
+      if (longSet.has(word)) common++;
+    });
+    // Une apenas variantes muito próximas; produtos da mesma marca continuam separados.
+    return common / shortSet.size >= 0.86 && common / longSet.size >= 0.58;
   }
 
   /** Casa chaves iguais ou truncadas (compat: mapas antigos com chave por nome). */
@@ -1363,7 +1450,14 @@
     } catch {}
     for (const t of titleNodes) {
       const s0 = cleanName(t.getAttribute?.("title") || t.textContent || "");
-      if (s0.length >= 4 && !PRICE_RX.test(s0) && !BADGE_RX.test(s0) && !JUNK_NAME_RX.test(s0)) {
+      if (
+        s0.length >= 4 &&
+        !PRICE_RX.test(s0) &&
+        !BADGE_RX.test(s0) &&
+        !JUNK_NAME_RX.test(s0) &&
+        !PRODUCT_UI_RX.test(s0) &&
+        !PRODUCT_META_RX.test(s0)
+      ) {
         name = s0;
         break;
       }
@@ -1371,11 +1465,17 @@
     if (!name) {
       const img = imgs.find((i) => !looksLikeAvatar(i) && i.getAttribute("alt"));
       const alt = cleanName(img?.getAttribute("alt") || "");
-      if (alt.length >= 4 && !BADGE_RX.test(alt) && !JUNK_NAME_RX.test(alt)) name = alt;
+      if (
+        alt.length >= 4 &&
+        !BADGE_RX.test(alt) &&
+        !JUNK_NAME_RX.test(alt) &&
+        !PRODUCT_UI_RX.test(alt)
+      )
+        name = alt;
     }
     if (!name) {
       const aria = cleanName(card.getAttribute?.("aria-label") || "");
-      if (aria.length >= 4 && !BADGE_RX.test(aria)) name = aria;
+      if (aria.length >= 4 && !BADGE_RX.test(aria) && !PRODUCT_UI_RX.test(aria)) name = aria;
     }
     if (!name) {
       const linhas = text.split(/[\n·|]/).map(cleanName);
@@ -1386,6 +1486,7 @@
             !PRICE_RX.test(l) &&
             !BADGE_RX.test(l) &&
             !JUNK_NAME_RX.test(l) &&
+            !PRODUCT_UI_RX.test(l) &&
             !PRODUCT_META_RX.test(l),
         ) || "";
     }
@@ -1444,6 +1545,9 @@
       '[class*="GoodsItem" i]',
       '[class*="goods-item" i]',
       '[class*="ShopProduct" i]',
+      // Assinatura estável observada no Gerenciador de LIVE atual. O botão
+      // `pc_pin_product_list_pin` pertence ao cabeçalho e não identifica card.
+      "button.pc_pin_product_pin",
       "img",
     ];
     selectors.forEach((sel) => {
@@ -1451,7 +1555,7 @@
         root.querySelectorAll(sel).forEach((node) => {
           let cur = node instanceof HTMLElement ? node : null;
           let hops = 0;
-          while (cur && hops++ < 6) {
+          while (cur && hops++ < 9) {
             addIfProductCard(cur, out);
             cur = cur.parentElement;
           }
@@ -1471,7 +1575,10 @@
     for (let i = 0; i < 4 && scroller; i++) {
       try {
         const st = getComputedStyle(scroller);
-        if (/auto|scroll/.test(st.overflowY) && scroller.scrollHeight > scroller.clientHeight + 40) {
+        if (
+          /auto|scroll/.test(st.overflowY) &&
+          scroller.scrollHeight > scroller.clientHeight + 40
+        ) {
           foundScrollable = true;
           break;
         }
@@ -1490,7 +1597,10 @@
       let y = 0;
       let stableBottom = 0;
       while (passes < 100) {
-        scroller.scrollTop = Math.min(y, Math.max(0, scroller.scrollHeight - scroller.clientHeight));
+        scroller.scrollTop = Math.min(
+          y,
+          Math.max(0, scroller.scrollHeight - scroller.clientHeight),
+        );
         await sleep(90);
         collectAtPosition?.(list);
         passes++;
@@ -1523,12 +1633,16 @@
     // 1) fonte mais confiável: payload da própria API do TikTok
     for (const p of net.products.values()) {
       if (isBadProductName(p.name)) continue;
-      upsertProduct(results, {
-        pid: p.pid || "",
-        name: p.name,
-        price: p.price || "",
-        description: p.description || "",
-      }, resultsIdx);
+      upsertProduct(
+        results,
+        {
+          pid: p.pid || "",
+          name: p.name,
+          price: p.price || "",
+          description: p.description || "",
+        },
+        resultsIdx,
+      );
     }
     const apiCount = results.size;
 
@@ -1605,21 +1719,19 @@
           const seen = new Set();
           scopes.forEach((doc) => {
             try {
-              doc
-                .querySelectorAll("img")
-                .forEach((img) => {
-                  let cur = img.parentElement;
-                  let hops = 0;
-                  while (cur && hops++ < 5) {
-                    if (seen.has(cur)) break;
-                    seen.add(cur);
-                    if (hasMultipleProductRows(cur)) {
-                      collectProductCards(cur, cards);
-                      break;
-                    }
-                    cur = cur.parentElement;
+              doc.querySelectorAll("img").forEach((img) => {
+                let cur = img.parentElement;
+                let hops = 0;
+                while (cur && hops++ < 5) {
+                  if (seen.has(cur)) break;
+                  seen.add(cur);
+                  if (hasMultipleProductRows(cur)) {
+                    collectProductCards(cur, cards);
+                    break;
                   }
-                });
+                  cur = cur.parentElement;
+                }
+              });
             } catch {}
           });
         }
@@ -1717,8 +1829,31 @@
         author = m[1].trim();
         text = m[2].trim();
       } else {
-        author = "";
-        text = raw;
+        // O Gerenciador de LIVE atual separa apelido e comentário em spans,
+        // mas não inclui ':' no textContent (ex.: "crisppr.24" + pergunta).
+        let pieces = [];
+        try {
+          pieces = Array.from(node.querySelectorAll("span,p,div"))
+            .map((el) => ownNodeText(el))
+            .filter(
+              (value, index, all) => value && value.length <= 280 && all.indexOf(value) === index,
+            );
+        } catch {}
+        const first = pieces.find(
+          (value) => value.length >= 2 && value.length <= 40 && raw.startsWith(value),
+        );
+        const rest = first
+          ? pieces.find(
+              (value) =>
+                value !== first &&
+                value.length >= 2 &&
+                !value.startsWith(first) &&
+                !CHAT_CHROME_RX.test(value) &&
+                !SYSTEM_MSG_RX.test(value),
+            )
+          : "";
+        author = first && rest ? first : "";
+        text = rest || raw;
       }
     }
     if (!text || text.length < 2) return null;
@@ -1839,11 +1974,20 @@
         },
         body: JSON.stringify({ text, voice: voice.id, speed: voice.speed }),
       });
-      if (!r.ok) return;
+      if (!r.ok) {
+        const detail = await r.text().catch(() => "");
+        throw new Error(`voz ${r.status}${detail ? ` · ${detail.slice(0, 100)}` : ""}`);
+      }
       const blob = await r.blob();
       await playAudio(URL.createObjectURL(blob), cfg);
       await waitForAudioEnd();
-    } catch {}
+    } catch (error) {
+      activity.log({
+        type: "error",
+        text: `Falha ao falar resposta: ${String(error?.message || error).slice(0, 140)}`,
+        ts: Date.now(),
+      });
+    }
     activity.setNowSpeaking(null);
     // OpenAI tts-1: ~$0.015 / 1k chars. Cost stored in cents (USD ~= BRL for estimate).
     const chars = (text || "").length;
@@ -1866,6 +2010,7 @@
     statusEl: null,
     count: 0,
     pitchIdx: 0,
+    serverBackoffUntil: 0,
     pitchProductId: null,
     pitchTimer: null,
     lastMsgAt: 0,
@@ -1975,21 +2120,125 @@
     }, delay || 5000);
   }
 
+  function chatEditorValue(editor) {
+    if (!editor) return "";
+    if ("value" in editor) return String(editor.value || "").trim();
+    return String(editor.textContent || "").trim();
+  }
+
+  function writeChatEditor(editor, value) {
+    editor.focus();
+    if ("value" in editor) {
+      const proto =
+        editor instanceof HTMLTextAreaElement
+          ? HTMLTextAreaElement.prototype
+          : HTMLInputElement.prototype;
+      const setter = Object.getOwnPropertyDescriptor(proto, "value")?.set;
+      if (setter) setter.call(editor, value);
+      else editor.value = value;
+    } else {
+      try {
+        const selection = window.getSelection();
+        const range = document.createRange();
+        range.selectNodeContents(editor);
+        selection.removeAllRanges();
+        selection.addRange(range);
+        document.execCommand("insertText", false, value);
+      } catch {
+        editor.textContent = value;
+      }
+    }
+    try {
+      editor.dispatchEvent(
+        new InputEvent("input", { bubbles: true, inputType: "insertText", data: value }),
+      );
+    } catch {
+      editor.dispatchEvent(new Event("input", { bubbles: true }));
+    }
+    editor.dispatchEvent(new Event("change", { bubbles: true }));
+  }
+
+  /** Escreve e envia a resposta no campo real "Digite algo..." do TikTok. */
+  async function sendChatReply(reply) {
+    let editor = await mapNode("chatReply", true);
+    if (!editor || !DM()?.util?.isVisible?.(editor)) return false;
+    const value = String(reply || "")
+      .replace(/\s+/g, " ")
+      .trim()
+      .slice(0, 100);
+    if (!value) return false;
+    writeChatEditor(editor, value);
+    await sleep(80);
+    if (!chatEditorValue(editor)) return false;
+
+    for (const type of ["keydown", "keypress", "keyup"]) {
+      editor.dispatchEvent(
+        new KeyboardEvent(type, {
+          key: "Enter",
+          code: "Enter",
+          keyCode: 13,
+          which: 13,
+          bubbles: true,
+          cancelable: true,
+        }),
+      );
+    }
+    await sleep(350);
+    if (!chatEditorValue(editor)) return true;
+
+    // Algumas versões do TikTok ignoram Enter e exigem o botão de envio.
+    let scope = editor.parentElement;
+    for (let depth = 0; depth < 3 && scope?.parentElement; depth++) scope = scope.parentElement;
+    const buttons = Array.from(scope?.querySelectorAll?.("button, [role='button']") || []).filter(
+      (button) => DM()?.util?.isVisible?.(button),
+    );
+    const editorRect = editor.getBoundingClientRect();
+    const nearEditor = buttons
+      .filter((button) => {
+        const rect = button.getBoundingClientRect();
+        return (
+          rect.left >= editorRect.left + editorRect.width * 0.55 &&
+          Math.abs(rect.top + rect.height / 2 - (editorRect.top + editorRect.height / 2)) < 55
+        );
+      })
+      .sort(
+        (a, b) =>
+          Math.abs(a.getBoundingClientRect().left - editorRect.right) -
+          Math.abs(b.getBoundingClientRect().left - editorRect.right),
+      );
+    const send =
+      nearEditor.find((button) =>
+        /(enviar|send|publicar|responder)/i.test(
+          `${button.getAttribute?.("aria-label") || ""} ${button.getAttribute?.("title") || ""} ${button.textContent || ""}`,
+        ),
+      ) || nearEditor[0];
+    if (send) realClick(send);
+    await sleep(400);
+    editor = (await mapNode("chatReply")) || editor;
+    return !chatEditorValue(editor);
+  }
+
   async function processQueue() {
     if (chatState.busy) return;
+    if (Date.now() < chatState.serverBackoffUntil) {
+      setTimeout(processQueue, Math.max(250, chatState.serverBackoffUntil - Date.now()));
+      return;
+    }
     const cfg = await loadConfig();
     if (!cfg.respostasIA) return;
 
     // Trava de segurança: verifica credencial e cota
     const unlocked = await checkExtensionLock(cfg.syncToken);
-    if (!unlocked || extSecurity.isLocked) {
+    if (!unlocked || extSecurity.isLocked || extSecurity.aiLocked) {
       _credsOk = false;
       const item = chatState.queue.shift();
       if (item) {
         activity.markStatus(
           item.id,
           "failed",
-          `🔒 TRAVADO: ${extSecurity.message || "Sync token inválido ou limite do plano atingido"}`,
+          extSecurity.aiLocked
+            ? `IA pausada: ${extSecurity.message || "limite de tokens atingido"}`
+            : `🔒 TRAVADO: ${extSecurity.message || "Sync token inválido"}`,
         );
       }
       updateHealth();
@@ -2027,6 +2276,9 @@
           extSecurity.remainingChat = data.remaining;
           if (data.plan) extSecurity.plan = data.plan;
         }
+        extSecurity.tokenRemaining = data.tokenRemaining ?? extSecurity.tokenRemaining;
+        extSecurity.tokenLimit = data.tokenLimit ?? extSecurity.tokenLimit;
+        extSecurity.upgrade = data.upgrade || extSecurity.upgrade;
         if (data.ignore) {
           activity.markStatus(item.id, "ignored", data.reason || "off_topic");
           sessionEvent({ kind: "ignored" });
@@ -2043,6 +2295,21 @@
             if (cfg.revisarAntesDeEnviar) {
               activity.addPending(item, reply, cfg);
             } else {
+              const sent = await sendChatReply(reply);
+              if (!sent) {
+                activity.markStatus(
+                  item.id,
+                  "failed",
+                  "resposta criada, mas o campo de envio do TikTok não confirmou o envio",
+                  reply,
+                );
+                try {
+                  DM()?.invalidate?.("chatReply");
+                } catch {}
+                chatState.busy = false;
+                setTimeout(processQueue, 500);
+                return;
+              }
               activity.markStatus(item.id, "answered", null, reply);
               sessionEvent({ kind: "answered" });
               // Gemini flash: ~$0.075/1M in + $0.30/1M out. Rough cents estimate.
@@ -2061,11 +2328,21 @@
             activity.markStatus(item.id, "ignored", "empty");
           }
         }
+        if (data.quotaReached) {
+          extSecurity.aiLocked = true;
+          extSecurity.reason = "quota_exceeded";
+          extSecurity.message =
+            data.upgradeMessage || data.upgrade?.message || "Limite de tokens atingido.";
+          updateLockUI();
+        }
       } else {
         // Falha do servidor: não é "ignorado" — mostra o motivo real e tenta de novo.
         let detail = "";
+        let errorData = {};
         try {
-          detail = (await r.text()).slice(0, 120);
+          detail = await r.text();
+          errorData = JSON.parse(detail);
+          detail = String(errorData.message || detail).slice(0, 120);
         } catch {}
         if (r.status === 401 || r.status === 403) {
           _credsOk = false;
@@ -2076,9 +2353,16 @@
             "Sync token inválido — copie de novo no painel web",
           );
         } else if (r.status === 429) {
-          activity.markStatus(item.id, "failed", "limite do plano atingido");
-          requeue(item, 15000);
+          extSecurity.aiLocked = true;
+          extSecurity.reason = "quota_exceeded";
+          extSecurity.message = errorData.message || "Limite de tokens do plano atingido.";
+          extSecurity.upgrade = errorData.upgrade || null;
+          extSecurity.tokenRemaining = errorData.tokenRemaining ?? 0;
+          extSecurity.tokenLimit = errorData.tokenLimit ?? extSecurity.tokenLimit;
+          activity.markStatus(item.id, "failed", extSecurity.message);
+          updateLockUI();
         } else {
+          chatState.serverBackoffUntil = Date.now() + 8000;
           activity.markStatus(
             item.id,
             "failed",
@@ -2088,6 +2372,7 @@
         }
       }
     } catch (e) {
+      chatState.serverBackoffUntil = Date.now() + 8000;
       activity.markStatus(item.id, "failed", "sem conexão com o Pitch AI");
       requeue(item, 8000);
     }
@@ -2310,7 +2595,7 @@
     }
     chatState.healthEl.title = "";
     if (!chatState.observer && !net.isChatLive()) {
-      chatState.healthEl.textContent = "⚠ chat não encontrado — aponte a área do chat";
+      chatState.healthEl.textContent = "Buscando o chat automaticamente…";
       chatState.healthEl.className = "pitchai-status warn";
       return;
     }
@@ -2384,6 +2669,7 @@
     chatTimer: null,
     saleTimer: null,
     violTimer: null,
+    tourTimers: [],
     msgIdx: 0,
     saleIdx: 0,
     badge: null,
@@ -2491,6 +2777,36 @@
       await pitchTick().catch(() => {});
     },
 
+    async startTour() {
+      demo.tourTimers.forEach((timer) => clearTimeout(timer));
+      demo.tourTimers = [];
+      if (!demo.on) await demo.start();
+      await demo.applyCatalog();
+      demo.nextMessage();
+      ackDemo("tour", true, "1/4 · Vitrine criada e pergunta recebida");
+
+      demo.tourTimers.push(
+        setTimeout(() => {
+          if (!demo.on) return;
+          demo.simulateSale();
+          ackDemo("tour", true, "2/4 · Venda simulada com aviso ao vivo");
+        }, 2800),
+      );
+      demo.tourTimers.push(
+        setTimeout(async () => {
+          if (!demo.on) return;
+          ackDemo("tour", true, "3/4 · Preparando o pitch de voz…");
+          try {
+            await demo.testVoice();
+            ackDemo("tour", true, "4/4 · Demonstração concluída — tudo funcionando");
+          } catch (error) {
+            ackDemo("tour", false, `Teste de voz não concluiu: ${error?.message || error}`);
+          }
+        }, 5200),
+      );
+      return "Demonstração iniciada · acompanhe as 4 etapas na página da LIVE";
+    },
+
     showBadge() {
       if (demo.badge) return;
       const b = document.createElement("div");
@@ -2561,6 +2877,8 @@
       demo.saleTimer = null;
       clearTimeout(demo.violTimer);
       demo.violTimer = null;
+      demo.tourTimers.forEach((timer) => clearTimeout(timer));
+      demo.tourTimers = [];
       demo.hideBadge();
       stopPitchLoop();
       stopHealthCheck();
@@ -2650,8 +2968,7 @@
   const auto = {
     catalogObserver: null,
     catalogBoot: null,
-    catalogTimer: null,
-    catalogWatchdog: null,
+    catalogStarted: false,
     catalogSyncPromise: null,
     catalogQueuedDeep: false,
     catalogLastDeepAt: 0,
@@ -2665,7 +2982,14 @@
     violationTimer: null,
     violationActive: false,
     liveTimer: null,
+    liveActive: false,
     liveStartedAt: 0,
+    liveStateKnown: false,
+    liveEndAttempts: 0,
+    scheduledStartAttempts: 0,
+    scheduledNextAttemptAt: 0,
+    scheduledFor: 0,
+    lastScheduledAt: 0,
     endingAt: 0,
     ended: false,
     banner: null,
@@ -2699,7 +3023,10 @@
       if (cleaned) saveConfig(cfg);
       return 0;
     }
-    const atual = (cfg.produtos || []).filter((p) => !p.demo);
+    const anteriores = (cfg.produtos || []).filter((p) => !p.demo);
+    // Leitura completa representa a vitrine atual: remove itens automáticos
+    // antigos antes de reconstruí-la, mas preserva todo produto manual.
+    const atual = deep ? anteriores.filter((p) => !p.fromVitrine) : [...anteriores];
     const index = new Map();
     const nameIndex = new Map(); // normKey(name) -> chave em index (O(1))
     for (const p of atual) {
@@ -2747,23 +3074,46 @@
       }
     }
 
-    // Grava relendo a config: mantém marcações do rodízio e o produto ativo
+    const beforeCatalog = anteriores
+      .map((p) => `${p.fromVitrine ? "A" : "M"}:${productFingerprint(p)}`)
+      .sort()
+      .join("\n");
+    const afterCatalog = atual
+      .map((p) => `${p.fromVitrine ? "A" : "M"}:${productFingerprint(p)}`)
+      .sort()
+      .join("\n");
+    const replaced = deep && beforeCatalog !== afterCatalog;
+
+    // Grava relendo a config: mantém a seleção e o produto ativo
     // escolhidos no painel enquanto a raspagem estava rodando.
+    // Não grava a configuração quando a vitrine não mudou. A gravação anterior
+    // acontecia a cada 2s e fazia o painel inteiro (inclusive a licença) piscar.
+    if (!added && !updated && !cleaned && !replaced) return 0;
+
     const savedCfg = await updateConfig((f) => {
       const prev = new Map();
+      const prevNames = new Map();
       for (const p of f.produtos || []) {
-        if (p.pid) prev.set(`#${p.pid}`, p);
-        const k = normKey(p.name || "");
-        if (k && !prev.has(k)) prev.set(k, p);
+        upsertProduct(prev, { ...p }, prevNames);
       }
       f.produtos = atual.map((p) => {
-        const old = (p.pid && prev.get(`#${p.pid}`)) || prev.get(normKey(p.name || ""));
+        const oldKey = findProductEntry(prev, p, prevNames);
+        const old = oldKey ? prev.get(oldKey) : null;
         return old ? { ...p, id: old.id || p.id, active: !!old.active } : p;
       });
       cleanupProducts(f);
+      const validIds = new Set((f.produtos || []).map((p) => p.id).filter(Boolean));
+      if (Array.isArray(f.autoFixar?.ids)) {
+        f.autoFixar.ids = f.autoFixar.ids.filter((id) => validIds.has(id));
+      }
+      if (f.autoFixar) {
+        f.autoFixar.names = (f.produtos || [])
+          .filter((p) => f.autoFixar.ids?.includes(p.id))
+          .map((p) => p.name);
+      }
     });
     cfg.produtos = savedCfg.produtos;
-    if (added || updated || cleaned) pushConfigToBackend(savedCfg);
+    if (added || updated || cleaned || replaced) pushConfigToBackend(savedCfg);
 
     if ((added || updated || cleaned) && !silent) {
       activity.log({
@@ -2797,63 +3147,46 @@
   }
 
   function startCatalogWatcher() {
-    if (auto.catalogTimer || demo.isOn()) return;
-    // primeira leitura automática: tenta a lista, mas também varre a página inteira
-    let tries = 0;
-    const boot = (auto.catalogBoot = setInterval(async () => {
+    if (auto.catalogStarted || demo.isOn()) return;
+    auto.catalogStarted = true;
+
+    // Uma leitura inicial, com apenas duas novas tentativas caso o TikTok ainda
+    // esteja montando a vitrine. Depois disso não existe polling: novas respostas
+    // da API do TikTok e o botão "Atualizar Vitrine" são os únicos gatilhos.
+    const delays = [0, 2500, 6000];
+    const attempt = async (index) => {
+      if (!auto.catalogStarted || extSecurity.isLocked) return;
       const list = await findProductList();
-      const deep = Date.now() - auto.catalogLastDeepAt > 120000;
-      const added = await syncCatalog({ silent: false, deep }).catch(() => 0);
-      if (list || added > 0 || net.products.size) {
-        clearInterval(boot);
+      const added = await syncCatalog({ silent: false, deep: index === 0 }).catch(() => 0);
+      const cfg = await loadConfig();
+      if (list || added > 0 || net.products.size || (cfg.produtos || []).length) {
         auto.catalogBoot = null;
-        try {
-          const target = list?.node || document.body;
-          auto.catalogObserver = new MutationObserver(() => {
-            clearTimeout(auto._catDebounce);
-            auto._catDebounce = setTimeout(() => syncCatalog().catch(() => {}), 2000);
-          });
-          auto.catalogObserver.observe(target, { childList: true, subtree: true });
-        } catch {}
-      } else if (++tries > 120) {
-        clearInterval(boot);
-        auto.catalogBoot = null;
+        return;
       }
-    }, 1500));
-    // loop contínuo: nunca para enquanto a página estiver aberta
-    auto.catalogLastRun = Date.now();
-    const tick = async () => {
-      auto.catalogLastRun = Date.now();
-      try {
-        // A varredura profunda movimenta a lista virtualizada; faça-a no máximo
-        // a cada 2 minutos. Nos demais ciclos, rede + DOM visível são suficientes.
-        const deep = Date.now() - auto.catalogLastDeepAt > 120000;
-        await syncCatalog({ deep });
-      } catch {}
+      if (index + 1 >= delays.length) {
+        auto.catalogBoot = null;
+        return;
+      }
+      auto.catalogBoot = setTimeout(() => attempt(index + 1).catch(() => {}), delays[index + 1]);
     };
-    auto.catalogTimer = setInterval(tick, 2000);
-    // watchdog: aba em segundo plano faz o navegador estrangular os timers.
-    // Se o loop ficar parado >20s, ele é recriado e roda na hora.
-    if (auto.catalogWatchdog) clearInterval(auto.catalogWatchdog);
-    auto.catalogWatchdog = setInterval(() => {
-      if (Date.now() - (auto.catalogLastRun || 0) < 20000) return;
-      try {
-        clearInterval(auto.catalogTimer);
-      } catch {}
-      auto.catalogTimer = setInterval(tick, 2000);
-      tick();
-    }, 10000);
-    document.addEventListener("visibilitychange", () => {
-      if (!document.hidden) tick();
-    });
+    attempt(0).catch(() => {});
   }
 
   // ---------- Auto-fixar produto ----------
   const PIN_RX = /fixar|pin|destacar|topo|apresentar|mostrar/i;
+  const PIN_DANGER_RX = /remover|excluir|apagar|editar|comprar|carrinho|detalhes|desafixar|unpin/i;
+  const UNPIN_RX = /desafixar|unpin|remover (do )?destaque|parar de apresentar|cancelar apresenta/i;
   const CONFIRM_RX = /^(confirmar|apresentar|fixar|sim|ok|continuar)$/i;
   const PINNED_RX = /(fixado|apresentando|em destaque|no topo|unpin|desafixar|cancelar apresenta)/i;
 
   function findPinButton(card) {
+    // Prioriza a ação do card. Há outro botão visualmente idêntico no
+    // cabeçalho da lista (`pc_pin_product_list_pin`) que nunca deve ser usado
+    // para a rotação automática de um produto específico.
+    try {
+      const exact = card.querySelector("button.pc_pin_product_pin");
+      if (exact && DM()?.util?.isVisible?.(exact)) return exact;
+    } catch {}
     let btns = [];
     try {
       btns = Array.from(
@@ -2863,15 +3196,42 @@
       );
     } catch {}
     for (const b of btns) {
+      if (b.matches?.(".pc_pin_product_list_pin")) continue;
       const label =
         `${b.getAttribute?.("aria-label") || ""} ${b.getAttribute?.("title") || ""} ${b.textContent || ""}`.toLowerCase();
-      if (PIN_RX.test(label)) return b.closest("button") || b;
+      if (PIN_RX.test(label) && !PIN_DANGER_RX.test(label)) return b.closest("button") || b;
     }
-    // fallback: primeiro botão visível do card (TikTok usa ícone sem label)
-    for (const b of btns) {
-      if (b.tagName === "BUTTON" && DM()?.util?.isVisible?.(b)) return b;
-    }
+    // Fallback seguro para versões do TikTok que usam um único botão sem texto.
+    // Nunca clica às cegas quando o card possui várias ações.
+    const visibleButtons = btns.filter((b) => b.tagName === "BUTTON" && DM()?.util?.isVisible?.(b));
+    if (visibleButtons.length === 1) return visibleButtons[0];
     return null;
+  }
+
+  function actionLabel(node) {
+    return `${node?.getAttribute?.("aria-label") || ""} ${node?.getAttribute?.("title") || ""} ${node?.textContent || ""}`
+      .replace(/\s+/g, " ")
+      .trim();
+  }
+
+  function findUnpinButton(card) {
+    let buttons = [];
+    try {
+      buttons = Array.from(card.querySelectorAll('button, [role="button"], a[role="button"]'));
+    } catch {}
+    return (
+      buttons.find(
+        (button) =>
+          DM()?.util?.isVisible?.(button) &&
+          (UNPIN_RX.test(actionLabel(button)) || button.getAttribute?.("aria-pressed") === "true"),
+      ) || null
+    );
+  }
+
+  function isPinnedCard(card) {
+    if (!card?.isConnected) return false;
+    if (PINNED_RX.test((card.textContent || "").toLowerCase())) return true;
+    return !!findUnpinButton(card);
   }
 
   /** Alguns fluxos abrem um modal "Apresentar produto?" — confirma automaticamente. */
@@ -2899,12 +3259,20 @@
 
   async function productCards() {
     const set = new Set();
-    const list = await mapNode("products");
+    const sector = await regionNode("products");
+    let list = await mapNode("products");
+    if (sector && list) {
+      try {
+        if (!sector.contains(list)) list = sector;
+      } catch {
+        list = sector;
+      }
+    }
+    if (!list) list = sector;
     if (list) {
-      await materializeList(list);
       collectProductCards(list, set);
     }
-    if (set.size < 2) {
+    if (!list && set.size < 2) {
       const roots = DM()?.util?.allRoots?.() || [document];
       [
         '[data-tid*="product_item"]',
@@ -2928,6 +3296,56 @@
       });
     }
     return Array.from(set);
+  }
+
+  function scrollableProductAncestor(list) {
+    let node = list;
+    for (let hops = 0; node && hops < 6; hops++, node = node.parentElement) {
+      try {
+        const style = getComputedStyle(node);
+        if (/auto|scroll/.test(style.overflowY) && node.scrollHeight > node.clientHeight + 40)
+          return node;
+      } catch {}
+    }
+    return null;
+  }
+
+  /** Localiza o produto e deixa a linha virtualizada visível para o clique real. */
+  async function locateProductCard(name) {
+    const sector = await regionNode("products");
+    let list = (await mapNode("products")) || sector;
+    if (sector && list) {
+      try {
+        if (!sector.contains(list)) list = sector;
+      } catch {
+        list = sector;
+      }
+    }
+    const atCurrentPosition = () => {
+      const cards = new Set();
+      if (list) collectProductCards(list, cards);
+      return matchCard(
+        Array.from(cards).filter((card) => card.isConnected),
+        name,
+      );
+    };
+    let found = atCurrentPosition();
+    if (found) return found;
+    const scroller = list && scrollableProductAncestor(list);
+    if (scroller) {
+      const start = scroller.scrollTop;
+      const step = Math.max(140, Math.floor(scroller.clientHeight * 0.65));
+      const max = Math.max(0, scroller.scrollHeight - scroller.clientHeight);
+      for (let y = 0, passes = 0; y <= max && passes < 80; y += step, passes++) {
+        scroller.scrollTop = Math.min(y, max);
+        await sleep(120);
+        found = atCurrentPosition();
+        if (found) return found;
+      }
+      scroller.scrollTop = start;
+      await sleep(80);
+    }
+    return matchCard(await productCards(), name);
   }
 
   /** Acha o card do produto pelo nome normalizado (tolerante a truncamento). */
@@ -2955,54 +3373,99 @@
   }
 
   async function pinProduct(alvo) {
-    const cards = await productCards();
-    const card = matchCard(cards, alvo.name || "");
+    const card = await locateProductCard(alvo.name || "");
     if (!card) return { ok: false, reason: "card não encontrado na vitrine" };
-    if (PINNED_RX.test((card.textContent || "").toLowerCase())) {
+    if (isPinnedCard(card)) {
       return { ok: true, reason: "já estava fixado" };
     }
-    const btn = findPinButton(card);
-    if (!btn) return { ok: false, reason: "botão de fixar não encontrado" };
-    realClick(btn);
-    await confirmPinDialog();
-    await sleep(700);
-    const confirmado =
-      PINNED_RX.test((card.textContent || "").toLowerCase()) ||
-      btn.getAttribute?.("aria-pressed") === "true";
-    return { ok: true, reason: confirmado ? "fixado" : "clique enviado" };
+    // O TikTok ocasionalmente aceita o evento de clique sem executar a ação.
+    // Repete uma única vez, mas somente após confirmar que o card continua no
+    // estado "Fixar"; assim nunca alterna de volta um produto já fixado.
+    for (let clickAttempt = 0; clickAttempt < 2; clickAttempt++) {
+      const currentCard = card.isConnected ? card : await locateProductCard(alvo.name || "");
+      if (currentCard && isPinnedCard(currentCard)) return { ok: true, reason: "fixado" };
+      const btn = currentCard && findPinButton(currentCard);
+      if (!btn) return { ok: false, reason: "botão de fixar não encontrado" };
+      realClick(btn);
+      await confirmPinDialog();
+      for (let attempt = 0; attempt < 10; attempt++) {
+        await sleep(250);
+        const current = currentCard.isConnected
+          ? currentCard
+          : await locateProductCard(alvo.name || "");
+        if (current && isPinnedCard(current)) return { ok: true, reason: "fixado" };
+      }
+    }
+    return { ok: false, reason: "o TikTok não confirmou o produto em destaque" };
   }
 
-  async function autoPinTick() {
-    if (extSecurity.isLocked) return;
+  /** Desfixa somente o card que o TikTok identifica como produto em destaque. */
+  async function unpinCurrentProduct() {
+    const cards = await productCards();
+    const pinned = cards.find((card) => isPinnedCard(card));
+    if (!pinned) return { ok: true, changed: false, reason: "nenhum produto estava fixado" };
+    const button = findUnpinButton(pinned);
+    if (!button) {
+      return { ok: false, changed: false, reason: "botão de desafixar não encontrado" };
+    }
+    const pinnedName = parseProductCard(pinned)?.name || "";
+    realClick(button);
+    await confirmPinDialog();
+    for (let attempt = 0; attempt < 10; attempt++) {
+      await sleep(250);
+      const current = pinned.isConnected
+        ? pinned
+        : pinnedName
+          ? await locateProductCard(pinnedName)
+          : null;
+      if (!current || !isPinnedCard(current)) {
+        return { ok: true, changed: true, reason: "produto anterior desfixado" };
+      }
+    }
+    return {
+      ok: false,
+      changed: false,
+      reason: "o TikTok não confirmou que o produto foi desfixado",
+    };
+  }
+
+  async function autoPinTick({ force = false } = {}) {
+    if (extSecurity.isLocked) {
+      return { ok: false, reason: extSecurity.message || "licença não confirmada" };
+    }
     const cfg = await loadConfig();
     const af = cfg.autoFixar || {};
-    if (!af.enabled) return;
-    if (Date.now() < auto.nextPinAt) return;
+    if (!af.enabled && !force) return { ok: false, reason: "fixação automática desativada" };
+    if (!force && Date.now() < auto.nextPinAt) return { ok: false, reason: "aguardando intervalo" };
 
     const min = Math.max(5, Number(af.minSec) || 20);
     const max = Math.max(min, Number(af.maxSec) || 60);
     auto.nextPinAt = Date.now() + (min + Math.random() * (max - min)) * 1000;
 
     let produtos = cfg.produtos || [];
-    // seleção manual do rodízio tem prioridade sobre o termo de busca.
+    // A seleção manual de produtos tem prioridade sobre o termo de busca.
     // casa por id, pid ou nome normalizado — a vitrine pode reescrever o id.
     const ids = Array.isArray(af.ids) ? af.ids : [];
     const names = Array.isArray(af.names) ? af.names.map((n) => normKey(n)) : [];
-    if (ids.length || names.length) {
-      const sel = produtos.filter(
+    if (Array.isArray(af.ids) || Array.isArray(af.names)) {
+      produtos = produtos.filter(
         (p) =>
           ids.includes(p.id) ||
           (p.pid && ids.includes(p.pid)) ||
           names.includes(normKey(p.name || "")),
       );
-      if (sel.length) produtos = sel;
     } else if (af.query) {
       const q = normKey(af.query);
-      const filtrados = produtos.filter((p) => normKey(p.name || "").includes(q));
-      if (filtrados.length) produtos = filtrados;
+      produtos = produtos.filter((p) => normKey(p.name || "").includes(q));
+    } else {
+      // Nunca escolhe todos implicitamente: o operador precisa marcar quais
+      // produtos participam do autofixar.
+      produtos = [];
     }
 
-    if (!produtos.length) return;
+    if (!produtos.length) {
+      return { ok: false, reason: "nenhum produto selecionado para fixar" };
+    }
 
     const alvo = produtos[auto.pinIdx % produtos.length];
     auto.pinIdx++;
@@ -3010,27 +3473,39 @@
       localStorage.setItem("pitchai.pinIdx", String(auto.pinIdx));
     } catch {}
 
-    // marca como ATIVO para o prompt da IA (relendo a config, sem sobrescrever o painel)
-    await updateConfig((f) => {
-      f.produtos = (f.produtos || []).map((p) => ({ ...p, active: p.id === alvo.id }));
-    });
-
     let res = { ok: false, reason: "modo demo" };
     if (!demo.isOn()) {
       try {
-        res = await pinProduct(alvo);
+        const unpinned = await unpinCurrentProduct();
+        if (!unpinned.ok) {
+          res = unpinned;
+        } else {
+          if (unpinned.changed) await sleep(450);
+          res = await pinProduct(alvo);
+        }
       } catch (e) {
         res = { ok: false, reason: String(e?.message || e) };
       }
+    }
+    // Só anuncia o produto à IA depois de confirmar que ele foi realmente fixado.
+    if (res.ok || demo.isOn()) {
+      await updateConfig((f) => {
+        f.produtos = (f.produtos || []).map((p) => ({ ...p, active: p.id === alvo.id }));
+      });
+    } else {
+      try {
+        DM()?.invalidate?.("products");
+      } catch {}
     }
     activity.log({
       type: "pin",
       text:
         res.ok || demo.isOn()
-          ? `Produto em destaque: ${alvo.name}`
+          ? `Produto desfixado e fixado novamente: ${alvo.name}`
           : `Destaque só no roteiro (${res.reason}): ${alvo.name}`,
       ts: Date.now(),
     });
+    return res;
   }
 
   function startAutoPin() {
@@ -3065,6 +3540,29 @@
   }
 
   const SALE_DEDUPE_MS = 20000;
+
+  /**
+   * Separa a lista superior de pedidos da lista inferior de atividades dos
+   * espectadores. Ambas ficam no mesmo setor "Atividade" do TikTok.
+   */
+  function findOrdersFeed(activityRegion) {
+    if (!activityRegion) return null;
+    try {
+      const lists = Array.from(
+        activityRegion.querySelectorAll('[role="list"], .arco-list-content'),
+      ).filter((node) => DM()?.util?.isVisible?.(node));
+      return (
+        lists.find((node) =>
+          /os pedidos feitos durante a sua live aparecer[ãa]o aqui/i.test(
+            (node.textContent || "").replace(/\s+/g, " "),
+          ),
+        ) || null
+      );
+    } catch {
+      return null;
+    }
+  }
+
   async function handleSale(node) {
     if (extSecurity.isLocked) return;
     const key = saleKey(node);
@@ -3102,8 +3600,15 @@
     if (auto.saleObserver || demo.isOn()) return;
     let tries = 0;
     const boot = (auto.saleBoot = setInterval(async () => {
-      const node = await mapNode("sales");
-      const found = node ? { node } : null;
+      // A área de Atividade existe antes do primeiro pedido. O detector de
+      // vendas só ganha pontuação depois que uma venda aparece; portanto
+      // observamos o setor real desde o início para não perder o primeiro pedido.
+      const activityRegion = await regionNode("activity");
+      const ordersFeed = findOrdersFeed(activityRegion);
+      const node = ordersFeed || (await mapNode("sales")) || activityRegion;
+      const found = node
+        ? { node, confirmedRegion: node === activityRegion || node === ordersFeed }
+        : null;
       if (found) {
         clearInterval(boot);
         auto.saleBoot = null;
@@ -3133,6 +3638,9 @@
             auto.saleCheck = null;
             return;
           }
+          // Setor confirmado pelos rótulos da página. Vazio significa apenas
+          // que ainda não houve pedido, então o observador deve continuar.
+          if (found.confirmedRegion) return;
           if (Date.now() - startedAt < 60000) return;
           try {
             auto.saleObserver?.disconnect();
@@ -3319,17 +3827,273 @@
     violationTick().catch(() => {});
   }
 
-  // ---------- Encerrar LIVE pelo timer ----------
-  async function clickEndLive() {
-    if (extSecurity.isLocked) return false;
-    const node = await mapNode("endLive");
-    if (!node) return false;
+  // ---------- Iniciar/encerrar LIVE e temporizador ----------
+  const START_LIVE_RX =
+    /(iniciar|come[çc]ar|transmitir|abrir)\s*(a\s*)?(live|transmiss[aã]o)|entrar\s+ao\s+vivo|go\s+live|start\s+(live|stream|broadcast)/i;
+  const END_LIVE_RX =
+    /(encerrar|finalizar|terminar|fechar)\s*(a\s*)?(live|transmiss[aã]o)|end\s+(live|stream|broadcast)|stop\s+(live|stream)|hang\s*up|power\s*off/i;
+  const LIVE_CLOCK_RX = /^\d{2}:\d{2}:\d{2}$/;
+
+  function liveControlLabel(node) {
+    return `${node?.getAttribute?.("aria-label") || ""} ${node?.getAttribute?.("title") || ""} ${node?.textContent || ""}`
+      .replace(/\s+/g, " ")
+      .trim();
+  }
+
+  function validLiveControl(node, rx) {
+    return !!node && !!DM()?.util?.isVisible?.(node) && rx.test(liveControlLabel(node));
+  }
+
+  function ownNodeText(node) {
+    let value = "";
     try {
-      node.click();
-      return true;
-    } catch {
-      return false;
+      for (const child of node.childNodes || [])
+        if (child.nodeType === 3) value += child.nodeValue || "";
+    } catch {}
+    return value.replace(/\s+/g, " ").trim();
+  }
+
+  function runningLiveClock() {
+    const roots = DM()?.util?.allRoots?.() || [document];
+    for (const root of roots) {
+      let nodes = [];
+      try {
+        nodes = Array.from(root.querySelectorAll("span,div,p,time")).slice(0, 6000);
+      } catch {}
+      for (const node of nodes) {
+        if (!DM()?.util?.isVisible?.(node)) continue;
+        const value = ownNodeText(node);
+        if (LIVE_CLOCK_RX.test(value) && value !== "00:00:00") return node;
+      }
     }
+    return null;
+  }
+
+  /**
+   * Na LIVE rápida o TikTok usa apenas um ícone de energia ao lado do cronômetro.
+   * O fallback exige relógio rodando + botão pequeno com ícone no mesmo toolbar,
+   * evitando clicar em ações genéricas da página.
+   */
+  function iconEndLiveControl() {
+    const clock = runningLiveClock();
+    if (!clock) return null;
+    let clockRect;
+    try {
+      clockRect = clock.getBoundingClientRect();
+    } catch {
+      return null;
+    }
+    // Gerenciador atual: o botão de energia não é um <button>; é um div
+    // clicável 24x24 contendo este SVG específico, à direita do cronômetro.
+    try {
+      let exactScope = clock.parentElement;
+      for (let hops = 0; exactScope && hops < 4; hops++, exactScope = exactScope.parentElement) {
+        const icon = exactScope.querySelector?.(".arco-icon-im_close_chat");
+        const control = icon?.closest?.(".cursor-pointer") || icon?.parentElement;
+        if (!control || !DM()?.util?.isVisible?.(control)) continue;
+        const rect = control.getBoundingClientRect();
+        const dx = rect.left + rect.width / 2 - (clockRect.left + clockRect.width / 2);
+        const dy = rect.top + rect.height / 2 - (clockRect.top + clockRect.height / 2);
+        if (dx > 0 && dx < 100 && Math.abs(dy) < 35) return control;
+      }
+    } catch {}
+    let scope = clock.parentElement;
+    const candidates = new Set();
+    for (let hops = 0; scope && hops < 5; hops++, scope = scope.parentElement) {
+      try {
+        scope
+          .querySelectorAll('button,[role="button"]')
+          .forEach((node) => candidates.add(node.closest?.("button") || node));
+      } catch {}
+    }
+    let best = null;
+    let bestScore = Infinity;
+    for (const node of candidates) {
+      if (!DM()?.util?.isVisible?.(node)) continue;
+      const label = liveControlLabel(node).toLowerCase();
+      if (/pausar|pause|roteiro|video|microfone|volume|configura|ajuda/.test(label)) continue;
+      let rect;
+      try {
+        rect = node.getBoundingClientRect();
+      } catch {
+        continue;
+      }
+      if (rect.width < 12 || rect.height < 12 || rect.width > 80 || rect.height > 80) continue;
+      const hasIcon = !!node.querySelector?.("svg,img,[class*='icon' i],[data-icon]");
+      if (!hasIcon && !/(power|encerrar|end|stop|close)/i.test(label)) continue;
+      const dx = rect.left + rect.width / 2 - (clockRect.left + clockRect.width / 2);
+      const dy = rect.top + rect.height / 2 - (clockRect.top + clockRect.height / 2);
+      const distance = Math.hypot(dx, dy);
+      if (distance > 180) continue;
+      // Um ícone sem rótulo à esquerda do relógio costuma ser áudio, câmera ou
+      // configuração. Só aceita esse lado quando o próprio controle declara
+      // explicitamente que encerra a transmissão.
+      const explicitlyEnds = /(power|encerrar|end|stop|close)/i.test(label);
+      if (dx < -20 && !explicitlyEnds) continue;
+      const score = distance + (dx < -20 ? 60 : 0) - (explicitlyEnds ? 80 : 0);
+      if (score < bestScore) {
+        best = node;
+        bestScore = score;
+      }
+    }
+    return best;
+  }
+
+  function textLiveControl(rx) {
+    const roots = DM()?.util?.allRoots?.() || [document];
+    for (const root of roots) {
+      let nodes = [];
+      try {
+        nodes = Array.from(root.querySelectorAll('button,[role="button"],a'));
+      } catch {}
+      const found = nodes.find((node) => validLiveControl(node, rx));
+      if (found) return found.closest?.("button") || found;
+    }
+    return null;
+  }
+
+  function publishLiveState(extra = {}) {
+    try {
+      chrome.storage.local.set({
+        [LIVE_STATE_KEY]: {
+          active: auto.liveActive,
+          known: auto.liveStateKnown,
+          startedAt: auto.liveStartedAt || 0,
+          endingAt: auto.endingAt || 0,
+          endAttempts: auto.liveEndAttempts || 0,
+          at: Date.now(),
+          ...extra,
+        },
+      });
+    } catch {}
+  }
+  async function syncSessionMetrics() {
+    if (!auto.liveActive || demo?.isOn?.()) return;
+    const analytics = RG()?.readAnalytics?.();
+    if (!analytics || typeof analytics !== "object") return;
+    const metrics = {
+      gmv: analytics.gmv,
+      items_sold: analytics.itensVendidos,
+      viewers: analytics.espectadores,
+      avg_watch: analytics.duracaoMedia,
+      product_clicks: analytics.cliquesProduto,
+      visitor_percent: analytics.percentVisitantes,
+    };
+    for (const key of Object.keys(metrics)) {
+      if (typeof metrics[key] !== "string" || !metrics[key].trim()) delete metrics[key];
+    }
+    if (!Object.keys(metrics).length) return;
+    const fingerprint = JSON.stringify(metrics);
+    const now = Date.now();
+    if (fingerprint === session.lastMetricsFingerprint && now - session.lastMetricsAt < 15000)
+      return;
+    if (!(await sessionStart())) return;
+    await sessionEvent({ kind: "metrics", metrics });
+    session.lastMetricsFingerprint = fingerprint;
+    session.lastMetricsAt = now;
+  }
+
+  async function confirmEndLiveDialog() {
+    await sleep(500);
+    const roots = DM()?.util?.allRoots?.() || [document];
+    for (const root of roots) {
+      let buttons = [];
+      try {
+        buttons = Array.from(
+          root.querySelectorAll(
+            '[role="dialog"] button, [aria-modal="true"] button, [class*="Modal" i] button',
+          ),
+        );
+      } catch {}
+      for (const button of buttons) {
+        if (!DM()?.util?.isVisible?.(button)) continue;
+        const label = liveControlLabel(button);
+        if (END_LIVE_RX.test(label) || /^(confirmar|sim|confirm|yes)$/i.test(label)) {
+          realClick(button);
+          return true;
+        }
+      }
+    }
+    return false;
+  }
+
+  async function clickLiveControl(target, rx) {
+    if (extSecurity.isLocked) return false;
+    try {
+      DM()?.invalidate?.(target);
+    } catch {}
+    let node = await mapNode(target, true);
+    if (!validLiveControl(node, rx)) {
+      await sleep(350);
+      node = await mapNode(target, true);
+    }
+    if (!validLiveControl(node, rx)) {
+      node = target === "endLive" ? iconEndLiveControl() : textLiveControl(rx);
+    }
+    if (!node || !DM()?.util?.isVisible?.(node)) return false;
+    realClick(node);
+    if (target === "endLive") await confirmEndLiveDialog();
+    return true;
+  }
+
+  async function clickStartLive() {
+    return clickLiveControl("startLive", START_LIVE_RX);
+  }
+
+  async function clickEndLive() {
+    return clickLiveControl("endLive", END_LIVE_RX);
+  }
+
+  async function detectLiveState() {
+    if (demo.isOn()) return { active: true, known: true };
+    const [endNode, startNode] = await Promise.all([mapNode("endLive"), mapNode("startLive")]);
+    const hasEnd = validLiveControl(endNode, END_LIVE_RX);
+    const hasStart = validLiveControl(startNode, START_LIVE_RX);
+    const hasRunningClock = !!runningLiveClock();
+    const hasIconEnd = hasRunningClock && !!iconEndLiveControl();
+    if (hasEnd || hasIconEnd || hasRunningClock)
+      return { active: true, known: true, hasEnd: hasEnd || hasIconEnd, hasStart };
+    if (hasStart) return { active: false, known: true, hasEnd, hasStart };
+    return { active: false, known: false, hasEnd, hasStart };
+  }
+
+  async function refreshLiveState() {
+    const detected = await detectLiveState();
+    if (!detected.known) {
+      auto.liveStateKnown = false;
+      publishLiveState({ hasStart: false, hasEnd: false });
+      return detected;
+    }
+    const wasActive = auto.liveActive;
+    auto.liveStateKnown = true;
+    auto.liveActive = detected.active;
+    if (detected.active && !wasActive) {
+      auto.liveStartedAt = Date.now();
+      auto.liveEndAttempts = 0;
+      auto.endingAt = 0;
+      auto.ended = false;
+      sessionStart();
+      activity.log({
+        type: "live",
+        text: "LIVE detectada. Temporizador iniciado.",
+        ts: Date.now(),
+      });
+    } else if (!detected.active && wasActive) {
+      auto.liveStartedAt = 0;
+      auto.endingAt = 0;
+      auto.ended = false;
+      auto.liveEndAttempts = 0;
+      if (auto.banner) auto.banner.remove();
+      auto.banner = null;
+      sessionEnd();
+      activity.log({
+        type: "live",
+        text: "LIVE encerrada detectada automaticamente.",
+        ts: Date.now(),
+      });
+    }
+    publishLiveState({ hasStart: detected.hasStart, hasEnd: detected.hasEnd });
+    return detected;
   }
 
   function showEndBanner(secs, onCancel) {
@@ -3348,13 +4112,34 @@
   }
 
   async function finishLive(reason) {
-    if (extSecurity.isLocked) return;
-    if (auto.ended) return;
+    if (extSecurity.isLocked) return false;
+    if (auto.ended || auto.liveEndAttempts >= 3) return false;
+    auto.liveEndAttempts++;
+    const clicked = demo.isOn() ? true : await clickEndLive();
+    if (!clicked) {
+      auto.endingAt = 0;
+      if (auto.banner) auto.banner.remove();
+      auto.banner = null;
+      publishLiveState({ error: "Não encontrei o botão Encerrar LIVE" });
+      activity.log({
+        type: "live",
+        text: `Tentativa ${auto.liveEndAttempts}/3: botão Encerrar LIVE não encontrado.`,
+        ts: Date.now(),
+      });
+      if (auto.liveEndAttempts >= 3) {
+        // Para aqui para não martelar a interface. Uma nova sessão detectada
+        // rearma automaticamente o encerramento.
+        auto.ended = true;
+        publishLiveState({
+          error:
+            "Não foi possível encerrar automaticamente após 3 tentativas. Encerre a LIVE no TikTok.",
+        });
+      }
+      return false;
+    }
     auto.ended = true;
-    const cfg = await loadConfig();
     stopPitchLoop();
     stopChatListener();
-    const clicked = demo.isOn() ? true : await clickEndLive();
     activity.log({
       type: "live",
       text: demo.isOn()
@@ -3369,15 +4154,46 @@
       auto.banner.remove();
       auto.banner = null;
     }
+    return true;
   }
 
   function startLiveTimer() {
     if (auto.liveTimer) return;
-    auto.liveStartedAt = Date.now();
     auto.liveTimer = setInterval(async () => {
       const cfg = await loadConfig();
+      const state = await refreshLiveState();
+      if (state.active) syncSessionMetrics().catch(() => {});
+      const schedule = cfg.agendar || {};
+      const scheduledAt = Date.parse(schedule.at || "");
+      if (Number.isFinite(scheduledAt) && auto.scheduledFor !== scheduledAt) {
+        auto.scheduledFor = scheduledAt;
+        auto.scheduledStartAttempts = 0;
+        auto.scheduledNextAttemptAt = 0;
+      }
+      if (
+        schedule.enabled &&
+        Number.isFinite(scheduledAt) &&
+        Date.now() >= scheduledAt &&
+        !state.active &&
+        auto.lastScheduledAt !== scheduledAt &&
+        auto.scheduledStartAttempts < 3 &&
+        Date.now() >= auto.scheduledNextAttemptAt
+      ) {
+        auto.scheduledStartAttempts++;
+        const started = await clickStartLive();
+        auto.scheduledNextAttemptAt = Date.now() + 10000;
+        if (started || auto.scheduledStartAttempts >= 3) auto.lastScheduledAt = scheduledAt;
+        activity.log({
+          type: "live",
+          text: started
+            ? "Comando automático para iniciar a LIVE enviado."
+            : `Tentativa ${auto.scheduledStartAttempts}/3: botão Iniciar LIVE não encontrado.`,
+          ts: Date.now(),
+        });
+        publishLiveState({ startAttempted: true, startClicked: started });
+      }
       const et = cfg.encerrarTempo || {};
-      if (!et.enabled || auto.ended) return;
+      if (!et.enabled || auto.ended || !state.active || !auto.liveStartedAt) return;
       const limitMs = Math.max(1, Number(et.minutes) || 120) * 60000;
       const elapsed = Date.now() - auto.liveStartedAt;
       if (elapsed < limitMs) {
@@ -3412,8 +4228,9 @@
         if (auto.banner) auto.banner.firstChild.textContent = `Encerrando a LIVE em ${restante}s… `;
         return;
       }
-      await finishLive("timer");
-    }, 1000);
+      await finishLive("tempo limite");
+    }, 2000);
+    refreshLiveState().catch(() => {});
   }
 
   let automationsStarted = false;
@@ -3428,10 +4245,9 @@
     } catch {}
     auto.catalogObserver = null;
     auto.saleObserver = null;
+    auto.catalogStarted = false;
     [
       "catalogBoot",
-      "catalogTimer",
-      "catalogWatchdog",
       "pinTimer",
       "saleBoot",
       "saleCheck",
@@ -3508,7 +4324,13 @@
   // flutuante e o Picture-in-Picture foram removidos para nao cobrir a live.
   // Quando a revisao estiver ligada, aparece apenas uma aprovacao compacta.
   const activity = (() => {
-    const state = { items: [], nowSpeaking: null, reviewQueue: [], reviewToast: null };
+    const state = {
+      items: [],
+      nowSpeaking: null,
+      reviewQueue: [],
+      reviewToast: null,
+      reviewTimer: null,
+    };
     const MAX_LOG = 40;
 
     function trim() {
@@ -3529,6 +4351,8 @@
       if (reply !== undefined) it.reply = reply;
     }
     function closeReviewToast(showNext = true) {
+      clearTimeout(state.reviewTimer);
+      state.reviewTimer = null;
       state.reviewToast?.remove();
       state.reviewToast = null;
       if (showNext) queueMicrotask(showNextReview);
@@ -3542,7 +4366,7 @@
       root.className = "pitchai-review-toast";
       const label = document.createElement("span");
       label.className = "pitchai-review-label";
-      label.textContent = "RESPOSTA PRONTA";
+      label.textContent = "CONFIRMAR RESPOSTA · EXPIRA EM 25s";
       const question = document.createElement("p");
       question.className = "pitchai-review-question";
       question.textContent = item.author ? `${item.author}: ${item.text}` : item.text;
@@ -3553,16 +4377,24 @@
       actions.className = "pitchai-review-actions";
       const skip = document.createElement("button");
       skip.className = "pitchai-btn";
-      skip.textContent = "Pular";
+      skip.textContent = "Descartar";
       skip.onclick = () => {
         markStatus(item.id, "ignored", "descartado");
         closeReviewToast();
       };
       const speak = document.createElement("button");
       speak.className = "pitchai-btn primary";
-      speak.textContent = "▶ Falar agora";
+      speak.textContent = "▶ Enviar e falar";
       speak.onclick = async () => {
+        speak.disabled = true;
+        const sent = await sendChatReply(item.reply);
+        if (!sent) {
+          markStatus(item.id, "failed", "campo de resposta do TikTok não confirmou o envio");
+          closeReviewToast();
+          return;
+        }
         markStatus(item.id, "answered", null, item.reply);
+        sessionEvent({ kind: "answered" });
         closeReviewToast(false);
         await speakText(item.reply, cfg);
         showNextReview();
@@ -3571,6 +4403,10 @@
       root.append(label, question, answer, actions);
       document.body.appendChild(root);
       state.reviewToast = root;
+      state.reviewTimer = setTimeout(() => {
+        markStatus(item.id, "ignored", "confirmação expirada");
+        closeReviewToast();
+      }, 25000);
     }
     function addPending(item, reply, cfg) {
       const it = state.items.find((x) => x.id === item.id);
@@ -3605,10 +4441,19 @@
   }
 
   // ações que só fazem sentido com o Modo Demo ligado
-  const DEMO_ONLY = new Set(["vitrine", "produto", "mensagem", "venda", "violacao", "pitch"]);
+  const DEMO_ONLY = new Set([
+    "tour",
+    "vitrine",
+    "produto",
+    "mensagem",
+    "venda",
+    "violacao",
+    "pitch",
+  ]);
 
   async function runDemoCommand(action) {
     const map = {
+      tour: async () => demo.startTour(),
       vitrine: async () => `Vitrine simulada: +${await demo.applyCatalog()} produto(s)`,
       produto: async () => {
         await demo.addFakeProduct();
@@ -3638,6 +4483,29 @@
         await finishLive("demo manual");
         return "Live encerrada";
       },
+      "live:start": async () => {
+        const state = await detectLiveState();
+        if (state.active) return "A LIVE já está ativa.";
+        if (!(await clickStartLive())) throw new Error("botão Iniciar LIVE não encontrado");
+        return "Comando para iniciar a LIVE enviado ao TikTok.";
+      },
+      "live:end": async () => {
+        const state = await detectLiveState();
+        if (!state.active) throw new Error("nenhuma LIVE ativa foi detectada");
+        if (!(await finishLive("comando do painel"))) {
+          throw new Error("botão Encerrar LIVE não encontrado");
+        }
+        return "Comando para encerrar a LIVE enviado ao TikTok.";
+      },
+      "pin:now": async () => {
+        const current = await loadConfig();
+        if (!(await checkExtensionLock(current.syncToken))) {
+          throw new Error(extSecurity.message || "licença não confirmada");
+        }
+        const result = await autoPinTick({ force: true });
+        if (!result?.ok) throw new Error(result?.reason || "não foi possível fixar o produto");
+        return "Produto desfixado e fixado novamente com sucesso.";
+      },
       "pick:chat": async () => {
         await startPickMode("chat");
         return "Clique no chat da live";
@@ -3653,6 +4521,10 @@
       "pick:violation": async () => {
         await startPickMode("violation");
         return "Clique no aviso/alerta de violação";
+      },
+      "pick:startLive": async () => {
+        await startPickMode("startLive");
+        return "Clique no botão de iniciar a LIVE";
       },
       "pick:endLive": async () => {
         await startPickMode("endLive");
@@ -3732,7 +4604,8 @@
         } catch {}
         const n = await syncCatalog({ silent: true, deep: true });
         const total = (await loadConfig()).produtos?.length || 0;
-        if (!total) throw new Error("nenhum produto encontrado — use 'Apontar vitrine'");
+        if (!total)
+          throw new Error("nenhum produto encontrado — abra a vitrine da LIVE e tente novamente");
         return `Produtos: ${total} na live (+${n} novo(s))`;
       },
       remap: async () => {
@@ -3891,7 +4764,7 @@
       return;
     }
 
-    const cfg = await loadConfig();
+    const cfg = await loadConfigWithPendingSync();
     scanFx.mount();
     const unlocked = await checkExtensionLock(cfg.syncToken);
     bindPushToTalk();
@@ -3916,6 +4789,7 @@
       class: "pitchai-toggle" + (cfg.protecaoGeral ? " on" : ""),
       id: "pitchai-master",
       title: "Proteção geral",
+      "aria-pressed": String(!!cfg.protecaoGeral),
     });
     master.addEventListener("click", async () => {
       const alvo = !master.classList.contains("on");
@@ -3932,6 +4806,10 @@
           fresh.protecaoGeral = alvo;
           return fresh;
         });
+        master.setAttribute("aria-pressed", String(alvo));
+        health.textContent = alvo ? "✓ Proteção ativada" : "Proteção pausada";
+        health.className = alvo ? "pitchai-status ok" : "pitchai-status";
+        setTimeout(updateHealth, 1800);
       } catch {
         master.classList.toggle("on", !alvo);
       }
@@ -3994,7 +4872,6 @@
       const cmd = map[alvo.trim().toLowerCase()];
       if (cmd) runDemoCommand(cmd);
     });
-
     // O contador e a antiga fila flutuante foram removidos da navegacao.
     // O processamento continua em segundo plano e o estado fica resumido em `health`.
     chatState.statusEl = null;
@@ -4057,7 +4934,6 @@
         return fresh;
       }).catch(() => {});
     });
-
     // ---- Modo Demo ----
     const demoBtn = el(
       "button",
@@ -4134,18 +5010,28 @@
     const brandGroup = el("div", { class: "pitchai-header-brand" }, logo, ver, health);
     const protectionLabel = el(
       "div",
-      { class: "pitchai-protection", title: "Ativar ou pausar a proteção geral" },
+      {
+        class: "pitchai-protection",
+        title: "Ativar ou pausar a proteção geral",
+        role: "button",
+        tabindex: "0",
+        "aria-label": "Ativar ou pausar a proteção geral",
+      },
       el("span", { class: "pitchai-control-label" }, "Proteção"),
       master,
     );
+    protectionLabel.addEventListener("click", () => toggleProtection().catch(() => {}));
+    protectionLabel.addEventListener("keydown", (event) => {
+      if (event.key !== "Enter" && event.key !== " ") return;
+      event.preventDefault();
+      toggleProtection().catch(() => {});
+    });
     const controlsGroup = el(
       "div",
       { class: "pitchai-header-controls" },
       protectionLabel,
       listenBtn,
       scrapeBtn,
-      pickBtn,
-      reviewBtn,
       demoBtn,
     );
     const actionsGroup = el("div", { class: "pitchai-header-actions" }, openBtn, tabBtn);
@@ -4154,7 +5040,6 @@
     document.body.appendChild(header);
 
     if (cfg.respostasIA) {
-      sessionStart();
       let tries = 0;
       const iv = setInterval(async () => {
         if ((await startChatListener()) || ++tries > 30) clearInterval(iv);
@@ -4176,17 +5061,29 @@
 
     if (cfg.demo?.enabled) demo.start(cfg).catch(() => {});
 
-    // Se a conta já tem apontamentos salvos e este navegador não, baixa
-    setTimeout(() => {
-      pullMappingIfEmpty().catch(() => {});
-    }, 4000);
-
     // Comandos vindos do painel (iframe/aba) via chrome.storage
     chrome.storage.onChanged.addListener(async (changes) => {
+      const pending = changes[PENDING_SYNC_KEY]?.newValue;
+      if (SYNC_UUID_RE.test(String(pending || ""))) {
+        const current = await loadConfig();
+        current.syncToken = String(pending);
+        const encrypted = await encryptConfigObj(current);
+        await chrome.storage.local.set({ [STORAGE_KEY]: encrypted });
+        await chrome.storage.local.remove(PENDING_SYNC_KEY);
+        const licensed = await checkExtensionLock(current.syncToken);
+        if (licensed) startAutomations();
+        else stopAutomations();
+      }
       const storedConfig = changes[STORAGE_KEY]?.newValue;
       if (storedConfig) {
         const c = normalizeConfig(await decryptConfigObj(storedConfig));
+        if (String(c.syncToken || "") !== extSecurity.syncToken) {
+          const licensed = await checkExtensionLock(c.syncToken);
+          if (licensed) startAutomations();
+          else stopAutomations();
+        }
         master.classList.toggle("on", !!c.protecaoGeral);
+        master.setAttribute("aria-pressed", String(!!c.protecaoGeral));
         applyListenUi(!!c.respostasIA);
         const wants = !!c.demo?.enabled;
         // ignora o eco da nossa própria gravação (senão start/stop roda duas vezes)

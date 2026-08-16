@@ -328,26 +328,17 @@ function Landing() {
     let alive = true;
     const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
     (async () => {
-      while (alive) {
-        el.textContent = "";
-        box.classList.add("typing");
-        for (let i = 1; i <= full.length && alive; i++) {
-          el.textContent = full.slice(0, i);
-          await sleep(26 + Math.random() * 44);
-        }
-        box.classList.remove("typing");
-        await sleep(4200);
-        if (!alive) return;
-        box.classList.add("typing");
-        for (let i = full.length; i > 0 && alive; i--) {
-          el.textContent = full.slice(0, i);
-          await sleep(9);
-        }
-        await sleep(900);
+      el.textContent = "";
+      box.classList.add("typing");
+      for (let i = 1; i <= full.length && alive; i++) {
+        el.textContent = full.slice(0, i);
+        await sleep(24 + Math.random() * 30);
       }
+      if (alive) box.classList.remove("typing");
     })();
     return () => {
       alive = false;
+      box.classList.remove("typing");
     };
   }, []);
 

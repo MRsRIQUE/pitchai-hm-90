@@ -2,7 +2,7 @@
  * Pitch AI — mapeamento por SETORES do Console de LIVE do TikTok
  * Divide a tela em regiões (produtos, estúdio, chat, atividade, análise) para que
  * o scraping de cada alvo aconteça só dentro do setor correto.
- * 
+ *
  * Este módulo fornece a API para o content script usar.
  */
 
@@ -68,7 +68,8 @@ export const REGIONS: Record<RegionID, RegionConfig> = {
     minAnchors: 2,
     content: (): boolean => true,
     geometry: { x: [0.25, 0.8], y: [0.2, 1] },
-    hintXPath: "/html/body/div[2]/div/div[2]/main/div/div/div/div/div/div/div[2]/div[2]/div[3]/div/div[2]",
+    hintXPath:
+      "/html/body/div[2]/div/div[2]/main/div/div/div/div/div/div/div[2]/div[2]/div[3]/div/div[2]",
   },
   activity: {
     label: "Atividade / pedidos",
@@ -126,7 +127,8 @@ export const IDS: RegionID[] = Object.keys(REGIONS) as RegionID[];
  */
 export function roots(): (Document | HTMLDocument)[] {
   try {
-    const u = (window as unknown as { PitchaiDomMap?: { util?: { allRoots?: () => Document[] } } }).PitchaiDomMap?.util;
+    const u = (window as unknown as { PitchaiDomMap?: { util?: { allRoots?: () => Document[] } } })
+      .PitchaiDomMap?.util;
     if (u?.allRoots) return u.allRoots();
   } catch {
     // Ignora erros
@@ -169,11 +171,7 @@ export function visible(el: Element): boolean {
     const r = el.getBoundingClientRect();
     if (r.width < 8 || r.height < 8) return false;
     const s = getComputedStyle(el as HTMLElement);
-    return (
-      s.display !== "none" &&
-      s.visibility !== "hidden" &&
-      Number(s.opacity) !== 0
-    );
+    return s.display !== "none" && s.visibility !== "hidden" && Number(s.opacity) !== 0;
   } catch {
     return false;
   }
@@ -200,13 +198,7 @@ export function countMatches(el: Element, rx: RegExp): number {
  */
 export function byXPath(path: string): HTMLElement | null {
   try {
-    const r = document.evaluate(
-      path,
-      document,
-      null,
-      XPathResult.FIRST_ORDERED_NODE_TYPE,
-      null,
-    );
+    const r = document.evaluate(path, document, null, XPathResult.FIRST_ORDERED_NODE_TYPE, null);
     return r.singleNodeValue instanceof HTMLElement ? r.singleNodeValue : null;
   } catch {
     return null;
@@ -335,10 +327,7 @@ export function containerFor(
     try {
       const r = last.getBoundingClientRect();
       if (r.width < 120 || r.height < 80) score -= 4;
-      if (
-        r.width > (window.innerWidth || 1) * 0.95 &&
-        r.height > (window.innerHeight || 1) * 0.95
-      )
+      if (r.width > (window.innerWidth || 1) * 0.95 && r.height > (window.innerHeight || 1) * 0.95)
         score -= 8;
     } catch {
       // Ignora erros
@@ -363,14 +352,8 @@ interface RegionInternalState {
   anchors: number;
 }
 
-const state: Record<RegionID, RegionInternalState> = {} as Record<
-  RegionID,
-  RegionInternalState
->;
-IDS.forEach(
-  (id) =>
-    (state[id] = { node: null, score: 0, via: null, at: 0, anchors: 0 }),
-);
+const state: Record<RegionID, RegionInternalState> = {} as Record<RegionID, RegionInternalState>;
+IDS.forEach((id) => (state[id] = { node: null, score: 0, via: null, at: 0, anchors: 0 }));
 
 let manual: Partial<Record<RegionID, unknown>> = {};
 let manualLoaded = false;
@@ -387,15 +370,16 @@ async function loadManual(): Promise<Partial<Record<RegionID, unknown>>> {
   return new Promise((res) => {
     if (manualLoaded) return res(manual);
     try {
-      (chrome.storage.local as { get: (keys: string[], callback: (result: Record<string, unknown>) => void) => void }).get(
-        [MANUAL_KEY],
-        (r) => {
-          const raw = (r?.[MANUAL_KEY] as Record<string, unknown> | undefined) || {};
-          manual = (raw.host === location.host ? raw.sig : {}) as Partial<Record<RegionID, unknown>>;
-          manualLoaded = true;
-          res(manual);
-        },
-      );
+      (
+        chrome.storage.local as {
+          get: (keys: string[], callback: (result: Record<string, unknown>) => void) => void;
+        }
+      ).get([MANUAL_KEY], (r) => {
+        const raw = (r?.[MANUAL_KEY] as Record<string, unknown> | undefined) || {};
+        manual = (raw.host === location.host ? raw.sig : {}) as Partial<Record<RegionID, unknown>>;
+        manualLoaded = true;
+        res(manual);
+      });
     } catch {
       manualLoaded = true;
       res(manual);
@@ -423,7 +407,9 @@ function saveCache(): void {
   const sig: Partial<Record<RegionID, unknown>> = {};
   IDS.forEach((id) => {
     const n = state[id].node;
-    const sigFn = (window as unknown as { PitchaiDomMap?: { util?: { signatureOf?: (el: Element) => unknown } } }).PitchaiDomMap?.util?.signatureOf;
+    const sigFn = (
+      window as unknown as { PitchaiDomMap?: { util?: { signatureOf?: (el: Element) => unknown } } }
+    ).PitchaiDomMap?.util?.signatureOf;
     if (n && sigFn) {
       try {
         sig[id] = sigFn(n);
@@ -447,13 +433,14 @@ function saveCache(): void {
 async function loadCache(): Promise<Partial<Record<RegionID, unknown>>> {
   return new Promise((res) => {
     try {
-      (chrome.storage.local as { get: (keys: string[], callback: (result: Record<string, unknown>) => void) => void }).get(
-        [CACHE_KEY],
-        (r) => {
-          const raw = (r?.[CACHE_KEY] as Record<string, unknown> | undefined) || {};
-          res((raw.host === location.host ? raw.sig : {}) as Partial<Record<RegionID, unknown>>);
-        },
-      );
+      (
+        chrome.storage.local as {
+          get: (keys: string[], callback: (result: Record<string, unknown>) => void) => void;
+        }
+      ).get([CACHE_KEY], (r) => {
+        const raw = (r?.[CACHE_KEY] as Record<string, unknown> | undefined) || {};
+        res((raw.host === location.host ? raw.sig : {}) as Partial<Record<RegionID, unknown>>);
+      });
     } catch {
       res({});
     }
@@ -481,7 +468,9 @@ let resolving: Promise<Record<RegionID, RegionState>> | null = null;
 /**
  * Resolve todas as regiões
  */
-export async function resolveAll(options: { force?: boolean } = {}): Promise<Record<RegionID, RegionState>> {
+export async function resolveAll(
+  options: { force?: boolean } = {},
+): Promise<Record<RegionID, RegionState>> {
   if (resolving) return resolving;
   if (!options.force && Date.now() - lastResolve < 4000 && IDS.some((id) => alive(id))) {
     return status();
@@ -642,10 +631,7 @@ export function get(id: RegionID): Element | null {
 /**
  * Obtém o nó da região (assíncrono, com resolução)
  */
-export async function node(
-  id: RegionID,
-  opts?: { force?: boolean },
-): Promise<Element | null> {
+export async function node(id: RegionID, opts?: { force?: boolean }): Promise<Element | null> {
   if (alive(id) && !opts?.force) return state[id].node;
   await resolveAll({ force: !!opts?.force });
   return get(id);
@@ -681,7 +667,9 @@ export async function setManual(id: RegionID, el: Element): Promise<boolean> {
   if (!REGIONS[id] || !(el instanceof HTMLElement)) return false;
   await loadManual();
   try {
-    const sigFn = (window as unknown as { PitchaiDomMap?: { util?: { signatureOf?: (el: Element) => unknown } } }).PitchaiDomMap?.util?.signatureOf;
+    const sigFn = (
+      window as unknown as { PitchaiDomMap?: { util?: { signatureOf?: (el: Element) => unknown } } }
+    ).PitchaiDomMap?.util?.signatureOf;
     if (sigFn) manual[id] = sigFn(el);
   } catch {
     return false;
@@ -747,14 +735,21 @@ export function readAnalytics(): RegionAnalytics | null {
     ["percentVisitantes", /porcentagem\s+de\s+visitantes/i],
   ];
 
+  const labelCount = (value: string) => LABELS.filter(([, rx]) => rx.test(value)).length;
   for (const el of cells) {
     const t = ownText(el);
     if (!t || t.length > 60) continue;
     const hit = LABELS.find(([, rx]) => rx.test(t));
     if (!hit) continue;
-    const box = el.parentElement || el;
-    const val = txt(box).replace(t, "").trim();
-    if (val && val !== "--") out[hit[0] as string] = val.slice(0, 32);
+    let box = el;
+    for (let depth = 0; depth < 4 && box.parentElement; depth++) {
+      const candidate = box.parentElement;
+      const value = txt(candidate);
+      if (value.length > 140 || labelCount(value) > 1) break;
+      box = candidate;
+    }
+    const val = txt(box).replace(t, " ").replace(/\s+/g, " ").trim();
+    if (val && val !== "--" && val.length <= 64) out[hit[0] as string] = val;
   }
 
   return Object.keys(out).length ? (out as unknown as RegionAnalytics) : null;
@@ -814,7 +809,9 @@ export async function exportManual(): Promise<Partial<Record<RegionID, unknown>>
 }
 
 /** Importa os apontamentos manuais. */
-export async function importManual(sig: Partial<Record<RegionID, unknown>>): Promise<Record<RegionID, RegionState>> {
+export async function importManual(
+  sig: Partial<Record<RegionID, unknown>>,
+): Promise<Record<RegionID, RegionState>> {
   manual = sig && typeof sig === "object" ? { ...sig } : {};
   manualLoaded = true;
   saveManual();

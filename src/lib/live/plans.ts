@@ -24,8 +24,6 @@ export type PitchaiPlan = {
   months: number;
   badge?: string;
   highlight?: boolean;
-  /** Link direto de checkout */
-  checkoutUrl: string;
   /** Se o recurso de áudio/voz da IA é permitido */
   allowAudio: boolean;
   audioNote: string;
@@ -37,7 +35,6 @@ export const PITCHAI_PLANS: PitchaiPlan[] = [
     name: "Mensal",
     amountCents: 2790,
     months: 1,
-    checkoutUrl: "https://go.perfectpay.com.br/PPU38CQERA9",
     allowAudio: false,
     audioNote: "Áudio / Voz da IA bloqueado (apenas respostas em texto)",
   },
@@ -48,7 +45,6 @@ export const PITCHAI_PLANS: PitchaiPlan[] = [
     months: 3,
     badge: "Economize 19%",
     highlight: true,
-    checkoutUrl: "https://go.perfectpay.com.br/PPU38CQERAA",
     allowAudio: true,
     audioNote: "Voz e áudio da IA liberados em tempo real",
   },
@@ -58,11 +54,32 @@ export const PITCHAI_PLANS: PitchaiPlan[] = [
     amountCents: 11790,
     months: 12,
     badge: "Economize 65%",
-    checkoutUrl: "https://go.perfectpay.com.br/PPU38CQERAB",
     allowAudio: true,
     audioNote: "Voz e áudio da IA liberados em tempo real",
   },
 ];
+
+/** Legado de homologação: oculto da página pública e sem novas vendas. */
+const PITCHAI_LEGACY_TEST_PLANS: PitchaiPlan[] = [
+  {
+    priceId: "pitchai_trimestral_teste_1real",
+    name: "Trimestral — Teste R$ 1",
+    amountCents: 100,
+    months: 3,
+    allowAudio: true,
+    audioNote: "Mesmos recursos e limites do plano Trimestral",
+  },
+];
+
+export function findPitchaiPlan(priceId: string): PitchaiPlan | undefined {
+  return [...PITCHAI_PLANS, ...PITCHAI_LEGACY_TEST_PLANS].find((plan) => plan.priceId === priceId);
+}
+
+/** Converte planos de homologação para o plano comercial que libera os recursos. */
+export function entitlementPlanId(priceId?: string | null): string {
+  if (priceId === "pitchai_trimestral_teste_1real") return "pitchai_trimestral";
+  return String(priceId || "free");
+}
 
 /** Benefícios incluídos — observação sobre áudio por plano. */
 export const PLAN_FEATURES = [
@@ -98,6 +115,7 @@ export const PRICE_TO_PLAN: Record<string, PlanTier> = {
   pitchai_mensal: "pro",
   pitchai_trimestral: "pro",
   pitchai_anual: "pro",
+  pitchai_trimestral_teste_1real: "pro",
   // Legado: assinaturas criadas antes da unificação de preços.
   pitchai_pro_monthly: "pro",
   pitchai_pro_yearly: "pro",

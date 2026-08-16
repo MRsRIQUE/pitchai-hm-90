@@ -28,13 +28,13 @@ export function SiteNav() {
 
   return (
     <header className={wrap}>
-      <div className="mx-auto flex max-w-6xl items-center justify-between gap-x-4 px-4 py-3.5 sm:px-6">
+      <div className="desktop-rail flex items-center justify-between gap-x-6 py-3.5">
         <Link to="/" className="group flex items-center gap-2">
           <PitchAiLogo size="sm" variant={effTone === "dark" ? "purple" : "dark"} />
         </Link>
 
         {/* Links Principais */}
-        <nav className="hidden md:flex items-center gap-x-6 text-sm">
+        <nav className="hidden lg:flex items-center gap-x-7 text-sm">
           {LINKS.map((l) => (
             <Link key={l.to} to={l.to} className={linkClass}>
               {l.label}

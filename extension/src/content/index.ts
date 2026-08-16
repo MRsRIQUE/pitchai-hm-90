@@ -38,30 +38,30 @@ function notifyExtensionInstalled(): void {
   try {
     window.pitchAiExtensionInstalled = true;
     window.dispatchEvent(
-      new CustomEvent("pitchai-extension-detected", { detail: { version: "0.15.1" } }),
+      new CustomEvent("pitchai-extension-detected", {
+        detail: { version: chrome.runtime.getManifest().version },
+      }),
     );
 
     window.addEventListener("message", (event) => {
       if (event.data && event.data.type === "PITCHAI_SYNC_TOKEN" && event.data.token) {
         if (typeof chrome !== "undefined" && chrome?.storage?.local) {
-          (chrome.storage.local as {
-            get: (keys: string[], callback: (result: Record<string, unknown>) => void) => void;
-            set: (items: Record<string, unknown>, callback?: () => void) => void;
-          }).get(
-            [STORAGE_KEY],
-            (res) => {
-              const current = (res[STORAGE_KEY] as Record<string, unknown> | undefined) || {};
-              current.syncToken = (event as MessageEvent).data.token;
-              (chrome.storage.local as {
+          (
+            chrome.storage.local as {
+              get: (keys: string[], callback: (result: Record<string, unknown>) => void) => void;
+              set: (items: Record<string, unknown>, callback?: () => void) => void;
+            }
+          ).get([STORAGE_KEY], (res) => {
+            const current = (res[STORAGE_KEY] as Record<string, unknown> | undefined) || {};
+            current.syncToken = (event as MessageEvent).data.token;
+            (
+              chrome.storage.local as {
                 set: (items: Record<string, unknown>, callback?: () => void) => void;
-              }).set(
-                { [STORAGE_KEY]: current },
-                () => {
-                  window.postMessage({ type: "PITCHAI_SYNC_TOKEN_SUCCESS" }, "*");
-                },
-              );
-            },
-          );
+              }
+            ).set({ [STORAGE_KEY]: current }, () => {
+              window.postMessage({ type: "PITCHAI_SYNC_TOKEN_SUCCESS" }, "*");
+            });
+          });
         }
       }
     });
@@ -86,7 +86,10 @@ function forceInjectPitchAiTestUI(options?: {
   const opts = Object.assign(
     {
       open: true,
-      iframeSrc: typeof chrome !== "undefined" && chrome?.runtime?.getURL ? chrome.runtime.getURL("panel.html") : "/app",
+      iframeSrc:
+        typeof chrome !== "undefined" && chrome?.runtime?.getURL
+          ? chrome.runtime.getURL("panel.html")
+          : "/app",
       forceStyles: true,
     },
     options || {},
@@ -195,7 +198,7 @@ function forceInjectPitchAiTestUI(options?: {
     header.className = "pitchai-header";
     header.innerHTML = `
     <span class="pitchai-logo">pitch<b>ai</b></span>
-    <span class="pitchai-ver">v0.15.1 [TEST]</span>
+    <span class="pitchai-ver">v0.15.12 [TEST]</span>
     <span class="pitchai-status ok"><span class="pitchai-dot on"></span> Teste Ativo</span>
     <button class="pitchai-btn primary" id="pitchai-test-toggle-btn">Painel ▴</button>
     <button class="pitchai-btn" id="pitchai-test-tab-btn" title="Abrir painel">↗ Aba</button>
@@ -206,7 +209,7 @@ function forceInjectPitchAiTestUI(options?: {
   // 3. Garante ou cria o pitchai-panel-frame
   let frame = document.getElementById("pitchai-frame");
   let iframe: HTMLIFrameElement | null = null;
-  
+
   if (!frame) {
     frame = document.createElement("div");
     frame.id = "pitchai-frame";

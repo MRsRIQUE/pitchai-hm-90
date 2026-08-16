@@ -17,14 +17,13 @@ import { Route as DownloadRouteImport } from './routes/download'
 import { Route as EntrarRouteImport } from './routes/entrar'
 import { Route as IndiqueRouteImport } from './routes/indique'
 import { Route as LivesRouteImport } from './routes/lives'
-import { Route as PaymentsRouteImport } from './routes/payments'
 import { Route as PlanosRouteImport } from './routes/planos'
 import { Route as QuentesRouteImport } from './routes/quentes'
 import { Route as ResetPasswordRouteImport } from './routes/reset-password'
 import { Route as TermosRouteImport } from './routes/termos'
-import { Route as ApiPaymentsRouteImport } from './routes/api/payments'
 import { Route as CheckoutReturnRouteImport } from './routes/checkout.return'
 import { Route as ApiAccountEnsureRouteImport } from './routes/api/account/ensure'
+import { Route as ApiAccountSyncTokenRouteImport } from './routes/api/account/sync-token'
 import { Route as ApiAdminCourtesyRouteImport } from './routes/api/admin/courtesy'
 import { Route as ApiCheckoutStartRouteImport } from './routes/api/checkout/start'
 import { Route as ApiScriptGenerateRouteImport } from './routes/api/script/generate'
@@ -36,8 +35,6 @@ import { Route as ApiPublicLiveConfigRouteImport } from './routes/api/public/liv
 import { Route as ApiPublicLiveMappingRouteImport } from './routes/api/public/live/mapping'
 import { Route as ApiPublicLiveSessionRouteImport } from './routes/api/public/live/session'
 import { Route as ApiPublicLiveVerifyRouteImport } from './routes/api/public/live/verify'
-import { Route as ApiPublicPaymentsActivateRouteImport } from './routes/api/public/payments/activate'
-import { Route as ApiPublicPaymentsPerfectpayRouteImport } from './routes/api/public/payments/perfectpay'
 import { Route as ApiPublicPaymentsWebhookRouteImport } from './routes/api/public/payments/webhook'
 import { Route as ApiPublicTtsSpeakRouteImport } from './routes/api/public/tts/speak'
 
@@ -81,11 +78,6 @@ const LivesRoute = LivesRouteImport.update({
   path: '/lives',
   getParentRoute: () => rootRouteImport,
 } as any)
-const PaymentsRoute = PaymentsRouteImport.update({
-  id: '/payments',
-  path: '/payments',
-  getParentRoute: () => rootRouteImport,
-} as any)
 const PlanosRoute = PlanosRouteImport.update({
   id: '/planos',
   path: '/planos',
@@ -106,11 +98,6 @@ const TermosRoute = TermosRouteImport.update({
   path: '/termos',
   getParentRoute: () => rootRouteImport,
 } as any)
-const ApiPaymentsRoute = ApiPaymentsRouteImport.update({
-  id: '/api/payments',
-  path: '/api/payments',
-  getParentRoute: () => rootRouteImport,
-} as any)
 const CheckoutReturnRoute = CheckoutReturnRouteImport.update({
   id: '/checkout/return',
   path: '/checkout/return',
@@ -119,6 +106,11 @@ const CheckoutReturnRoute = CheckoutReturnRouteImport.update({
 const ApiAccountEnsureRoute = ApiAccountEnsureRouteImport.update({
   id: '/api/account/ensure',
   path: '/api/account/ensure',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiAccountSyncTokenRoute = ApiAccountSyncTokenRouteImport.update({
+  id: '/api/account/sync-token',
+  path: '/api/account/sync-token',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ApiAdminCourtesyRoute = ApiAdminCourtesyRouteImport.update({
@@ -177,18 +169,6 @@ const ApiPublicLiveVerifyRoute = ApiPublicLiveVerifyRouteImport.update({
   path: '/api/public/live/verify',
   getParentRoute: () => rootRouteImport,
 } as any)
-const ApiPublicPaymentsActivateRoute =
-  ApiPublicPaymentsActivateRouteImport.update({
-    id: '/api/public/payments/activate',
-    path: '/api/public/payments/activate',
-    getParentRoute: () => rootRouteImport,
-  } as any)
-const ApiPublicPaymentsPerfectpayRoute =
-  ApiPublicPaymentsPerfectpayRouteImport.update({
-    id: '/api/public/payments/perfectpay',
-    path: '/api/public/payments/perfectpay',
-    getParentRoute: () => rootRouteImport,
-  } as any)
 const ApiPublicPaymentsWebhookRoute =
   ApiPublicPaymentsWebhookRouteImport.update({
     id: '/api/public/payments/webhook',
@@ -210,14 +190,13 @@ export interface FileRoutesByFullPath {
   '/entrar': typeof EntrarRoute
   '/indique': typeof IndiqueRoute
   '/lives': typeof LivesRoute
-  '/payments': typeof PaymentsRoute
   '/planos': typeof PlanosRoute
   '/quentes': typeof QuentesRoute
   '/reset-password': typeof ResetPasswordRoute
   '/termos': typeof TermosRoute
-  '/api/payments': typeof ApiPaymentsRoute
   '/checkout/return': typeof CheckoutReturnRoute
   '/api/account/ensure': typeof ApiAccountEnsureRoute
+  '/api/account/sync-token': typeof ApiAccountSyncTokenRoute
   '/api/admin/courtesy': typeof ApiAdminCourtesyRoute
   '/api/checkout/start': typeof ApiCheckoutStartRoute
   '/api/script/generate': typeof ApiScriptGenerateRoute
@@ -229,8 +208,6 @@ export interface FileRoutesByFullPath {
   '/api/public/live/mapping': typeof ApiPublicLiveMappingRoute
   '/api/public/live/session': typeof ApiPublicLiveSessionRoute
   '/api/public/live/verify': typeof ApiPublicLiveVerifyRoute
-  '/api/public/payments/activate': typeof ApiPublicPaymentsActivateRoute
-  '/api/public/payments/perfectpay': typeof ApiPublicPaymentsPerfectpayRoute
   '/api/public/payments/webhook': typeof ApiPublicPaymentsWebhookRoute
   '/api/public/tts/speak': typeof ApiPublicTtsSpeakRoute
 }
@@ -243,14 +220,13 @@ export interface FileRoutesByTo {
   '/entrar': typeof EntrarRoute
   '/indique': typeof IndiqueRoute
   '/lives': typeof LivesRoute
-  '/payments': typeof PaymentsRoute
   '/planos': typeof PlanosRoute
   '/quentes': typeof QuentesRoute
   '/reset-password': typeof ResetPasswordRoute
   '/termos': typeof TermosRoute
-  '/api/payments': typeof ApiPaymentsRoute
   '/checkout/return': typeof CheckoutReturnRoute
   '/api/account/ensure': typeof ApiAccountEnsureRoute
+  '/api/account/sync-token': typeof ApiAccountSyncTokenRoute
   '/api/admin/courtesy': typeof ApiAdminCourtesyRoute
   '/api/checkout/start': typeof ApiCheckoutStartRoute
   '/api/script/generate': typeof ApiScriptGenerateRoute
@@ -262,8 +238,6 @@ export interface FileRoutesByTo {
   '/api/public/live/mapping': typeof ApiPublicLiveMappingRoute
   '/api/public/live/session': typeof ApiPublicLiveSessionRoute
   '/api/public/live/verify': typeof ApiPublicLiveVerifyRoute
-  '/api/public/payments/activate': typeof ApiPublicPaymentsActivateRoute
-  '/api/public/payments/perfectpay': typeof ApiPublicPaymentsPerfectpayRoute
   '/api/public/payments/webhook': typeof ApiPublicPaymentsWebhookRoute
   '/api/public/tts/speak': typeof ApiPublicTtsSpeakRoute
 }
@@ -277,14 +251,13 @@ export interface FileRoutesById {
   '/entrar': typeof EntrarRoute
   '/indique': typeof IndiqueRoute
   '/lives': typeof LivesRoute
-  '/payments': typeof PaymentsRoute
   '/planos': typeof PlanosRoute
   '/quentes': typeof QuentesRoute
   '/reset-password': typeof ResetPasswordRoute
   '/termos': typeof TermosRoute
-  '/api/payments': typeof ApiPaymentsRoute
   '/checkout/return': typeof CheckoutReturnRoute
   '/api/account/ensure': typeof ApiAccountEnsureRoute
+  '/api/account/sync-token': typeof ApiAccountSyncTokenRoute
   '/api/admin/courtesy': typeof ApiAdminCourtesyRoute
   '/api/checkout/start': typeof ApiCheckoutStartRoute
   '/api/script/generate': typeof ApiScriptGenerateRoute
@@ -296,8 +269,6 @@ export interface FileRoutesById {
   '/api/public/live/mapping': typeof ApiPublicLiveMappingRoute
   '/api/public/live/session': typeof ApiPublicLiveSessionRoute
   '/api/public/live/verify': typeof ApiPublicLiveVerifyRoute
-  '/api/public/payments/activate': typeof ApiPublicPaymentsActivateRoute
-  '/api/public/payments/perfectpay': typeof ApiPublicPaymentsPerfectpayRoute
   '/api/public/payments/webhook': typeof ApiPublicPaymentsWebhookRoute
   '/api/public/tts/speak': typeof ApiPublicTtsSpeakRoute
 }
@@ -312,14 +283,13 @@ export interface FileRouteTypes {
     | '/entrar'
     | '/indique'
     | '/lives'
-    | '/payments'
     | '/planos'
     | '/quentes'
     | '/reset-password'
     | '/termos'
-    | '/api/payments'
     | '/checkout/return'
     | '/api/account/ensure'
+    | '/api/account/sync-token'
     | '/api/admin/courtesy'
     | '/api/checkout/start'
     | '/api/script/generate'
@@ -331,8 +301,6 @@ export interface FileRouteTypes {
     | '/api/public/live/mapping'
     | '/api/public/live/session'
     | '/api/public/live/verify'
-    | '/api/public/payments/activate'
-    | '/api/public/payments/perfectpay'
     | '/api/public/payments/webhook'
     | '/api/public/tts/speak'
   fileRoutesByTo: FileRoutesByTo
@@ -345,14 +313,13 @@ export interface FileRouteTypes {
     | '/entrar'
     | '/indique'
     | '/lives'
-    | '/payments'
     | '/planos'
     | '/quentes'
     | '/reset-password'
     | '/termos'
-    | '/api/payments'
     | '/checkout/return'
     | '/api/account/ensure'
+    | '/api/account/sync-token'
     | '/api/admin/courtesy'
     | '/api/checkout/start'
     | '/api/script/generate'
@@ -364,8 +331,6 @@ export interface FileRouteTypes {
     | '/api/public/live/mapping'
     | '/api/public/live/session'
     | '/api/public/live/verify'
-    | '/api/public/payments/activate'
-    | '/api/public/payments/perfectpay'
     | '/api/public/payments/webhook'
     | '/api/public/tts/speak'
   id:
@@ -378,14 +343,13 @@ export interface FileRouteTypes {
     | '/entrar'
     | '/indique'
     | '/lives'
-    | '/payments'
     | '/planos'
     | '/quentes'
     | '/reset-password'
     | '/termos'
-    | '/api/payments'
     | '/checkout/return'
     | '/api/account/ensure'
+    | '/api/account/sync-token'
     | '/api/admin/courtesy'
     | '/api/checkout/start'
     | '/api/script/generate'
@@ -397,8 +361,6 @@ export interface FileRouteTypes {
     | '/api/public/live/mapping'
     | '/api/public/live/session'
     | '/api/public/live/verify'
-    | '/api/public/payments/activate'
-    | '/api/public/payments/perfectpay'
     | '/api/public/payments/webhook'
     | '/api/public/tts/speak'
   fileRoutesById: FileRoutesById
@@ -412,14 +374,13 @@ export interface RootRouteChildren {
   EntrarRoute: typeof EntrarRoute
   IndiqueRoute: typeof IndiqueRoute
   LivesRoute: typeof LivesRoute
-  PaymentsRoute: typeof PaymentsRoute
   PlanosRoute: typeof PlanosRoute
   QuentesRoute: typeof QuentesRoute
   ResetPasswordRoute: typeof ResetPasswordRoute
   TermosRoute: typeof TermosRoute
-  ApiPaymentsRoute: typeof ApiPaymentsRoute
   CheckoutReturnRoute: typeof CheckoutReturnRoute
   ApiAccountEnsureRoute: typeof ApiAccountEnsureRoute
+  ApiAccountSyncTokenRoute: typeof ApiAccountSyncTokenRoute
   ApiAdminCourtesyRoute: typeof ApiAdminCourtesyRoute
   ApiCheckoutStartRoute: typeof ApiCheckoutStartRoute
   ApiScriptGenerateRoute: typeof ApiScriptGenerateRoute
@@ -431,8 +392,6 @@ export interface RootRouteChildren {
   ApiPublicLiveMappingRoute: typeof ApiPublicLiveMappingRoute
   ApiPublicLiveSessionRoute: typeof ApiPublicLiveSessionRoute
   ApiPublicLiveVerifyRoute: typeof ApiPublicLiveVerifyRoute
-  ApiPublicPaymentsActivateRoute: typeof ApiPublicPaymentsActivateRoute
-  ApiPublicPaymentsPerfectpayRoute: typeof ApiPublicPaymentsPerfectpayRoute
   ApiPublicPaymentsWebhookRoute: typeof ApiPublicPaymentsWebhookRoute
   ApiPublicTtsSpeakRoute: typeof ApiPublicTtsSpeakRoute
 }
@@ -495,13 +454,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof LivesRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/payments': {
-      id: '/payments'
-      path: '/payments'
-      fullPath: '/payments'
-      preLoaderRoute: typeof PaymentsRouteImport
-      parentRoute: typeof rootRouteImport
-    }
     '/planos': {
       id: '/planos'
       path: '/planos'
@@ -530,13 +482,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof TermosRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/api/payments': {
-      id: '/api/payments'
-      path: '/api/payments'
-      fullPath: '/api/payments'
-      preLoaderRoute: typeof ApiPaymentsRouteImport
-      parentRoute: typeof rootRouteImport
-    }
     '/checkout/return': {
       id: '/checkout/return'
       path: '/checkout/return'
@@ -549,6 +494,13 @@ declare module '@tanstack/react-router' {
       path: '/api/account/ensure'
       fullPath: '/api/account/ensure'
       preLoaderRoute: typeof ApiAccountEnsureRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/account/sync-token': {
+      id: '/api/account/sync-token'
+      path: '/api/account/sync-token'
+      fullPath: '/api/account/sync-token'
+      preLoaderRoute: typeof ApiAccountSyncTokenRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/admin/courtesy': {
@@ -628,20 +580,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiPublicLiveVerifyRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/api/public/payments/activate': {
-      id: '/api/public/payments/activate'
-      path: '/api/public/payments/activate'
-      fullPath: '/api/public/payments/activate'
-      preLoaderRoute: typeof ApiPublicPaymentsActivateRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/api/public/payments/perfectpay': {
-      id: '/api/public/payments/perfectpay'
-      path: '/api/public/payments/perfectpay'
-      fullPath: '/api/public/payments/perfectpay'
-      preLoaderRoute: typeof ApiPublicPaymentsPerfectpayRouteImport
-      parentRoute: typeof rootRouteImport
-    }
     '/api/public/payments/webhook': {
       id: '/api/public/payments/webhook'
       path: '/api/public/payments/webhook'
@@ -668,14 +606,13 @@ const rootRouteChildren: RootRouteChildren = {
   EntrarRoute: EntrarRoute,
   IndiqueRoute: IndiqueRoute,
   LivesRoute: LivesRoute,
-  PaymentsRoute: PaymentsRoute,
   PlanosRoute: PlanosRoute,
   QuentesRoute: QuentesRoute,
   ResetPasswordRoute: ResetPasswordRoute,
   TermosRoute: TermosRoute,
-  ApiPaymentsRoute: ApiPaymentsRoute,
   CheckoutReturnRoute: CheckoutReturnRoute,
   ApiAccountEnsureRoute: ApiAccountEnsureRoute,
+  ApiAccountSyncTokenRoute: ApiAccountSyncTokenRoute,
   ApiAdminCourtesyRoute: ApiAdminCourtesyRoute,
   ApiCheckoutStartRoute: ApiCheckoutStartRoute,
   ApiScriptGenerateRoute: ApiScriptGenerateRoute,
@@ -687,8 +624,6 @@ const rootRouteChildren: RootRouteChildren = {
   ApiPublicLiveMappingRoute: ApiPublicLiveMappingRoute,
   ApiPublicLiveSessionRoute: ApiPublicLiveSessionRoute,
   ApiPublicLiveVerifyRoute: ApiPublicLiveVerifyRoute,
-  ApiPublicPaymentsActivateRoute: ApiPublicPaymentsActivateRoute,
-  ApiPublicPaymentsPerfectpayRoute: ApiPublicPaymentsPerfectpayRoute,
   ApiPublicPaymentsWebhookRoute: ApiPublicPaymentsWebhookRoute,
   ApiPublicTtsSpeakRoute: ApiPublicTtsSpeakRoute,
 }

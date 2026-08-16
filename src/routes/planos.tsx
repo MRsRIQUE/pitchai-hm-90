@@ -10,6 +10,7 @@ import {
   formatBRL,
   monthlyEquivalent,
 } from "@/lib/live/plans";
+import { formatTokenLimit, resolvePlanQuota } from "@/lib/live/quotas";
 
 export const Route = createFileRoute("/planos")({
   component: PlanosPage,
@@ -39,7 +40,7 @@ function PlanosPage() {
   return (
     <div className="marketing-page min-h-screen">
       <SiteNav />
-      <div className="mx-auto max-w-5xl px-4 py-12">
+      <div className="desktop-rail-narrow py-12">
         <header className="text-center mb-10">
           <h1 className="marketing-title text-4xl mb-3 sm:text-5xl">
             Escolha seu plano do Pitch AI
@@ -68,7 +69,7 @@ function PlanosPage() {
           )}
         </header>
 
-        <div className="grid gap-6 md:grid-cols-3">
+        <div className="grid gap-6 lg:grid-cols-3">
           {PITCHAI_PLANS.map((p) => (
             <div
               key={p.priceId}
@@ -132,7 +133,10 @@ function PlanosPage() {
                   </li>
                   <li className="flex items-center gap-2">
                     <Check className="w-4 h-4 text-[#00E676] shrink-0" />
-                    <span>Respostas ilimitadas no chat</span>
+                    <span>
+                      Até {formatTokenLimit(resolvePlanQuota(p.priceId).monthlyTokenLimit)} de
+                      tokens por mês
+                    </span>
                   </li>
                   <li className="flex items-center gap-2">
                     <Check className="w-4 h-4 text-[#00E676] shrink-0" />

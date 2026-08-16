@@ -17,7 +17,7 @@ export function getApiBase(): string {
   if (window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1") {
     return window.location.origin;
   }
-  return "https://pitchai-moon-e5ad.vercel.app";
+  return "https://pitchai-hm.vercel.app";
 }
 
 // ============================================================================
@@ -75,19 +75,19 @@ export async function safeFetch<T = unknown>(
   } = options;
 
   let lastError: Error | undefined;
-  
+
   for (let attempt = 1; attempt <= retries + 1; attempt++) {
     try {
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), timeout);
-      
+
       const response = await fetch(`${getApiBase()}${endpoint}`, {
         ...fetchOptions,
         signal: controller.signal,
       });
-      
+
       clearTimeout(timeoutId);
-      
+
       if (!response.ok) {
         const errorText = await response.text().catch(() => "Unknown error");
         lastError = new FetchError(
@@ -95,16 +95,16 @@ export async function safeFetch<T = unknown>(
           response.status,
           errorText,
         );
-        
+
         if (attempt <= retries) {
           onError?.(lastError, attempt);
           await new Promise((resolve) => setTimeout(resolve, retryDelay * attempt));
           continue;
         }
-        
+
         throw lastError;
       }
-      
+
       try {
         return (await response.json()) as T;
       } catch {
@@ -112,17 +112,17 @@ export async function safeFetch<T = unknown>(
       }
     } catch (error) {
       lastError = error instanceof Error ? error : new Error(String(error));
-      
+
       if (attempt <= retries) {
         onError?.(lastError, attempt);
         await new Promise((resolve) => setTimeout(resolve, retryDelay * attempt));
         continue;
       }
-      
+
       throw lastError;
     }
   }
-  
+
   return fallback as T | null;
 }
 
@@ -145,7 +145,7 @@ export async function verifyToken(token: string): Promise<{
   ttsLimit?: number;
 } | null> {
   if (!token) return null;
-  
+
   try {
     const headers = await signRequest(token, "verify");
     const result = await safeFetch<{
@@ -167,7 +167,7 @@ export async function verifyToken(token: string): Promise<{
       body: JSON.stringify({ token }),
       retries: 3,
     });
-    
+
     return result;
   } catch (error) {
     console.error("[network] Failed to verify token:", error);
@@ -189,7 +189,7 @@ export async function verifyToken(token: string): Promise<{
  */
 export async function loadConfigFromBackend(token: string): Promise<Partial<Config> | null> {
   if (!token) return null;
-  
+
   try {
     const result = await safeFetch<{ config?: Partial<Config> }>("/api/public/live/config", {
       method: "POST",
@@ -202,7 +202,7 @@ export async function loadConfigFromBackend(token: string): Promise<Partial<Conf
       }),
       retries: 3,
     });
-    
+
     return result?.config || null;
   } catch (error) {
     console.error("[network] Failed to load config:", error);
@@ -218,7 +218,7 @@ export async function pushConfigToBackend(
   config: Partial<Config>,
 ): Promise<{ success: boolean; error?: string } | null> {
   if (!token) return null;
-  
+
   try {
     const result = await safeFetch<{ success: boolean; error?: string }>(
       "/api/public/live/config",
@@ -235,7 +235,7 @@ export async function pushConfigToBackend(
         retries: 3,
       },
     );
-    
+
     return result;
   } catch (error) {
     console.error("[network] Failed to push config:", error);
@@ -251,7 +251,7 @@ export async function startSession(token: string): Promise<{
   error?: string;
 } | null> {
   if (!token) return null;
-  
+
   try {
     const result = await safeFetch<{ session_id?: string; error?: string }>(
       "/api/public/live/session",
@@ -267,7 +267,7 @@ export async function startSession(token: string): Promise<{
         retries: 3,
       },
     );
-    
+
     return result;
   } catch (error) {
     console.error("[network] Failed to start session:", error);
@@ -283,7 +283,7 @@ export async function endSession(
   sessionId: string,
 ): Promise<{ success: boolean; error?: string } | null> {
   if (!token || !sessionId) return null;
-  
+
   try {
     const result = await safeFetch<{ success: boolean; error?: string }>(
       "/api/public/live/session",
@@ -300,7 +300,7 @@ export async function endSession(
         retries: 3,
       },
     );
-    
+
     return result;
   } catch (error) {
     console.error("[network] Failed to end session:", error);
@@ -317,7 +317,7 @@ export async function sendSessionEvent(
   payload: Record<string, unknown>,
 ): Promise<void> {
   if (!token || !sessionId) return;
-  
+
   try {
     await safeFetch("/api/public/live/session", {
       method: "POST",

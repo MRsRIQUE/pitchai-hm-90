@@ -109,7 +109,7 @@ function LivesPage() {
     <main className="marketing-page min-h-screen bg-background">
       <SiteNav />
       <header className="border-b border-border bg-background/80">
-        <div className="mx-auto flex max-w-6xl items-center justify-between gap-3 px-4 py-3">
+        <div className="desktop-rail flex items-center justify-between gap-3 py-3">
           <Link
             to="/app"
             className="inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground"
@@ -123,7 +123,7 @@ function LivesPage() {
         </div>
       </header>
 
-      <div className="mx-auto max-w-6xl space-y-4 px-4 py-6">
+      <div className="desktop-rail space-y-5 py-6">
         {status === "loading" && (
           <Card className="flex items-center gap-2 p-6 text-sm text-muted-foreground">
             <Loader2 className="h-4 w-4 animate-spin" /> Carregando…
@@ -144,7 +144,7 @@ function LivesPage() {
 
         {status === "ok" && (
           <>
-            <div className="grid gap-3 sm:grid-cols-4">
+            <div className="desktop-card-grid">
               <StatCard label="Respondidas" value={totals.answered} icon={MessageCircle} />
               <StatCard label="Ignoradas" value={totals.ignored} icon={Mic} />
               <StatCard label="Bloqueadas" value={totals.blocked} icon={Ban} />

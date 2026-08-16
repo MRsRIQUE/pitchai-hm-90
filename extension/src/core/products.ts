@@ -25,7 +25,7 @@ export function extractProductId(card: HTMLElement): string | null {
     "[data-tid*='product']",
     "[data-e2e*='product']",
   ];
-  
+
   for (const sel of selectors) {
     const el = card.querySelector<HTMLElement>(sel);
     if (el) {
@@ -37,24 +37,20 @@ export function extractProductId(card: HTMLElement): string | null {
         (typeof anchor.href === "string" ? anchor.href.match(/\/product\/(\d+)/)?.[1] : "") ||
         el.getAttribute("data-tid") ||
         el.getAttribute("data-e2e");
-      
+
       if (id && String(id).length >= 5) {
         return String(id).slice(0, 64);
       }
     }
   }
-  
+
   return null;
 }
 
 /**
  * Extrai o nome do produto de um elemento DOM
  */
-export function extractProductName(
-  card: HTMLElement,
-  text: string,
-  price: string,
-): string {
+export function extractProductName(card: HTMLElement, text: string, price: string): string {
   // Tentar extrair de atributos conhecidos
   const titleSelectors = [
     "[data-e2e*='title']",
@@ -63,7 +59,7 @@ export function extractProductName(
     "h1, h2, h3, h4",
     "[data-tid*='title']",
   ];
-  
+
   for (const sel of titleSelectors) {
     const el = card.querySelector<HTMLElement>(sel);
     if (el) {
@@ -73,24 +69,25 @@ export function extractProductName(
       }
     }
   }
-  
+
   // Tentar extrair de imagens (alt text)
-  const img = Array.from(card.querySelectorAll<HTMLImageElement>("img"))
-    .find((i) => !looksLikeAvatar(i) && i.getAttribute("alt"));
-  
+  const img = Array.from(card.querySelectorAll<HTMLImageElement>("img")).find(
+    (i) => !looksLikeAvatar(i) && i.getAttribute("alt"),
+  );
+
   if (img) {
     const alt = cleanName(img.getAttribute("alt") || "");
     if (alt.length >= 4) {
       return alt;
     }
   }
-  
+
   // Tentar extrair de aria-label
   const aria = cleanName(card.getAttribute("aria-label") || "");
   if (aria.length >= 4) {
     return aria;
   }
-  
+
   // Fallback: inferir do texto do card
   return inferNameFromProductText(text, price);
 }
@@ -102,7 +99,7 @@ export function looksLikeAvatar(img: HTMLImageElement): boolean {
   try {
     const r = img.getBoundingClientRect();
     if (r.width && r.width < 40) return true;
-    
+
     const br = getComputedStyle(img).borderRadius || "";
     if (/(50|100)%/.test(br)) return true;
   } catch {
@@ -123,11 +120,7 @@ export function extractPrice(card: HTMLElement): string {
 /**
  * Extrai a descrição de um elemento DOM
  */
-export function extractDescription(
-  text: string,
-  name: string,
-  price: string,
-): string {
+export function extractDescription(text: string, name: string, price: string): string {
   return text
     .replace(name, "")
     .replace(price, "")
@@ -145,19 +138,20 @@ export function extractDescription(
 export function inferNameFromProductText(text: string, price?: string): string {
   let s = cleanName(text);
   s = s.replace(/^\d+\s+/, ""); // Remove números no início
-  
+
   if (price) {
     s = s.split(price)[0] || s;
   }
-  
+
   // Remove termos de metadados
-  s = s.split(
-    /\b(?:em\s+estoque|demonstra[çc][ãa]o\s+solicitada|termina\s+em|frete\s+gr[áa]tis)\b/i,
-  )[0] || s;
-  
+  s =
+    s.split(
+      /\b(?:em\s+estoque|demonstra[çc][ãa]o\s+solicitada|termina\s+em|frete\s+gr[áa]tis)\b/i,
+    )[0] || s;
+
   s = s.replace(/\s+R\$\s?\d[\d.,].*$/i, ""); // Remove preço
   s = s.replace(/\s+\d+\s*$/, ""); // Remove números no final
-  
+
   return cleanName(s);
 }
 
@@ -166,39 +160,37 @@ export function inferNameFromProductText(text: string, price?: string): string {
  */
 export function parseProductCard(card: HTMLElement): Product | null {
   if (!(card instanceof HTMLElement)) return null;
-  
+
   try {
     const text = (card.textContent || "").replace(/\s+/g, " ").trim();
-    
+
     if (text.length < 5 || text.length > 800) return null;
-    
+
     // Regex para detectar se é um card de navegação
     const PRODUCT_CHROME_RX = /(gerenciador\s+de\s+live|pesquisar\s+id|todas\s+as\s+categorias)/i;
     if (PRODUCT_CHROME_RX.test(text) && !PRICE_RX.test(text)) return null;
-    
+
     const price = extractPrice(card);
     const pid = extractProductId(card);
-    
+
     // Se não tem preço, ID ou imagens, não é um produto
     const imgCount = card.querySelectorAll("img").length;
     if (!price && !imgCount && !pid) return null;
-    
+
     // Se não tem preço e tem muitas imagens, provavelmente é um carousel
     if (!price && imgCount > 2) return null;
-    
+
     // Sem preço e sem ID: só aceita com imagem de card ou CTA
     if (!price && !pid) {
-      const realImg = Array.from(card.querySelectorAll("img")).some(
-        (i) => !looksLikeAvatar(i),
-      );
+      const realImg = Array.from(card.querySelectorAll("img")).some((i) => !looksLikeAvatar(i));
       if (!realImg && !CTA_RX.test(text)) return null;
     }
-    
-    let name = extractProductName(card, text, price);
+
+    const name = extractProductName(card, text, price);
     if (isBadProductName(name)) return null;
-    
+
     const description = extractDescription(text, name, price);
-    
+
     return {
       pid: pid || "",
       name,
@@ -227,9 +219,9 @@ const productMap = new Map<string, Product>();
 export function upsertProduct(product: Product): void {
   const key = productKey(product);
   if (!key) return;
-  
+
   const existing = productMap.get(key);
-  
+
   if (existing) {
     // Merge das informações
     const merged: Product = {
@@ -241,7 +233,7 @@ export function upsertProduct(product: Product): void {
       description: product.description || existing.description,
       pid: product.pid || existing.pid,
     };
-    
+
     // Se agora temos um PID, atualiza a chave
     if (merged.pid && !existing.pid) {
       productMap.delete(key);
@@ -252,7 +244,7 @@ export function upsertProduct(product: Product): void {
   } else {
     productMap.set(key, product);
   }
-  
+
   // Emitir evento de atualização
   emitProductsUpdate(Array.from(productMap.values()));
 }
@@ -263,7 +255,7 @@ export function upsertProduct(product: Product): void {
 export function removeProduct(product: Product): void {
   const key = productKey(product);
   if (!key) return;
-  
+
   productMap.delete(key);
   emitProductsUpdate(Array.from(productMap.values()));
 }
@@ -299,16 +291,16 @@ export function addProducts(products: Product[]): void {
  */
 export function shouldDropProduct(product: Product): boolean {
   if (!product || typeof product !== "object") return true;
-  
+
   const name = product.name || "";
   if (isBadProductName(name)) return true;
-  
+
   const fromAuto = !!product.fromVitrine || !!product.demo;
   if (fromAuto && !product.price) {
     const PRODUCT_CHROME_RX = /(gerenciador\s+de\s+live|pesquisar\s+id|todas\s+as\s+categorias)/i;
     return PRODUCT_CHROME_RX.test(name);
   }
-  
+
   return false;
 }
 
@@ -317,33 +309,33 @@ export function shouldDropProduct(product: Product): boolean {
  */
 export function cleanupProducts(config: Config): boolean {
   if (!config || !Array.isArray(config.produtos)) return false;
-  
+
   const before = config.produtos.length;
   const validProducts: Product[] = [];
   const seenKeys = new Set<string>();
-  
+
   for (const p of config.produtos) {
     if (shouldDropProduct(p)) continue;
-    
+
     const key = productKey(p);
     if (!key || seenKeys.has(key)) continue;
-    
+
     seenKeys.add(key);
     validProducts.push(p);
   }
-  
+
   // Atualiza o catálogo
   clearProducts();
   addProducts(validProducts);
-  
+
   // Atualiza a configuração
   config.produtos = validProducts;
-  
+
   // Marca o primeiro produto como ativo se nenhum estiver
   if (!config.produtos.some((p) => p.active) && config.produtos[0]) {
     config.produtos[0].active = true;
   }
-  
+
   return config.produtos.length !== before;
 }
 
@@ -359,7 +351,7 @@ export function collectProductCards(
   out: Set<Element> = new Set(),
 ): Set<Element> {
   if (!root) return out;
-  
+
   // Tentar adicionar o próprio elemento
   try {
     if (root instanceof HTMLElement) {
@@ -368,7 +360,7 @@ export function collectProductCards(
   } catch {
     // Ignora erros
   }
-  
+
   // Tentar adicionar os filhos
   try {
     Array.from(root.children || []).forEach((child) => {
@@ -377,7 +369,7 @@ export function collectProductCards(
   } catch {
     // Ignora erros
   }
-  
+
   // Selectores conhecidos para cards de produto
   const selectors = [
     "[data-tid*='product']",
@@ -392,7 +384,7 @@ export function collectProductCards(
     "[class*='ShopProduct']",
     "img",
   ];
-  
+
   selectors.forEach((sel) => {
     try {
       (root instanceof Document ? root : root.ownerDocument || document)
@@ -400,7 +392,7 @@ export function collectProductCards(
         .forEach((node) => {
           let cur: HTMLElement | null = node instanceof HTMLElement ? node : null;
           let hops = 0;
-          
+
           while (cur && hops++ < 6) {
             addIfProductCard(cur, out);
             cur = cur.parentElement;
@@ -410,7 +402,7 @@ export function collectProductCards(
       // Ignora erros
     }
   });
-  
+
   return out;
 }
 
@@ -419,16 +411,16 @@ export function collectProductCards(
  */
 export function addIfProductCard(el: Element, out: Set<Element>): boolean {
   if (!(el instanceof HTMLElement)) return false;
-  
+
   try {
     // Se o elemento já tem múltiplas linhas de produto, não é um card
     if (hasMultipleProductRows(el)) return false;
-    
+
     const parsed = parseProductCard(el);
     if (!parsed) return false;
-    
+
     if (isBadProductName(parsed.name)) return false;
-    
+
     out.add(el);
     return true;
   } catch {
@@ -441,7 +433,7 @@ export function addIfProductCard(el: Element, out: Set<Element>): boolean {
  */
 export function hasMultipleProductRows(el: Element): boolean {
   let count = 0;
-  
+
   try {
     Array.from(el.children || []).forEach((child) => {
       const text = child.textContent || "";
@@ -452,7 +444,7 @@ export function hasMultipleProductRows(el: Element): boolean {
   } catch {
     // Ignora erros
   }
-  
+
   return count >= 2;
 }
 
@@ -468,13 +460,13 @@ export async function scrapeCatalog(
   deep: boolean = false,
 ): Promise<Product[]> {
   const results: Map<string, Product> = new Map();
-  
+
   // 1. Adicionar produtos da rede (API do TikTok)
   // (Isso será feito pelo hook.js e enviado via eventos)
-  
+
   // 2. Adicionar produtos do DOM
   const cards = new Set<Element>();
-  
+
   if (sector) {
     collectProductCards(sector, cards);
   } else {
@@ -484,26 +476,26 @@ export async function scrapeCatalog(
       collectProductCards(doc, cards);
     });
   }
-  
+
   // Processar os cards
   let domCount = 0;
   cards.forEach((card) => {
     let parsed: Product | null = null;
-    
+
     try {
       parsed = parseProductCard(card as HTMLElement);
     } catch {
       parsed = null;
     }
-    
+
     if (!parsed) return;
     if (isBadProductName(parsed.name)) return;
-    
+
     domCount++;
     upsertProduct(parsed);
     results.set(productKey(parsed) || "", parsed);
   });
-  
+
   return Array.from(results.values());
 }
 
@@ -512,20 +504,20 @@ export async function scrapeCatalog(
  */
 export function getAllDocuments(): (Document | HTMLDocument)[] {
   const docs = [document];
-  
+
   const walk = (doc: Document, depth: number) => {
     if (depth > 3) return;
-    
+
     try {
       doc.querySelectorAll("iframe").forEach((f) => {
         let d: Document | null = null;
-        
+
         try {
           d = f.contentDocument;
         } catch {
           d = null;
         }
-        
+
         if (d && !docs.includes(d)) {
           docs.push(d);
           walk(d, depth + 1);
@@ -535,12 +527,12 @@ export function getAllDocuments(): (Document | HTMLDocument)[] {
       // Ignora erros
     }
   };
-  
+
   try {
     walk(document, 0);
   } catch {
     // Ignora erros
   }
-  
+
   return docs;
 }

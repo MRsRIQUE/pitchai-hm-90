@@ -45,7 +45,10 @@ async function signInOnUi(page: Page) {
 }
 
 test.describe("perf: painel do aluno", () => {
-  test.skip(!EMAIL || !PASSWORD, "defina E2E_ALUNO_EMAIL / E2E_ALUNO_PASSWORD para rodar este teste");
+  test.skip(
+    !EMAIL || !PASSWORD,
+    "defina E2E_ALUNO_EMAIL / E2E_ALUNO_PASSWORD para rodar este teste",
+  );
 
   // Roda apenas no projeto "desktop" — selecione via `--project=desktop`.
 

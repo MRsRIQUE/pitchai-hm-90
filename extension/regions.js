@@ -267,22 +267,17 @@
   function loadManual() {
     return new Promise((res) => {
       if (manualLoaded) return res(manual);
+      manual = {};
+      manualLoaded = true;
       try {
-        chrome.storage.local.get([MANUAL_KEY], (r) => {
-          const raw = r?.[MANUAL_KEY] || {};
-          manual = raw.host === location.host ? raw.sig || {} : {};
-          manualLoaded = true;
-          res(manual);
-        });
-      } catch {
-        manualLoaded = true;
-        res(manual);
-      }
+        chrome.storage.local.remove(MANUAL_KEY);
+      } catch {}
+      res(manual);
     });
   }
   function saveManual() {
     try {
-      chrome.storage.local.set({ [MANUAL_KEY]: { host: location.host, sig: manual } });
+      chrome.storage.local.remove(MANUAL_KEY);
     } catch {}
   }
   function saveCache() {
@@ -463,18 +458,9 @@
     return null;
   }
 
-  async function setManual(id, el) {
-    if (!REGIONS[id] || !(el instanceof HTMLElement)) return false;
+  async function setManual() {
     await loadManual();
-    try {
-      manual[id] = window.PitchaiDomMap.util.signatureOf(el);
-    } catch {
-      return false;
-    }
-    saveManual();
-    state[id] = { node: el, score: 99, via: "manual", at: Date.now(), anchors: 0 };
-    emit();
-    return true;
+    return false;
   }
 
   async function clearManual(id) {
@@ -517,14 +503,21 @@
       ["cliquesProduto", /cliques\s+no\s+produto/i],
       ["percentVisitantes", /porcentagem\s+de\s+visitantes/i],
     ];
+    const labelCount = (value) => LABELS.filter(([, rx]) => rx.test(value)).length;
     for (const el of cells) {
       const t = ownText(el);
       if (!t || t.length > 60) continue;
       const hit = LABELS.find(([, rx]) => rx.test(t));
       if (!hit) continue;
-      const box = el.parentElement || el;
-      const val = txt(box).replace(t, "").trim();
-      if (val && val !== "--") out[hit[0]] = val.slice(0, 32);
+      let box = el;
+      for (let depth = 0; depth < 4 && box.parentElement; depth++) {
+        const candidate = box.parentElement;
+        const value = txt(candidate);
+        if (value.length > 140 || labelCount(value) > 1) break;
+        box = candidate;
+      }
+      const val = txt(box).replace(t, " ").replace(/\s+/g, " ").trim();
+      if (val && val !== "--" && val.length <= 64) out[hit[0]] = val;
     }
     return Object.keys(out).length ? out : null;
   }
@@ -567,7 +560,7 @@
     return JSON.parse(JSON.stringify(manual || {}));
   }
   async function importManual(sig) {
-    manual = sig && typeof sig === "object" ? { ...sig } : {};
+    manual = {};
     manualLoaded = true;
     saveManual();
     return resolveAll({ force: true });

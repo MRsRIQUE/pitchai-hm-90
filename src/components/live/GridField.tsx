@@ -45,7 +45,7 @@ export function GridField() {
     let mouseActive = false;
     let raf = 0;
     let lastT = 0;
-    let lastMoveT = 0;
+    const lastMoveT = 0;
     let animating = false;
 
     const start = () => {
@@ -210,9 +210,7 @@ export function GridField() {
 
       const idle =
         (!mouseActive && maxOffset < 0.35) ||
-        (mouseActive &&
-          performance.now() - lastMoveT > 160 &&
-          maxOffset < 0.35);
+        (mouseActive && performance.now() - lastMoveT > 160 && maxOffset < 0.35);
       if (idle) {
         stop();
         return;

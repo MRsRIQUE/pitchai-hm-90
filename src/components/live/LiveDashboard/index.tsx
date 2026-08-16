@@ -26,7 +26,6 @@ import {
   Download,
   Upload,
   Zap,
-  Bell,
   Brain,
   FileText,
   Copy,
@@ -77,7 +76,6 @@ import {
 import { QuickStartModal } from "../QuickStartModal";
 import { useUserSubscription } from "@/hooks/useUserSubscription";
 import { PaymentGuardOverlay } from "../PaymentGuardModal";
-import { getFirebaseAuth } from "@/lib/firebase";
 import { useLiveStore } from "@/stores/useLiveStore";
 import { useShallow } from "zustand/react/shallow";
 import { ProductsSection } from "./ProductsSection";
@@ -115,7 +113,7 @@ const THEME_OPTIONS: { id: ThemeStyle; name: string; tag: string; icon: any; col
 ];
 
 export function LiveDashboard() {
-  const { isPaidActive, loading, refetch } = useUserSubscription();
+  const { isPaidActive, loading } = useUserSubscription();
 
   if (loading) {
     return (
@@ -132,10 +130,7 @@ export function LiveDashboard() {
     return (
       <main className="marketing-page min-h-screen px-4 py-8 sm:px-6">
         <div className="mx-auto max-w-6xl">
-          <PaymentGuardOverlay
-            userEmail={getFirebaseAuth().currentUser?.email ?? undefined}
-            onActivated={refetch}
-          />
+          <PaymentGuardOverlay />
         </div>
       </main>
     );
@@ -537,13 +532,13 @@ function LiveDashboardContent() {
   const activeProduct = config.produtos.find((p) => p.active) ?? null;
 
   return (
-    <div className="marketing-page min-h-screen bg-background pb-28 text-foreground lg:pb-0">
+    <div className="marketing-page min-h-screen overflow-x-clip bg-background pb-28 text-foreground lg:pb-0">
       <MobileBottomNav />
       <audio ref={audioRef} hidden />
 
       {/* Header */}
       <div className="sticky top-0 z-10 border-b border-border/60 bg-background/80 backdrop-blur">
-        <div className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-4 py-3 sm:px-6">
+        <div className="desktop-rail flex items-center justify-between gap-6 py-3">
           <div className="flex items-center gap-3">
             <div className="relative flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-primary via-primary to-secondary text-primary-foreground shadow-[0_4px_14px_-2px_rgba(124,58,237,0.55)] ring-1 ring-white/10">
               <Zap className="h-4 w-4" strokeWidth={2.5} fill="currentColor" />
@@ -611,9 +606,9 @@ function LiveDashboardContent() {
         syncToken={syncToken ?? undefined}
       />
 
-      <div className="mx-auto grid max-w-6xl gap-4 px-4 py-6 sm:px-6 lg:grid-cols-[1fr_320px]">
+      <div className="desktop-rail grid gap-5 py-6 xl:grid-cols-[minmax(0,1fr)_clamp(360px,23vw,440px)] xl:gap-6 2xl:gap-8">
         {/* Main column */}
-        <div className="space-y-4">
+        <div className="min-w-0 space-y-4">
           {!config.onboardingDone && (
             <SetupWizard
               cfg={config}
@@ -1322,43 +1317,12 @@ function LiveDashboardContent() {
         </div>
 
         {/* Sidebar */}
-        <aside className="space-y-3">
+        <aside className="min-w-0 space-y-3">
           <SyncTokenCard />
-          <Card className="p-4">
-            <div className="mb-3 flex items-center gap-2">
-              <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-secondary/15 text-secondary ring-1 ring-inset ring-secondary/25">
-                <Bell className="h-3.5 w-3.5" strokeWidth={2.4} />
-              </div>
-              <h4 className="font-display text-sm font-bold">Novidades</h4>
-              <span className="ml-auto h-1.5 w-1.5 animate-pulse rounded-full bg-secondary" />
-            </div>
-            <div className="space-y-3 text-sm">
-              <div className="rounded-lg border border-border/60 p-3">
-                <div className="text-[10px] font-mono uppercase text-muted-foreground">
-                  Hoje · v{APP_VERSION}
-                </div>
-                <div className="mt-1 font-semibold">⭐ MVP público lançado</div>
-                <p className="mt-1 text-xs text-muted-foreground">
-                  Painel completo com Proteção, Auto-fixar, Encerrar por tempo, Respostas IA,
-                  Notificações de venda, gerenciamento de produtos e voz da IA em tempo real.
-                </p>
-              </div>
-              <div className="rounded-lg border border-border/60 p-3">
-                <div className="text-[10px] font-mono uppercase text-muted-foreground">
-                  Em breve
-                </div>
-                <div className="mt-1 font-semibold">Login + Planos</div>
-                <p className="mt-1 text-xs text-muted-foreground">
-                  Sincronização de configuração entre dispositivos e planos pagos com uso maior de
-                  IA.
-                </p>
-              </div>
-            </div>
-          </Card>
         </aside>
       </div>
 
-      <div className="mx-auto max-w-6xl border-t border-border/60 px-4 py-4 text-center text-xs text-muted-foreground sm:px-6">
+      <div className="desktop-rail border-t border-border/60 py-4 text-left text-xs text-muted-foreground">
         Pitch AI v{APP_VERSION} · salva sozinho a cada alteração
       </div>
     </div>

@@ -124,6 +124,12 @@ service cloud.firestore {
         allow read: if isOwnerOf(uid) || isServer();
         allow write: if isServer();
       }
+
+      // Franquia mensal de tokens — somente o backend pode incrementar/zerar.
+      match /token_usage/{month} {
+        allow read: if isOwnerOf(uid) || isPrivileged();
+        allow write: if isPrivileged();
+      }
     }
 
     // ------------------------------------------------------------------

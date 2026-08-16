@@ -1,6 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { z } from "zod";
-import { randomUUID } from "node:crypto";
 import { corsHeaders } from "@/lib/live/cors.server";
 import { throttle } from "@/lib/live/rate-limit.server";
 import { fsGet, fsSet } from "@/lib/firebase.server";
@@ -12,7 +11,29 @@ const BodySchema = z.object({
   action: z.enum(["start", "end", "event"]),
   token: z.string().uuid(),
   session_id: z.string().uuid().optional(),
-  kind: z.enum(["answered", "ignored", "blocked", "product", "tokens", "tts", "sale"]).optional(),
+  kind: z
+    .enum([
+      "answered",
+      "ignored",
+      "blocked",
+      "product",
+      "tokens",
+      "tts",
+      "sale",
+      "metrics",
+      "violation",
+    ])
+    .optional(),
+  metrics: z
+    .object({
+      gmv: z.string().max(64).optional(),
+      items_sold: z.string().max(64).optional(),
+      viewers: z.string().max(64).optional(),
+      avg_watch: z.string().max(64).optional(),
+      product_clicks: z.string().max(64).optional(),
+      visitor_percent: z.string().max(64).optional(),
+    })
+    .optional(),
   sale: z.object({ text: z.string().max(200).optional() }).optional(),
   product: z
     .object({ id: z.string().max(120).optional(), name: z.string().max(200).optional() })
@@ -65,7 +86,7 @@ export const Route = createFileRoute("/api/public/live/session")({
         const uid = access.userId;
 
         if (body.action === "start") {
-          const sessionId = randomUUID();
+          const sessionId = crypto.randomUUID();
           await fsSet(
             `users/${uid}/sessions/${sessionId}`,
             {
@@ -81,6 +102,8 @@ export const Route = createFileRoute("/api/public/live/session")({
               tts_seconds: 0,
               estimated_cost_cents: 0,
               sales_snapshot: [],
+              live_metrics: null,
+              violation_count: 0,
               notes: null,
             },
             { mode: "server" },
@@ -101,7 +124,6 @@ export const Route = createFileRoute("/api/public/live/session")({
           await fsSet(
             `users/${uid}/sessions/${body.session_id}`,
             {
-              ...data,
               ended_at: new Date().toISOString(),
               sales_snapshot: body.sales_snapshot ?? data.sales_snapshot ?? [],
               notes: body.notes ?? data.notes ?? null,
@@ -146,14 +168,26 @@ export const Route = createFileRoute("/api/public/live/session")({
               ...prev.slice(-199),
               { text: String(body.sale?.text ?? "").slice(0, 200), at: new Date().toISOString() },
             ];
+          } else if (body.kind === "metrics" && body.metrics) {
+            const clean = Object.fromEntries(
+              Object.entries(body.metrics).filter(
+                ([, value]) => typeof value === "string" && value.trim(),
+              ),
+            );
+            if (!Object.keys(clean).length) return j(400, { error: "empty_metrics" });
+            patch.live_metrics = {
+              ...(data.live_metrics && typeof data.live_metrics === "object"
+                ? data.live_metrics
+                : {}),
+              ...clean,
+              captured_at: new Date().toISOString(),
+            };
+          } else if (body.kind === "violation") {
+            patch.violation_count = (data.violation_count ?? 0) + 1;
           } else {
             return j(400, { error: "unknown_kind" });
           }
-          await fsSet(
-            `users/${uid}/sessions/${body.session_id}`,
-            { ...data, ...patch },
-            { mode: "server" },
-          );
+          await fsSet(`users/${uid}/sessions/${body.session_id}`, patch, { mode: "server" });
           return j(200, { ok: true });
         }
 

@@ -13,7 +13,7 @@ import {
 import { toast } from "sonner";
 import { Link } from "@tanstack/react-router";
 import confetti from "canvas-confetti";
-import { copyToClipboard } from "@/lib/clipboard";
+import { connectSyncTokenToExtension } from "@/lib/live/extension-sync";
 
 export function fireSuccessConfetti() {
   try {
@@ -29,38 +29,31 @@ export function fireSuccessConfetti() {
 }
 
 export function ExtensionStatusBanner({ syncToken }: { syncToken?: string }) {
-  // Começa em false para o HTML do servidor bater com o do cliente; a detecção
-  // real acontece no efeito abaixo (ler window aqui causa erro de hidratação).
-  const [installed, setInstalled] = useState<boolean>(false);
+  const [installed, setInstalled] = useState<boolean>(() => {
+    return (
+      typeof window !== "undefined" &&
+      (Boolean((window as any).pitchAiExtensionInstalled) ||
+        Boolean(document.documentElement.getAttribute("data-pitchai-extension")))
+    );
+  });
   const [synced, setSynced] = useState<boolean>(false);
+  const [syncing, setSyncing] = useState<boolean>(false);
 
   useEffect(() => {
-    // Já instalada quando a tela abriu: reflete sem comemorar.
-    if ((window as any).pitchAiExtensionInstalled) setInstalled(true);
-
     function handleDetected() {
       setInstalled(true);
       fireSuccessConfetti();
     }
 
-    function handleMessage(event: MessageEvent) {
-      // Valida origem: aceita só a própria janela (mesmo origin).
-      // Evita que iframes/scripts de terceiros falsifiquem a confirmação.
-      if (event.origin !== window.location.origin) return;
-      if (event.data?.type === "PITCHAI_SYNC_TOKEN_SUCCESS") {
-        setSynced(true);
-        fireSuccessConfetti();
-        toast.success("Sincronização concluída com a extensão!");
-      }
-    }
-
     window.addEventListener("pitchai-extension-detected", handleDetected);
-    window.addEventListener("message", handleMessage);
 
     // Polling para detectar a flag injetada pela extensão.
     // Para assim que detectada (evita polling infinito em SPA).
     const interval = setInterval(() => {
-      if ((window as any).pitchAiExtensionInstalled) {
+      if (
+        (window as any).pitchAiExtensionInstalled ||
+        document.documentElement.getAttribute("data-pitchai-extension")
+      ) {
         setInstalled((prev) => {
           if (!prev) fireSuccessConfetti();
           return true;
@@ -71,22 +64,15 @@ export function ExtensionStatusBanner({ syncToken }: { syncToken?: string }) {
 
     return () => {
       window.removeEventListener("pitchai-extension-detected", handleDetected);
-      window.removeEventListener("message", handleMessage);
       clearInterval(interval);
     };
   }, []);
 
-  const handleCopyChromeUrl = async () => {
-    const copied = await copyToClipboard("chrome://extensions");
-    if (copied) {
-      toast.success("Endereço 'chrome://extensions' copiado!", {
-        description: "Abra uma nova aba no Chrome, cole na barra de endereço e pressione Enter.",
-      });
-    } else {
-      toast.error("Não consegui copiar", {
-        description: "Digite chrome://extensions na barra de endereços do Chrome.",
-      });
-    }
+  const handleCopyChromeUrl = () => {
+    navigator.clipboard.writeText("chrome://extensions");
+    toast.success("Endereço 'chrome://extensions' copiado!", {
+      description: "Abra uma nova aba no Chrome, cole na barra de endereço e pressione Enter.",
+    });
   };
 
   const handleAutoSync = async () => {
@@ -95,16 +81,23 @@ export function ExtensionStatusBanner({ syncToken }: { syncToken?: string }) {
       return;
     }
 
-    // Target = própria origin (não "*" — evita broadcast para iframes de terceiros).
-    window.postMessage({ type: "PITCHAI_SYNC_TOKEN", token: syncToken }, window.location.origin);
-    const copied = await copyToClipboard(syncToken);
+    setSyncing(true);
+    const result = await connectSyncTokenToExtension(syncToken);
+    setSyncing(false);
+    if (!result.ok) {
+      setSynced(false);
+      toast.error("Não foi possível conectar a extensão", {
+        description: result.message || "Atualize a extensão e tente novamente.",
+      });
+      return;
+    }
 
-    // Sucesso de verdade é quando a extensão responde PITCHAI_SYNC_TOKEN_SUCCESS
-    // (tratado no efeito acima). Aqui só confirmamos o envio.
-    toast.info("Pedido de conexão enviado para a extensão…", {
-      description: copied
-        ? "O código também foi copiado, caso precise colar manualmente."
-        : "Se a extensão não responder, copie o código pelo painel e cole nela.",
+    setSynced(true);
+    fireSuccessConfetti();
+    toast.success("Conta sincronizada com sucesso! 🎉", {
+      description: result.aiLocked
+        ? "Conexão salva. A cota de IA está pausada, mas os controles da live continuam disponíveis."
+        : "Token validado e salvo pela extensão. Os controles da live já estão liberados.",
     });
   };
 
@@ -133,14 +126,14 @@ export function ExtensionStatusBanner({ syncToken }: { syncToken?: string }) {
               {installed ? (
                 <>
                   <span className="break-words">Extensão do Pitch AI Instalada</span>
-                  <span className="rounded-full bg-emerald-500/20 px-2 py-1 text-[10px] font-extrabold text-emerald-300 border border-emerald-500/30 shrink-0">
+                  <span className="rounded-full bg-emerald-500/20 px-2 py-0.5 text-[10px] font-extrabold text-emerald-300 border border-emerald-500/30 shrink-0">
                     Ativa
                   </span>
                 </>
               ) : (
                 <>
                   <span className="break-words">Extensão Acompanhante não Detectada</span>
-                  <span className="rounded-full bg-amber-500/20 px-2 py-1 text-[10px] font-extrabold text-amber-300 border border-amber-500/30 shrink-0">
+                  <span className="rounded-full bg-amber-500/20 px-2.5 py-1 text-[10px] font-extrabold text-amber-300 border border-amber-500/30 shrink-0">
                     Pendente
                   </span>
                 </>
@@ -182,11 +175,16 @@ export function ExtensionStatusBanner({ syncToken }: { syncToken?: string }) {
             <Button
               size="sm"
               onClick={handleAutoSync}
+              disabled={syncing}
               className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs gap-1.5 shadow max-w-full"
             >
               <ShieldCheck className="h-3.5 w-3.5 shrink-0" />
               <span className="truncate">
-                {synced ? "Re-sincronizar Conexão" : "Conectar em 1 Clique"}
+                {syncing
+                  ? "Validando conexão…"
+                  : synced
+                    ? "Re-sincronizar Conexão"
+                    : "Conectar em 1 Clique"}
               </span>
             </Button>
           )}

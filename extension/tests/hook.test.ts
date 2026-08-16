@@ -70,7 +70,9 @@ describe("hook de scraping de rede", () => {
     }));
 
     const events = await fetchPayload({ products });
-    const captured = events.filter((event) => event.kind === "products").flatMap((event) => event.payload);
+    const captured = events
+      .filter((event) => event.kind === "products")
+      .flatMap((event) => event.payload);
     expect(captured).toHaveLength(620);
   });
 
@@ -107,5 +109,17 @@ describe("hook de scraping de rede", () => {
 
     expect(first.find((event) => event.kind === "messages")?.payload).toHaveLength(1);
     expect(duplicate.find((event) => event.kind === "messages")).toBeUndefined();
+  });
+
+  it("não transforma controles da vitrine em produtos", async () => {
+    const { fetchPayload } = createHookHarness();
+    const events = await fetchPayload({
+      product_id: "999999",
+      title: "CARRINHO",
+      format_price: "R$ 0,00",
+      cover: "https://img/cart-icon",
+    });
+
+    expect(events.find((event) => event.kind === "products")).toBeUndefined();
   });
 });

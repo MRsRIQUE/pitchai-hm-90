@@ -10,6 +10,10 @@ import {
   type SubscriptionData,
 } from "@/lib/firebase.server";
 import { PITCHAI_PLANS } from "@/lib/live/plans";
+import { DEFAULT_PLAN_QUOTAS, PLAN_QUOTA_SCHEMA_VERSION, type PlanQuota } from "@/lib/live/quotas";
+import { createStripeClient, type StripeEnv } from "@/lib/stripe.server";
+
+export { DEFAULT_PLAN_QUOTAS, type PlanQuota } from "@/lib/live/quotas";
 import { parseLocaleNumber } from "@/lib/live/number-parsing";
 export { parseLocaleNumber } from "@/lib/live/number-parsing";
 
@@ -58,6 +62,47 @@ export type Costs = {
   tokens_out_mes: number;
   minutos_tts_mes: number;
   usd_brl: number;
+};
+
+export type StripeAdminSubscription = {
+  id: string;
+  customerId: string;
+  email: string;
+  plan: string;
+  amountCents: number;
+  currency: string;
+  status: string;
+  currentPeriodEnd: string | null;
+  cancelAtPeriodEnd: boolean;
+  firestoreSynced: boolean;
+  dashboardUrl: string;
+};
+
+export type StripeAdminInvoice = {
+  id: string;
+  email: string;
+  amountCents: number;
+  currency: string;
+  status: string;
+  createdAt: string;
+  hostedUrl: string | null;
+};
+
+export type StripeAdminSnapshot = {
+  environment: StripeEnv;
+  currency: string;
+  mrrCents: number;
+  paidLast30DaysCents: number;
+  availableBalanceCents: number;
+  pendingBalanceCents: number;
+  active: number;
+  trialing: number;
+  pastDue: number;
+  canceled: number;
+  unsynced: number;
+  subscriptions: StripeAdminSubscription[];
+  recentInvoices: StripeAdminInvoice[];
+  fetchedAt: string;
 };
 
 async function ensureAdmin(ctx: FirebaseAuthContext): Promise<void> {
@@ -381,6 +426,117 @@ export async function fetchPlans(): Promise<Plan[]> {
   return getPlans({});
 }
 
+function stripeEnvironment(): StripeEnv {
+  return process.env.STRIPE_SECRET_KEY?.startsWith("sk_live_") ? "live" : "sandbox";
+}
+
+function monthlyRecurringCents(price: any, quantity = 1): number {
+  const amount = Number(price?.unit_amount || 0) * Math.max(1, Number(quantity || 1));
+  const interval = price?.recurring?.interval;
+  const count = Math.max(1, Number(price?.recurring?.interval_count || 1));
+  if (interval === "year") return Math.round(amount / (12 * count));
+  if (interval === "week") return Math.round((amount * 52) / (12 * count));
+  if (interval === "day") return Math.round((amount * 365) / (12 * count));
+  return Math.round(amount / count);
+}
+
+const getStripeAdminSnapshot = createServerFn({ method: "GET" })
+  .middleware([requireFirebaseAuth])
+  .handler(async ({ context }): Promise<StripeAdminSnapshot> => {
+    await ensureAdmin(context);
+    const environment = stripeEnvironment();
+    const stripe = createStripeClient(environment);
+    const since = Math.floor((Date.now() - 30 * 24 * 60 * 60 * 1000) / 1000);
+
+    const [stripeSubs, invoices, balance, firestoreSubs] = await Promise.all([
+      stripe.subscriptions.list({ status: "all", limit: 100, expand: ["data.customer"] }),
+      stripe.invoices.list({ created: { gte: since }, limit: 100 }),
+      stripe.balance.retrieve(),
+      fetchAllSubscriptions(context),
+    ]);
+
+    const firestoreIds = new Set(
+      firestoreSubs.map((sub) => sub.stripe_subscription_id).filter(Boolean),
+    );
+    const dashboardBase =
+      environment === "live" ? "https://dashboard.stripe.com" : "https://dashboard.stripe.com/test";
+
+    const subscriptions = stripeSubs.data.map((sub: any): StripeAdminSubscription => {
+      const item = sub.items?.data?.[0];
+      const customer = typeof sub.customer === "object" ? sub.customer : null;
+      const email = String(customer?.email || sub.metadata?.email || "");
+      const periodEnd = item?.current_period_end ?? sub.current_period_end;
+      return {
+        id: sub.id,
+        customerId: String(customer?.id || sub.customer || ""),
+        email,
+        plan: String(item?.price?.lookup_key || sub.metadata?.plan || "Sem lookup_key"),
+        amountCents: Number(item?.price?.unit_amount || 0) * Number(item?.quantity || 1),
+        currency: String(item?.price?.currency || "brl").toUpperCase(),
+        status: String(sub.status || "unknown"),
+        currentPeriodEnd: periodEnd ? new Date(periodEnd * 1000).toISOString() : null,
+        cancelAtPeriodEnd: Boolean(sub.cancel_at_period_end),
+        firestoreSynced: firestoreIds.has(sub.id),
+        dashboardUrl: `${dashboardBase}/subscriptions/${sub.id}`,
+      };
+    });
+
+    const revenueStatuses = new Set(["active", "trialing", "past_due"]);
+    const mrrCents = stripeSubs.data.reduce((sum: number, sub: any) => {
+      if (!revenueStatuses.has(String(sub.status))) return sum;
+      return (
+        sum +
+        (sub.items?.data || []).reduce(
+          (itemSum: number, item: any) =>
+            itemSum + monthlyRecurringCents(item.price, item.quantity),
+          0,
+        )
+      );
+    }, 0);
+
+    const balanceAmount = (kind: "available" | "pending") =>
+      (balance[kind] || [])
+        .filter((item: any) => item.currency === "brl")
+        .reduce((sum: number, item: any) => sum + Number(item.amount || 0), 0);
+    const paidInvoices = invoices.data.filter((invoice: any) => invoice.status === "paid");
+
+    return {
+      environment,
+      currency: "BRL",
+      mrrCents,
+      paidLast30DaysCents: paidInvoices.reduce(
+        (sum: number, invoice: any) => sum + Number(invoice.amount_paid || 0),
+        0,
+      ),
+      availableBalanceCents: balanceAmount("available"),
+      pendingBalanceCents: balanceAmount("pending"),
+      active: subscriptions.filter((sub) => sub.status === "active").length,
+      trialing: subscriptions.filter((sub) => sub.status === "trialing").length,
+      pastDue: subscriptions.filter((sub) =>
+        ["past_due", "unpaid", "incomplete"].includes(sub.status),
+      ).length,
+      canceled: subscriptions.filter((sub) => sub.status === "canceled").length,
+      unsynced: subscriptions.filter(
+        (sub) => ["active", "trialing", "past_due"].includes(sub.status) && !sub.firestoreSynced,
+      ).length,
+      subscriptions,
+      recentInvoices: invoices.data.slice(0, 20).map((invoice: any): StripeAdminInvoice => ({
+        id: invoice.id,
+        email: String(invoice.customer_email || ""),
+        amountCents: Number(invoice.amount_paid || invoice.amount_due || 0),
+        currency: String(invoice.currency || "brl").toUpperCase(),
+        status: String(invoice.status || "unknown"),
+        createdAt: new Date(Number(invoice.created || 0) * 1000).toISOString(),
+        hostedUrl: invoice.hosted_invoice_url || null,
+      })),
+      fetchedAt: new Date().toISOString(),
+    };
+  });
+
+export async function fetchStripeAdminSnapshot(): Promise<StripeAdminSnapshot> {
+  return getStripeAdminSnapshot({});
+}
+
 const updatePlanFn = createServerFn({ method: "POST" })
   .middleware([requireFirebaseAuth])
   .validator((data: { id: string; patch: Record<string, unknown> }) => {
@@ -584,55 +740,6 @@ export type UserCostProfile = {
   lastActive: string;
 };
 
-export type PlanQuota = {
-  planSlug: string;
-  planName: string;
-  dailyTokenLimit: number;
-  monthlyTokenLimit: number;
-  ttsMinutesLimit: number;
-  allowedModel: "flash" | "pro" | "both";
-  overLimitAction: "block" | "throttle" | "alert";
-};
-
-export const DEFAULT_PLAN_QUOTAS: Record<string, PlanQuota> = {
-  gratuito: {
-    planSlug: "gratuito",
-    planName: "Gratuito (Trial)",
-    dailyTokenLimit: 15000,
-    monthlyTokenLimit: 100000,
-    ttsMinutesLimit: 5,
-    allowedModel: "flash",
-    overLimitAction: "block",
-  },
-  pitchai_mensal: {
-    planSlug: "pitchai_mensal",
-    planName: "Mensal",
-    dailyTokenLimit: 500000,
-    monthlyTokenLimit: 5000000,
-    ttsMinutesLimit: 0,
-    allowedModel: "flash",
-    overLimitAction: "alert",
-  },
-  pitchai_trimestral: {
-    planSlug: "pitchai_trimestral",
-    planName: "Trimestral",
-    dailyTokenLimit: 500000,
-    monthlyTokenLimit: 5000000,
-    ttsMinutesLimit: 180,
-    allowedModel: "both",
-    overLimitAction: "alert",
-  },
-  pitchai_anual: {
-    planSlug: "pitchai_anual",
-    planName: "Anual",
-    dailyTokenLimit: 500000,
-    monthlyTokenLimit: 5000000,
-    ttsMinutesLimit: 180,
-    allowedModel: "both",
-    overLimitAction: "alert",
-  },
-};
-
 /** Calcula os custos estimados e a margem líquida de um usuário com base no consumo e nos preços do provedor */
 export function calculateUserCost(
   tokensIn: number,
@@ -688,15 +795,26 @@ const getUsersWithUsage = createServerFn({ method: "GET" })
     // Lê todos os docs de ai_usage_stats para obter uso real
     const docs = await fsQuery("ai_usage_stats", firestore);
     const userIds = docs.map((doc) => doc.id);
-    const [subscriptions, userProfiles] = await Promise.all([
+    const currentMonth = new Date().toISOString().slice(0, 7);
+    const [subscriptions, userProfiles, monthlyUsage] = await Promise.all([
       fetchSubscriptionsForUsers(context, userIds),
       fsGetMany(
         userIds.map((userId) => `users/${userId}`),
         firestore,
       ),
+      fsGetMany(
+        userIds.map((userId) => `users/${userId}/token_usage/${currentMonth}`),
+        firestore,
+      ),
     ]);
     const subscriptionsByUser = new Map(subscriptions.map((sub) => [sub.userId, sub]));
     const profilesByUser = new Map(userProfiles.map((profile) => [profile.id, profile.data]));
+    const monthlyUsageByUser = new Map(
+      monthlyUsage.map((usage) => {
+        const match = usage.path.match(/^users\/([^/]+)\/token_usage\/[^/]+$/);
+        return [match?.[1] ?? "", usage.data] as const;
+      }),
+    );
     return docs.map((d): AdminUserUsage => {
       const sub = subscriptionsByUser.get(d.id);
       const planFromSub = sub?.plan ?? "gratuito";
@@ -704,6 +822,9 @@ const getUsersWithUsage = createServerFn({ method: "GET" })
       const isComped = sub?.status === "comped";
       const usageStatus = (d.data.status as string) ?? "active";
       const isBlocked = usageStatus === "blocked";
+      const currentUsage = monthlyUsageByUser.get(d.id);
+      const tokensInput = (currentUsage?.tokensInput as number) ?? 0;
+      const tokensOutput = (currentUsage?.tokensOutput as number) ?? 0;
       return {
         userId: d.id,
         email:
@@ -712,9 +833,9 @@ const getUsersWithUsage = createServerFn({ method: "GET" })
           "(sem e-mail)",
         plan: planFromSub,
         status: statFromSub,
-        tokensInput: (d.data.tokensInput as number) ?? 0,
-        tokensOutput: (d.data.tokensOutput as number) ?? 0,
-        totalTokens: (d.data.totalTokens as number) ?? 0,
+        tokensInput,
+        tokensOutput,
+        totalTokens: tokensInput + tokensOutput,
         ttsMinutes: (d.data.ttsMinutes as number) ?? 0,
         apiCallCount: (d.data.apiCallCount as number) ?? 0,
         lastApiCallAt: (d.data.lastApiCallAt as string) ?? "",
@@ -750,6 +871,19 @@ const setBlockedFn = createServerFn({ method: "POST" })
       },
       firestore,
     );
+    const currentMonth = new Date().toISOString().slice(0, 7);
+    await fsSet(
+      `users/${data.userId}/token_usage/${currentMonth}`,
+      {
+        userId: data.userId,
+        period: currentMonth,
+        tokensInput: 0,
+        tokensOutput: 0,
+        totalTokens: 0,
+        updatedAt: new Date().toISOString(),
+      },
+      firestore,
+    );
     return { ok: true };
   });
 
@@ -767,11 +901,10 @@ const resetUsageAdminFn = createServerFn({ method: "POST" })
     await ensureAdmin(context);
     const firestore = adminFirestoreOptions(context);
     const current = await fsGet(`ai_usage_stats/${data.userId}`, firestore);
-    if (!current) return { ok: true };
     await fsSet(
       `ai_usage_stats/${data.userId}`,
       {
-        ...(current.data as any),
+        ...((current?.data as any) ?? {}),
         tokensInput: 0,
         tokensOutput: 0,
         totalTokens: 0,
@@ -798,6 +931,9 @@ const getPlanQuotas = createServerFn({ method: "GET" })
     const doc = await fsGet("admin_settings/plan_quotas", adminFirestoreOptions(context));
     if (!doc?.data) return DEFAULT_PLAN_QUOTAS;
     const stored = doc.data as Record<string, unknown>;
+    if (Number(stored.quotaSchemaVersion) !== PLAN_QUOTA_SCHEMA_VERSION) {
+      return DEFAULT_PLAN_QUOTAS;
+    }
     const out: Record<string, PlanQuota> = {};
     for (const [key, val] of Object.entries(DEFAULT_PLAN_QUOTAS)) {
       const override = stored[key] as Record<string, unknown> | undefined;
@@ -828,6 +964,7 @@ const savePlanQuotasFn = createServerFn({ method: "POST" })
       {
         ...((current?.data as any) ?? {}),
         ...data,
+        quotaSchemaVersion: PLAN_QUOTA_SCHEMA_VERSION,
         savedAt: new Date().toISOString(),
       },
       firestore,

@@ -714,6 +714,96 @@ export async function incrementUsageBestEffort(
   return { count: (current ?? {})[endpoint] ?? 0, incremented: false };
 }
 
+export type AiTokenUsage = {
+  tokensInput: number;
+  tokensOutput: number;
+  totalTokens: number;
+};
+
+function tokenUsageFromDocument(data?: Record<string, unknown> | null): AiTokenUsage {
+  const tokensInput = Math.max(0, Number(data?.tokensInput) || 0);
+  const tokensOutput = Math.max(0, Number(data?.tokensOutput) || 0);
+  return { tokensInput, tokensOutput, totalTokens: tokensInput + tokensOutput };
+}
+
+/** Lê a franquia de tokens do dia e do mês corrente. */
+export async function getAiTokenUsage(
+  uid: string,
+  day: string,
+  month: string,
+  options: { mode?: FirestoreAuthMode; userToken?: string } = {},
+): Promise<{ daily: AiTokenUsage; monthly: AiTokenUsage }> {
+  const [dailyDoc, monthlyDoc] = await Promise.all([
+    fsGet(`users/${uid}/usage/${day}`, options),
+    fsGet(`users/${uid}/token_usage/${month}`, options),
+  ]);
+  return {
+    daily: tokenUsageFromDocument(dailyDoc?.data),
+    monthly: tokenUsageFromDocument(monthlyDoc?.data),
+  };
+}
+
+/**
+ * Registra entrada e saída em uma única operação atômica nos contadores diário,
+ * mensal e administrativo. Assim chamadas simultâneas não perdem consumo.
+ */
+export async function incrementAiTokenUsage(
+  uid: string,
+  day: string,
+  month: string,
+  tokensInput: number,
+  tokensOutput: number,
+  options: { mode?: FirestoreAuthMode; userToken?: string } = {},
+): Promise<{ daily: AiTokenUsage; monthly: AiTokenUsage }> {
+  const input = Math.max(0, Math.round(tokensInput));
+  const output = Math.max(0, Math.round(tokensOutput));
+  if (input + output === 0) return getAiTokenUsage(uid, day, month, options);
+
+  const { headers, key } = await authorization(options.mode ?? "public", options.userToken);
+  const documentName = (path: string) =>
+    `projects/${FIREBASE_PROJECT_ID}/databases/${FIREBASE_DATABASE_ID}/documents/${path}`;
+  const now = new Date().toISOString();
+  const total = input + output;
+  const paths = [
+    `users/${uid}/usage/${day}`,
+    `users/${uid}/token_usage/${month}`,
+    `ai_usage_stats/${uid}`,
+  ];
+
+  const res = await fetch(`${FIRESTORE_BASE_URL}/documents:commit${key}`, {
+    method: "POST",
+    headers: { "content-type": "application/json", ...headers },
+    body: JSON.stringify({
+      writes: paths.map((path, index) => ({
+        update: {
+          name: documentName(path),
+          fields: {
+            userId: encodeValue(uid),
+            updatedAt: encodeValue(now),
+            ...(index === 1 ? { period: encodeValue(month) } : {}),
+          },
+        },
+        updateMask: {
+          fieldPaths: ["userId", "updatedAt", ...(index === 1 ? ["period"] : [])],
+        },
+        updateTransforms: [
+          { fieldPath: "tokensInput", increment: { integerValue: String(input) } },
+          { fieldPath: "tokensOutput", increment: { integerValue: String(output) } },
+          { fieldPath: "totalTokens", increment: { integerValue: String(total) } },
+        ],
+      })),
+    }),
+  });
+
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new Error(
+      `Firestore token usage increment falhou: ${body?.error?.message ?? res.status}`,
+    );
+  }
+  return getAiTokenUsage(uid, day, month, options);
+}
+
 // referral_claims — pedidos de indicação
 export async function createReferralClaim(
   claimId: string,

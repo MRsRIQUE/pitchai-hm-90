@@ -50,7 +50,7 @@ export function initNetBridge(): void {
     if (ev.source !== window) return;
 
     const d = ev.data as NetMessage | null;
-    
+
     // Verifica se é uma mensagem do hook de rede e não é um repasse
     if (!d || d.source !== TAG || d.relay) return;
 

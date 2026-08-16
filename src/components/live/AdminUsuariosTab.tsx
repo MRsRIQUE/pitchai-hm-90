@@ -231,7 +231,7 @@ export function UsuariosTab() {
       );
 
       const quota = quotas[u.plan] || DEFAULT_PLAN_QUOTAS.gratuito;
-      const isOverTokenQuota = u.tokensInput + u.tokensOutput > quota.monthlyTokenLimit;
+      const isOverTokenQuota = u.tokensInput + u.tokensOutput >= quota.monthlyTokenLimit;
       const isOverTtsQuota = u.ttsMinutes > quota.ttsMinutesLimit;
       const isOverQuota = isOverTokenQuota || isOverTtsQuota;
 

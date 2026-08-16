@@ -81,7 +81,10 @@ function TermsPage() {
     <main className="marketing-page min-h-screen px-4 py-8 sm:px-6 lg:px-8">
       <div className="mx-auto max-w-4xl">
         <header className="mb-10 flex items-center justify-between gap-4 border-b border-white/10 pb-6">
-          <Link to="/" className="inline-flex items-center gap-2 text-sm text-white/60 transition hover:text-white">
+          <Link
+            to="/"
+            className="inline-flex items-center gap-2 text-sm text-white/60 transition hover:text-white"
+          >
             <ArrowLeft className="h-4 w-4" aria-hidden="true" /> Voltar para a Pitch AI
           </Link>
           <Link to="/" aria-label="Pitch AI" className="font-semibold tracking-tight text-white">
@@ -93,19 +96,27 @@ function TermsPage() {
           <div className="mb-5 flex h-12 w-12 items-center justify-center rounded-2xl bg-[#8b5cf6]/15 text-[#c4b5fd]">
             <ShieldCheck className="h-6 w-6" aria-hidden="true" />
           </div>
-          <p className="text-xs font-semibold uppercase tracking-[0.2em] text-[#c4b5fd]">Documento vigente</p>
+          <p className="text-xs font-semibold uppercase tracking-[0.2em] text-[#c4b5fd]">
+            Documento vigente
+          </p>
           <h1 className="marketing-title mt-3 text-balance text-4xl sm:text-5xl">Termos de Uso</h1>
           <p className="mt-4 max-w-2xl text-pretty text-base leading-7 text-white/60">
-            Regras claras para usar a Pitch AI em suas operações de live commerce. Última atualização: 13 de agosto de 2026.
+            Regras claras para usar a Pitch AI em suas operações de live commerce. Última
+            atualização: 13 de agosto de 2026.
           </p>
         </section>
 
         <article className="marketing-panel space-y-8 rounded-3xl p-6 sm:p-10">
           {sections.map((section) => (
-            <section key={section.title} className="border-b border-white/8 pb-8 last:border-0 last:pb-0">
+            <section
+              key={section.title}
+              className="border-b border-white/8 pb-8 last:border-0 last:pb-0"
+            >
               <h2 className="text-xl font-semibold text-white sm:text-2xl">{section.title}</h2>
               <div className="mt-4 space-y-4 text-sm leading-7 text-white/65 sm:text-base">
-                {section.body.map((paragraph) => <p key={paragraph}>{paragraph}</p>)}
+                {section.body.map((paragraph) => (
+                  <p key={paragraph}>{paragraph}</p>
+                ))}
               </div>
             </section>
           ))}
