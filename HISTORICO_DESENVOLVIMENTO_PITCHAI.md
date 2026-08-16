@@ -3,7 +3,7 @@
 > Registro consolidado das funcionalidades, correções, decisões técnicas, testes e publicações realizados nesta sequência de desenvolvimento.
 
 **Atualizado em:** 15 de agosto de 2026
-**Versão atual da aplicação e da extensão:** `0.16.1`
+**Versão atual da aplicação e da extensão:** `0.16.2`
 **Escopo:** site, painel do cliente, APIs, Firebase/Firestore, extensão Chrome e integração com o Gerenciador de LIVE do TikTok Shop.
 
 ## 1. Objetivo do produto

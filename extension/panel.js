@@ -499,7 +499,7 @@
     const hint = document.getElementById("pnl-autofix-hint");
     if (!hint) return;
     const total = (cfg.produtos || []).length;
-    const noRodizio = rodizio();
+    const noRodizio = produtosSelecionados();
     // Descartados na limpeza + os que ainda estão na lista mas o TikTok não acha.
     const curtos = shortNameDrops + (total - pickableProducts().length);
     const avisoCurtos = curtos
@@ -580,7 +580,7 @@
         if (pick.checked) ids.add(prod.id);
         else ids.delete(prod.id);
         cfg.autoFixar.ids = Array.from(ids);
-        syncRodizioNames();
+        syncSelectedProductNames();
         save(["autoFixar.ids", "autoFixar.names"]);
         renderAutofixPicker();
       };
@@ -592,7 +592,7 @@
       input.value = prod.name;
       input.oninput = () => {
         cfg.produtos[i].name = input.value;
-        syncRodizioNames();
+        syncSelectedProductNames();
         save(["produtos", "autoFixar.names"]);
         renderAutofixHint();
       };
@@ -602,7 +602,7 @@
       del.onclick = () => {
         cfg.autoFixar.ids = cfg.autoFixar.ids.filter((id) => id !== prod.id);
         cfg.produtos.splice(i, 1);
-        syncRodizioNames();
+        syncSelectedProductNames();
         save(["produtos", "autoFixar.ids", "autoFixar.names"]);
         render();
       };
@@ -727,7 +727,7 @@
       if (prod?.id) {
         cfg.autoFixar.ids = [prod.id];
       }
-      syncRodizioNames();
+      syncSelectedProductNames();
       save(["autoFixar.query", "autoFixar.ids", "autoFixar.names"]);
       const inp = document.querySelector('input[data-key="autoFixar.query"]');
       if (inp) inp.value = name;
