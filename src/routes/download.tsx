@@ -1,18 +1,16 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import {
   Download,
-  Check,
   Globe,
   ShieldCheck,
   FolderArchive,
   Copy,
   HelpCircle,
   ChevronDown,
-  Sparkles,
 } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
-import { SiteNav } from "@/components/live/SiteNav";
+import { SitePageFrame } from "@/components/live/SitePageFrame";
 import { ExtensionStatusBanner } from "@/components/live/ExtensionStatusBanner";
 import { APP_VERSION } from "@/lib/live/version";
 import { copyToClipboard } from "@/lib/clipboard";
@@ -65,89 +63,74 @@ function DownloadPage() {
   };
 
   return (
-    <div className="marketing-page min-h-screen pb-16">
-      <SiteNav />
+    <SitePageFrame>
+      <div className="wrap">
+        {/* Banner de verificação do status da extensão */}
+        <div className="dl-banner">
+          <ExtensionStatusBanner />
+        </div>
 
-      <main className="desktop-rail-narrow space-y-8 py-10">
-        {/* Banner de Verificação do Status da Extensão */}
-        <ExtensionStatusBanner />
-
-        <div className="text-center max-w-2xl mx-auto">
-          <div className="inline-flex items-center gap-2 rounded-full border border-[#7C3AED]/30 bg-[#7C3AED]/10 px-4 py-1.5 text-xs font-bold text-[#A855F7]">
-            <Globe className="h-3.5 w-3.5" />
-            <span>Para Google Chrome, Edge, Brave e Opera</span>
+        <header className="sec-head">
+          <div className="badge">
+            <b>
+              <Globe style={{ width: 11, height: 11 }} /> Compatível
+            </b>
+            <span>Google Chrome, Edge, Brave e Opera</span>
           </div>
-
-          <h1 className="marketing-title mt-4 text-4xl sm:text-5xl">
-            Instalar o Pitch AI é Muito Fácil
+          <h1>
+            Instalar o Pitch AI é <em className="h1-serif">Muito Fácil</em>
           </h1>
-          <p className="mt-3 text-slate-400 text-sm sm:text-base">
+          <p>
             Desenvolvido para qualquer pessoa conseguir usar em menos de 2 minutos, sem complicação.
           </p>
-        </div>
+        </header>
 
-        {/* Card de Download Principal */}
-        <div className="marketing-panel rounded-3xl border-[#7C3AED]/30 p-6 sm:p-8">
-          <div className="flex flex-col gap-6 sm:flex-row sm:items-center sm:justify-between">
-            <div className="flex items-center gap-4">
-              <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-2xl bg-[#7C3AED] text-white shadow-lg">
-                <FolderArchive className="h-8 w-8" />
+        {/* Card de download principal */}
+        <div className="card dl-hero">
+          <div className="dl-file">
+            <span className="dl-file-ic">
+              <FolderArchive />
+            </span>
+            <div>
+              <div className="dl-file-name">
+                pitchai-extension.zip <span className="dl-pill">Pronto</span>
               </div>
-              <div>
-                <div className="font-display text-xl font-extrabold text-white flex items-center gap-2">
-                  <span>pitchai-extension.zip</span>
-                  <span className="rounded-full bg-emerald-500/20 px-2 py-1 text-[10px] font-extrabold text-emerald-400 border border-emerald-500/30">
-                    Pronto
-                  </span>
-                </div>
-                <div className="mt-1 flex flex-wrap items-center gap-3 text-xs text-slate-400 font-medium">
-                  <span className="rounded-full bg-white/10 px-2.5 py-1 text-purple-300 font-bold">
-                    v{APP_VERSION}
-                  </span>
-                  <span>Extensão Oficial</span>
-                  <span className="flex items-center gap-1 text-emerald-400">
-                    <ShieldCheck className="h-3.5 w-3.5" /> 100% Seguro
-                  </span>
-                </div>
+              <div className="dl-tags">
+                <span className="dl-pill">v{APP_VERSION}</span>
+                <span>Extensão Oficial</span>
+                <span className="dl-safe">
+                  <ShieldCheck /> 100% Seguro
+                </span>
               </div>
             </div>
-
-            <button
-              onClick={handleDownload}
-              className="inline-flex items-center justify-center gap-2 rounded-full bg-[#7C3AED] px-8 py-4 font-extrabold text-white shadow-lg transition-all hover:bg-[#6D28D9] hover:shadow-[0_4px_25px_rgba(124,58,237,0.5)] active:scale-95 text-sm"
-            >
-              <Download className="h-5 w-5" />
-              <span>1. Baixar Arquivo da Extensão</span>
-            </button>
           </div>
+
+          <button onClick={handleDownload} className="btn btn-primary btn-lg btn-glow">
+            <Download style={{ width: 16, height: 16 }} />
+            1. Baixar Arquivo da Extensão
+          </button>
         </div>
 
-        {/* Passo a Passo Ilustrado Simplificado */}
-        <div className="space-y-6">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-            <h2 className="font-display text-2xl font-bold text-white flex items-center gap-2">
-              <Sparkles className="h-5 w-5 text-[#A855F7]" />
-              <span>Passo a Passo para Pessoas Leigas em Tecnologia</span>
-            </h2>
-            <button
-              type="button"
-              onClick={() => setShowUnzipHelp((v) => !v)}
-              className="inline-flex items-center gap-1 text-xs text-[#A855F7] hover:underline font-bold"
-            >
-              <HelpCircle className="h-3.5 w-3.5" />
-              <span>Como extrair o arquivo .zip?</span>
-              <ChevronDown
-                className={`h-3.5 w-3.5 transition-transform ${showUnzipHelp ? "rotate-180" : ""}`}
-              />
-            </button>
+        {/* Passo a passo */}
+        <section className="site-page-more">
+          <div className="sec-head">
+            <div className="eyebrow">Instalação</div>
+            <h2>Passo a passo para pessoas leigas em tecnologia</h2>
           </div>
 
-          {/* Dica de Unzip se expandida */}
+          <button
+            type="button"
+            onClick={() => setShowUnzipHelp((v) => !v)}
+            className="btn btn-outline dl-help-btn"
+          >
+            <HelpCircle />
+            Como extrair o arquivo .zip?
+            <ChevronDown className={`dl-help-chev${showUnzipHelp ? " is-open" : ""}`} />
+          </button>
+
           {showUnzipHelp && (
-            <div className="rounded-2xl border border-purple-500/30 bg-purple-950/40 p-5 text-xs text-purple-200 space-y-2 animate-in fade-in">
-              <h4 className="font-bold text-sm text-white flex items-center gap-1.5">
-                💡 Como extrair o arquivo .zip em 2 cliques:
-              </h4>
+            <div className="card dl-help">
+              <h3>💡 Como extrair o arquivo .zip em 2 cliques:</h3>
               <p>
                 <b>No Windows:</b> Vá na sua pasta &quot;Downloads&quot;, clique com o{" "}
                 <b>botão direito do mouse</b> no arquivo <code>pitchai-extension.zip</code> e
@@ -160,98 +143,59 @@ function DownloadPage() {
             </div>
           )}
 
-          <div className="grid gap-4 sm:grid-cols-2">
-            {/* Passo 1 */}
-            <div className="rounded-2xl border border-white/10 bg-white/5 p-5 space-y-3 relative overflow-hidden">
-              <div className="flex items-center justify-between">
-                <span className="flex h-8 w-8 items-center justify-center rounded-xl bg-[#7C3AED] text-white font-extrabold text-sm">
-                  1
-                </span>
-                <span className="text-[10px] font-bold uppercase tracking-wider text-purple-400 bg-purple-500/10 px-2 py-0.5 rounded border border-purple-500/20">
-                  Download
-                </span>
-              </div>
-              <h3 className="font-bold text-white text-base">Baixe o Arquivo</h3>
-              <p className="text-xs text-slate-400 leading-relaxed">
+          <div className="feat dl-steps">
+            <article className="card">
+              <div className="step-n">1</div>
+              <div className="card-tag">Download</div>
+              <h3>Baixe o Arquivo</h3>
+              <p>
                 Clique no botão Roxo &quot;1. Baixar Arquivo da Extensão&quot; acima. O arquivo será
                 salvo na sua pasta Downloads.
               </p>
-            </div>
+            </article>
 
-            {/* Passo 2 */}
-            <div className="rounded-2xl border border-white/10 bg-white/5 p-5 space-y-3 relative overflow-hidden">
-              <div className="flex items-center justify-between">
-                <span className="flex h-8 w-8 items-center justify-center rounded-xl bg-[#7C3AED] text-white font-extrabold text-sm">
-                  2
-                </span>
-                <span className="text-[10px] font-bold uppercase tracking-wider text-purple-400 bg-purple-500/10 px-2 py-0.5 rounded border border-purple-500/20">
-                  Aba do Chrome
-                </span>
-              </div>
-              <h3 className="font-bold text-white text-base">Abra a Página de Extensões</h3>
-              <p className="text-xs text-slate-400 leading-relaxed">
+            <article className="card">
+              <div className="step-n">2</div>
+              <div className="card-tag">Aba do Chrome</div>
+              <h3>Abra a Página de Extensões</h3>
+              <p>
                 Abra uma nova aba e digite <b>chrome://extensions</b> na barra de endereço (onde
                 você digita os sites).
               </p>
-              <button
-                onClick={copyChromeUrl}
-                className="mt-2 inline-flex items-center gap-1.5 rounded-lg border border-white/20 bg-white/10 px-3 py-1.5 text-xs font-bold text-white hover:bg-white/20 transition-all"
-              >
-                <Copy className="h-3.5 w-3.5" />
-                <span>Copiar chrome://extensions</span>
+              <button onClick={copyChromeUrl} className="btn btn-outline">
+                <Copy /> Copiar chrome://extensions
               </button>
-            </div>
+            </article>
 
-            {/* Passo 3 */}
-            <div className="rounded-2xl border border-white/10 bg-white/5 p-5 space-y-3 relative overflow-hidden">
-              <div className="flex items-center justify-between">
-                <span className="flex h-8 w-8 items-center justify-center rounded-xl bg-[#7C3AED] text-white font-extrabold text-sm">
-                  3
-                </span>
-                <span className="text-[10px] font-bold uppercase tracking-wider text-purple-400 bg-purple-500/10 px-2 py-0.5 rounded border border-purple-500/20">
-                  Ativar
-                </span>
-              </div>
-              <h3 className="font-bold text-white text-base">
-                Ative o &quot;Modo Desenvolvedor&quot;
-              </h3>
-              <p className="text-xs text-slate-400 leading-relaxed">
+            <article className="card">
+              <div className="step-n">3</div>
+              <div className="card-tag">Ativar</div>
+              <h3>Ative o &quot;Modo Desenvolvedor&quot;</h3>
+              <p>
                 No canto superior direito da tela do Chrome, clique na chave para ativar o{" "}
                 <b>Modo do desenvolvedor</b>.
               </p>
-            </div>
+            </article>
 
-            {/* Passo 4 */}
-            <div className="rounded-2xl border border-white/10 bg-white/5 p-5 space-y-3 relative overflow-hidden">
-              <div className="flex items-center justify-between">
-                <span className="flex h-8 w-8 items-center justify-center rounded-xl bg-[#7C3AED] text-white font-extrabold text-sm">
-                  4
-                </span>
-                <span className="text-[10px] font-bold uppercase tracking-wider text-purple-400 bg-purple-500/10 px-2 py-0.5 rounded border border-purple-500/20">
-                  Carregar
-                </span>
-              </div>
-              <h3 className="font-bold text-white text-base">Carregue a Pasta</h3>
-              <p className="text-xs text-slate-400 leading-relaxed">
+            <article className="card">
+              <div className="step-n">4</div>
+              <div className="card-tag">Carregar</div>
+              <h3>Carregue a Pasta</h3>
+              <p>
                 Clique no botão <b>&quot;Carregar sem compactação&quot;</b> e selecione a pasta
                 extraída. Pronto!
               </p>
-            </div>
+            </article>
           </div>
-        </div>
 
-        {/* Rodapé explicativo */}
-        <div className="rounded-2xl border border-[#7C3AED]/20 bg-[#7C3AED]/10 p-5 text-xs sm:text-sm text-purple-200 backdrop-blur-md flex flex-col sm:flex-row items-center justify-between gap-4">
-          <div>
-            <strong className="text-white font-bold">Próximo Passo:</strong> Agora que você baixou a
-            extensão, acesse o{" "}
-            <Link to="/app" className="text-[#A855F7] underline font-bold">
-              Painel Web do Pitch AI
-            </Link>{" "}
-            para configurar a voz e seus produtos.
+          <div className="card dl-next">
+            <p>
+              <strong>Próximo Passo:</strong> Agora que você baixou a extensão, acesse o{" "}
+              <Link to="/app">Painel Web do Pitch AI</Link> para configurar a voz e seus produtos.
+            </p>
           </div>
-        </div>
-      </main>
-    </div>
+        </section>
+      </div>
+    </SitePageFrame>
   );
 }

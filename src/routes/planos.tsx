@@ -1,18 +1,12 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useState } from "react";
 import { signOut as firebaseSignOut } from "firebase/auth";
-import { Check, Sparkles, Volume2, VolumeX, Lock, ShieldCheck, LogOut } from "lucide-react";
+import { Check, Sparkles, Volume2, VolumeX, Lock, LogOut } from "lucide-react";
 import { toast } from "sonner";
 import { getFirebaseAuth } from "@/lib/firebase";
-import { SiteNav } from "@/components/live/SiteNav";
+import { SitePageFrame } from "@/components/live/SitePageFrame";
+import { FlameWrap } from "@/components/ui/flame-wrap";
 import { useUserSubscription } from "@/hooks/useUserSubscription";
-import {
-  PITCHAI_PLANS,
-  PLAN_FEATURES,
-  FREE_LIMITS,
-  formatBRL,
-  monthlyEquivalent,
-} from "@/lib/live/plans";
+import { PITCHAI_PLANS, PLAN_FEATURES, formatBRL, monthlyEquivalent } from "@/lib/live/plans";
 import { formatTokenLimit, resolvePlanQuota } from "@/lib/live/quotas";
 
 export const Route = createFileRoute("/planos")({
@@ -37,14 +31,28 @@ export const Route = createFileRoute("/planos")({
   }),
 });
 
+/* roxo da marca (#8b5cf6) no formato [r, g, b] 0-1 que o shader do FlameWrap espera */
+const FLAME_COLOR: [number, number, number] = [0.545, 0.361, 0.965];
+
+/**
+ * O `.plan-price` da LP já traz o "R$" no próprio span `.cur`, então aqui sai
+ * só o número. Mesma formatação do `formatBRL` do `plans.ts` — inclusive o
+ * separador de milhar, senão um plano acima de mil reais apareceria como
+ * "1290,00" aqui e "R$ 1.290,00" no resto do site.
+ */
+function brl(cents: number): string {
+  return (cents / 100).toLocaleString("pt-BR", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
+}
+
+/* os preços da política de voz saem dos planos, nunca de texto fixo */
+const PLANO_SEM_VOZ = PITCHAI_PLANS.find((p) => !p.allowAudio);
+const PLANOS_COM_VOZ = PITCHAI_PLANS.filter((p) => p.allowAudio);
+
 function PlanosPage() {
-  const {
-    subscription: sub,
-    isPaidActive: isActive,
-    isComped,
-    userId,
-    userEmail,
-  } = useUserSubscription();
+  const { subscription: sub, isComped, userId, userEmail } = useUserSubscription();
 
   async function handleSignOut() {
     try {
@@ -56,199 +64,205 @@ function PlanosPage() {
   }
 
   return (
-    <div className="marketing-page min-h-screen">
-      <SiteNav />
-      <div className="desktop-rail-narrow py-12">
-        <header className="text-center mb-10">
-          <h1 className="marketing-title text-4xl mb-3 sm:text-5xl">
-            Escolha seu plano do Pitch AI
+    <SitePageFrame>
+      <div className="wrap">
+        <header className="sec-head">
+          <div className="eyebrow">Planos</div>
+          <h1>
+            Escolha seu plano do <em className="h1-serif">Pitch AI</em>
           </h1>
-          <p className="text-white/70 max-w-2xl mx-auto text-base">
-            O plano <span className="font-semibold text-amber-300">Mensal</span> inclui todas as
-            respostas automáticas via chat por texto. Os planos{" "}
-            <span className="font-semibold text-[#00E676]">Trimestral</span> e{" "}
-            <span className="font-semibold text-[#00E676]">Anual</span> liberam a voz e narração de
-            áudio da IA em tempo real!
+          <p>
+            O plano <strong>Mensal</strong> inclui todas as respostas automáticas via chat por
+            texto. Os planos <strong>Trimestral</strong> e <strong>Anual</strong> liberam a voz e
+            narração de áudio da IA em tempo real!
           </p>
+
           {userId ? (
-            <p className="mt-4 flex flex-wrap items-center justify-center gap-3 text-sm text-white/60">
-              <span className="break-all">
-                Conectado como <span className="font-semibold text-white/85">{userEmail}</span>
+            <div className="site-page-meta">
+              <span>
+                Conectado como <strong>{userEmail}</strong>
               </span>
-              <button
-                type="button"
-                onClick={handleSignOut}
-                className="inline-flex items-center gap-1.5 rounded-lg border border-white/15 bg-white/5 px-3 py-1.5 text-xs font-semibold text-white/80 transition-colors hover:bg-white/10 hover:text-white"
-              >
-                <LogOut className="h-3.5 w-3.5" /> Sair da conta
+              <button type="button" onClick={handleSignOut} className="btn btn-outline">
+                <LogOut style={{ width: 14, height: 14 }} /> Sair da conta
               </button>
-            </p>
+            </div>
           ) : (
-            <p className="mt-4 text-sm text-orange-300">
-              <Link to="/entrar" search={{ next: "/planos" }} className="underline">
-                Entre na sua conta
-              </Link>{" "}
-              para manter seus dados e token sincronizados.
-            </p>
+            <div className="site-page-meta">
+              <span>
+                <Link to="/entrar" search={{ next: "/planos" }}>
+                  Entre na sua conta
+                </Link>{" "}
+                para manter seus dados e token sincronizados.
+              </span>
+            </div>
           )}
+
           {isComped && sub?.granted_until && (
-            <p className="mt-4 inline-flex items-center gap-2 rounded-full bg-[#00E676]/10 px-4 py-2 text-sm text-[#00E676]">
-              <Sparkles className="w-4 h-4" />
-              Você tem acesso cortesia liberado até{" "}
-              {new Date(sub.granted_until).toLocaleDateString("pt-BR")}
-            </p>
+            <div className="site-page-meta">
+              <div className="badge" style={{ marginBottom: 0 }}>
+                <b>
+                  <Sparkles style={{ width: 11, height: 11 }} /> Cortesia
+                </b>
+                <span>
+                  Acesso liberado até {new Date(sub.granted_until).toLocaleDateString("pt-BR")}
+                </span>
+              </div>
+            </div>
           )}
         </header>
 
-        <div className="grid gap-6 lg:grid-cols-3">
-          {PITCHAI_PLANS.map((p) => (
-            <div
-              key={p.priceId}
-              className={`relative flex flex-col justify-between rounded-2xl border p-6 transition-all ${
-                p.highlight
-                  ? "border-[#7C3AED] bg-[#7C3AED]/10 shadow-[0_0_40px_rgba(124,58,237,0.2)]"
-                  : "marketing-panel hover:border-[#6D28D9]/30"
-              }`}
-            >
-              {p.badge && (
-                <div className="absolute -top-3 left-1/2 -translate-x-1/2 whitespace-nowrap rounded-full bg-[#FF6B35] px-3.5 py-1 text-xs font-bold text-white shadow">
-                  {p.badge}
+        <div className="plans">
+          {PITCHAI_PLANS.map((p) => {
+            const per = p.months === 1 ? "/mês" : p.months === 3 ? "/trimestre" : "/ano";
+            const quota = resolvePlanQuota(p.priceId);
+            const card = (
+              <div className={`plan${p.highlight ? " pop" : ""}${p.badge ? " has-badge" : ""}`}>
+                {p.badge && <span className="plan-badge">{p.badge}</span>}
+                <div className="plan-name">{p.name}</div>
+                <div className="plan-desc">
+                  {p.months === 12
+                    ? "O melhor custo por mês para quem vive de TikTok Shop."
+                    : p.months === 3
+                      ? "Voz neural liberada. É aqui que a live ganha ritmo próprio."
+                      : "Para começar com respostas automáticas no chat."}
                 </div>
-              )}
-              <div>
-                <h2 className="text-2xl font-bold">{p.name}</h2>
-                <div className="mt-3 flex items-baseline gap-1">
-                  <span className="text-4xl font-extrabold">{formatBRL(p.amountCents)}</span>
-                  <span className="text-white/60 text-sm font-medium">
-                    {p.months === 1 ? "/mês" : p.months === 12 ? "/ano" : "/trimestre"}
+                <div className="plan-price">
+                  <span className="cur">R$</span>
+                  <span className="val">{brl(p.amountCents)}</span>
+                  <span className="per">{per}</span>
+                </div>
+                <div className="plan-note">
+                  {p.months > 1
+                    ? `Equivale a ${monthlyEquivalent(p)} por mês`
+                    : "Cobrado mensalmente"}
+                </div>
+
+                <div className={`plan-audio${p.allowAudio ? "" : " is-off"}`}>
+                  {p.allowAudio ? <Volume2 /> : <VolumeX />}
+                  <span>
+                    <strong>
+                      {p.allowAudio ? "Voz e áudio liberados" : "Áudio / voz bloqueado"}
+                    </strong>
+                    {p.allowAudio
+                      ? p.audioNote
+                      : "Apenas respostas por texto. Voz da IA indisponível neste plano."}
                   </span>
                 </div>
-                {p.months > 1 && (
-                  <div className="mt-1 text-xs text-white/50">
-                    equivale a <strong className="text-white/80">{monthlyEquivalent(p)}</strong> por
-                    mês
-                  </div>
-                )}
 
-                {/* Tag de Recurso de Áudio da IA */}
-                <div className="mt-5">
-                  {p.allowAudio ? (
-                    <div className="flex items-start gap-2 rounded-xl bg-[#00E676]/10 border border-[#00E676]/30 p-3 text-xs text-[#00E676]">
-                      <Volume2 className="w-4 h-4 shrink-0 mt-0.5" />
-                      <div>
-                        <strong className="block font-bold">Voz e Áudio Liberados</strong>
-                        <span className="text-white/80 text-[11px] leading-tight block mt-0.5">
-                          {p.audioNote}
-                        </span>
-                      </div>
-                    </div>
-                  ) : (
-                    <div className="flex items-start gap-2 rounded-xl bg-amber-500/10 border border-amber-500/30 p-3 text-xs text-amber-300">
-                      <VolumeX className="w-4 h-4 shrink-0 mt-0.5 text-amber-400" />
-                      <div>
-                        <strong className="block font-bold flex items-center gap-1">
-                          Áudio / Voz Bloqueado <Lock className="w-3 h-3 text-amber-400" />
-                        </strong>
-                        <span className="text-amber-200/90 text-[11px] leading-tight block mt-0.5">
-                          Apenas respostas por texto. Voz da IA indisponível neste plano.
-                        </span>
-                      </div>
-                    </div>
-                  )}
-                </div>
-
-                <ul className="mt-6 space-y-2.5 text-xs text-white/80 border-t border-white/10 pt-4">
-                  <li className="flex items-center gap-2">
-                    <Check className="w-4 h-4 text-[#00E676] shrink-0" />
-                    <span>Pitch automático de produtos</span>
-                  </li>
-                  <li className="flex items-center gap-2">
-                    <Check className="w-4 h-4 text-[#00E676] shrink-0" />
-                    <span>
-                      Até {formatTokenLimit(resolvePlanQuota(p.priceId).monthlyTokenLimit)} de
-                      tokens por mês
-                    </span>
-                  </li>
-                  <li className="flex items-center gap-2">
-                    <Check className="w-4 h-4 text-[#00E676] shrink-0" />
-                    <span>Auto-fixar ofertas na vitrine</span>
-                  </li>
-                  <li className="flex items-center gap-2">
-                    {p.allowAudio ? (
-                      <Check className="w-4 h-4 text-[#00E676] shrink-0" />
-                    ) : (
-                      <Lock className="w-3.5 h-3.5 text-amber-400 shrink-0 ml-0.5" />
-                    )}
-                    <span
-                      className={p.allowAudio ? "text-white" : "text-amber-200/70 line-through"}
-                    >
-                      Voz da IA em tempo real
-                    </span>
-                  </li>
-                </ul>
-              </div>
-
-              <div className="mt-8">
                 <Link
                   to="/comprar"
                   search={{ plan: p.priceId }}
-                  className={`w-full py-3.5 px-4 rounded-xl font-bold text-sm text-center flex items-center justify-center gap-2 transition-all shadow-md ${
-                    p.highlight
-                      ? "bg-[#7C3AED] hover:bg-[#6D28D9] text-white hover:shadow-purple-500/25"
-                      : "bg-white/10 hover:bg-white/20 text-white"
-                  }`}
+                  className={`btn ${p.highlight ? "btn-dark" : "btn-outline"}`}
                 >
                   Assinar Plano {p.name}
                 </Link>
+
+                <ul>
+                  <li>
+                    <Check className="check" /> Pitch automático de produtos
+                  </li>
+                  <li>
+                    <Check className="check" /> Até {formatTokenLimit(quota.monthlyTokenLimit)} de
+                    tokens por mês
+                  </li>
+                  <li>
+                    <Check className="check" /> Auto-fixar ofertas na vitrine
+                  </li>
+                  {p.allowAudio ? (
+                    <li>
+                      <Check className="check" /> Voz da IA em tempo real
+                    </li>
+                  ) : (
+                    <li className="muted-li">
+                      <Lock className="check" style={{ color: "var(--ink-3)" }} /> Voz da IA em
+                      tempo real
+                    </li>
+                  )}
+                </ul>
               </div>
-            </div>
-          ))}
+            );
+
+            /* só o plano em destaque queima, exatamente como na home */
+            if (!p.highlight) return <div key={p.priceId}>{card}</div>;
+            return (
+              <FlameWrap
+                key={p.priceId}
+                className="plan-flame"
+                capture={false}
+                color={FLAME_COLOR}
+                radius={16}
+                height={150}
+                spread={12}
+                intensity={0.7}
+                speed={0.3}
+                scale={0.8}
+                sparks={1.4}
+                sparkSize={0.3}
+                rim={2.2}
+                melt={3}
+                distortion={7}
+                smoke={1}
+                ember={1.6}
+              >
+                {card}
+              </FlameWrap>
+            );
+          })}
         </div>
 
-        {/* Detalhes de Comparação de Recursos */}
-        <section className="mt-12 grid gap-6 md:grid-cols-2">
-          <div className="marketing-panel rounded-2xl p-6 space-y-4">
-            <div className="flex items-center gap-2 text-base font-bold text-white">
-              <ShieldCheck className="w-5 h-5 text-[#00E676]" /> Incluído em todos os planos
-            </div>
-            <ul className="space-y-2.5 text-sm">
+        <section className="site-page-more split">
+          <div className="safe-card">
+            <div className="eyebrow">Benefícios</div>
+            <h3>Incluído em todos os planos</h3>
+            <ul className="safe-list">
               {PLAN_FEATURES.map((f) => (
-                <li key={f} className="flex items-start gap-2.5">
-                  <Check className="w-4 h-4 text-[#00E676] shrink-0 mt-0.5" />
-                  <span className="text-white/80">{f}</span>
+                <li key={f}>
+                  <Check className="check" /> {f}
                 </li>
               ))}
             </ul>
           </div>
 
-          <div className="rounded-2xl border border-amber-500/20 bg-amber-500/5 p-6 space-y-4">
-            <div className="flex items-center gap-2 text-base font-bold text-amber-300">
-              <Volume2 className="w-5 h-5 text-amber-400" /> Política da Voz / Áudio da IA
+          <div>
+            <div className="sec-head" style={{ marginBottom: 22 }}>
+              <div className="eyebrow">Voz e áudio</div>
+              <h2 style={{ fontSize: 30 }}>Política da voz da IA</h2>
+              <p>
+                Para garantir uma experiência de live com narração de voz ao vivo de alta
+                fidelidade:
+              </p>
             </div>
-            <p className="text-xs text-white/70 leading-relaxed">
-              Para garantir uma experiência de live com narração de voz ao vivo de alta fidelidade:
-            </p>
-            <div className="space-y-3 text-xs">
-              <div className="p-3 rounded-xl bg-black/30 border border-white/10">
-                <strong className="text-amber-300 block mb-1">🔒 Plano Mensal (R$ 27,90)</strong>
-                <span className="text-white/70">
-                  Sem voz/áudio. O assistente funciona respondendo aos comentários no chat apenas
-                  via texto.
-                </span>
-              </div>
-              <div className="p-3 rounded-xl bg-black/30 border border-[#00E676]/20">
-                <strong className="text-[#00E676] block mb-1">
-                  🎙️ Planos Trimestral (R$ 67,90) e Anual (R$ 117,90)
-                </strong>
-                <span className="text-white/70">
-                  Com áudio completo. A IA narra os pitches, ofertas e saudações em voz humana em
-                  tempo real na sua live.
-                </span>
-              </div>
+
+            <div className="site-page-stack">
+              {PLANO_SEM_VOZ && (
+                <article className="card">
+                  <h3>
+                    🔒 Plano {PLANO_SEM_VOZ.name} ({formatBRL(PLANO_SEM_VOZ.amountCents)})
+                  </h3>
+                  <p>
+                    Sem voz/áudio. O assistente funciona respondendo aos comentários no chat apenas
+                    via texto.
+                  </p>
+                </article>
+              )}
+              {PLANOS_COM_VOZ.length > 0 && (
+                <article className="card hi">
+                  <h3>
+                    🎙️ Planos{" "}
+                    {PLANOS_COM_VOZ.map((p) => `${p.name} (${formatBRL(p.amountCents)})`).join(
+                      " e ",
+                    )}
+                  </h3>
+                  <p>
+                    Com áudio completo. A IA narra os pitches, ofertas e saudações em voz humana em
+                    tempo real na sua live.
+                  </p>
+                </article>
+              )}
             </div>
           </div>
         </section>
       </div>
-    </div>
+    </SitePageFrame>
   );
 }

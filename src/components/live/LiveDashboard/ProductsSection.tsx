@@ -14,6 +14,8 @@ import { useLiveStore } from "@/stores/useLiveStore";
 import { useShallow } from "zustand/react/shallow";
 import { mergeVitrineProducts, newProduct, type Product } from "@/lib/live/config";
 import { useVitrineSync } from "@/hooks/live/useVitrineSync";
+import { ProdutoThumb } from "./sections/ProdutoThumb";
+import { formatarPreco } from "./sections/produto";
 
 export interface ProductsSectionProps {
   compact?: boolean;
@@ -217,14 +219,19 @@ export function ProductsSection({ compact = false }: ProductsSectionProps) {
                   p.active ? "border-primary bg-primary/5" : "border-border"
                 }`}
               >
-                <div className="flex items-center gap-2">
+                <div className="flex min-w-0 flex-1 items-center gap-2">
                   <span
-                    className={`h-2 w-2 rounded-full ${p.active ? "bg-primary" : "bg-muted"}`}
+                    className={`h-2 w-2 shrink-0 rounded-full ${p.active ? "bg-primary" : "bg-muted"}`}
                   />
-                  <span className="truncate max-w-[150px]">{p.name}</span>
-                  {p.price && <span className="text-muted-foreground">{p.price}</span>}
+                  <ProdutoThumb produto={p} tamanho={28} />
+                  <span className="min-w-0 flex-1 truncate" title={p.name}>
+                    {p.name}
+                  </span>
+                  {formatarPreco(p) ? (
+                    <span className="shrink-0 text-muted-foreground">{formatarPreco(p)}</span>
+                  ) : null}
                 </div>
-                <div className="flex gap-2">
+                <div className="flex shrink-0 gap-2">
                   <Switch
                     checked={p.active}
                     onCheckedChange={(v) => setActiveProduct(p.id, v)}
@@ -248,7 +255,7 @@ export function ProductsSection({ compact = false }: ProductsSectionProps) {
   }
 
   return (
-    <div id="sec-produtos" className="scroll-mt-24 pt-2">
+    <div>
       <h4 className="mb-3 font-display text-sm font-semibold">
         Produtos
         <span className="ml-2 font-sans text-xs font-normal text-muted-foreground">
@@ -295,22 +302,34 @@ export function ProductsSection({ compact = false }: ProductsSectionProps) {
                   Nenhum produto. Clique em "+ Novo".
                 </p>
               )}
-              {config.produtos.map((p) => (
-                <button
-                  key={p.id}
-                  onClick={() => setEditingId(p.id)}
-                  className={`flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm transition ${
-                    editingId === p.id ? "bg-primary/15 text-foreground" : "hover:bg-accent"
-                  }`}
-                >
-                  <span
-                    className={`h-1.5 w-1.5 rounded-full ${
-                      p.active ? "bg-primary" : "bg-muted-foreground/40"
+              {config.produtos.map((p) => {
+                const preco = formatarPreco(p);
+                return (
+                  <button
+                    key={p.id}
+                    onClick={() => setEditingId(p.id)}
+                    title={p.name}
+                    className={`flex w-full min-w-0 items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm transition ${
+                      editingId === p.id ? "bg-primary/15 text-foreground" : "hover:bg-accent"
                     }`}
-                  />
-                  <span className="truncate">{p.name}</span>
-                </button>
-              ))}
+                  >
+                    <span
+                      className={`h-1.5 w-1.5 shrink-0 rounded-full ${
+                        p.active ? "bg-primary" : "bg-muted-foreground/40"
+                      }`}
+                    />
+                    <ProdutoThumb produto={p} tamanho={32} />
+                    {/* min-w-0 é o que faz o truncate valer: sem ele o filho flex
+                        usa min-width auto e se recusa a encolher abaixo do texto. */}
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate">{p.name}</span>
+                      <span className="block truncate text-xs text-muted-foreground">
+                        {preco ?? "sem preço"}
+                      </span>
+                    </span>
+                  </button>
+                );
+              })}
             </div>
           </div>
 
@@ -318,6 +337,20 @@ export function ProductsSection({ compact = false }: ProductsSectionProps) {
           <div>
             {editing ? (
               <div className="space-y-3">
+                {/* Como o produto vai aparecer para o usuário: foto (ou fallback)
+                    e preço já formatado. É a prévia do que a vitrine vai preencher. */}
+                <div className="flex min-w-0 items-center gap-3 rounded-lg border border-border/60 p-3">
+                  <ProdutoThumb produto={editing} tamanho={56} />
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-sm font-semibold" title={editing.name}>
+                      {editing.name}
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      {formatarPreco(editing) ?? "sem preço"}
+                    </p>
+                  </div>
+                </div>
+
                 <div className="flex items-center justify-between gap-2">
                   <span className="text-xs uppercase tracking-wide text-muted-foreground">
                     Editar produto

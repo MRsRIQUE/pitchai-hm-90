@@ -1,10 +1,6 @@
-import { useState } from "react";
-import { useNavigate } from "@tanstack/react-router";
-import { signOut } from "firebase/auth";
 import { Loader2, LogOut } from "lucide-react";
-import { toast } from "sonner";
-import { getFirebaseAuth } from "@/lib/firebase";
 import { useTheme } from "@/lib/use-theme";
+import { useLogout } from "@/lib/use-logout";
 import { cn } from "@/lib/utils";
 
 type LogoutButtonProps = {
@@ -17,27 +13,15 @@ type LogoutButtonProps = {
 
 /**
  * Botão de sair da conta com a mesma linguagem visual da landing page:
- * pastilha arredondada, borda de vidro e o mesmo roxo (#7C3AED) do CTA do
- * `SiteNav`, com as duas variantes de tema que a LP usa.
+ * pastilha arredondada, borda de vidro e o mesmo roxo (#7C3AED) do CTA da nav,
+ * com as duas variantes de tema que a LP usa.
+ *
+ * Esta é a skin de pastilha. A nav das páginas internas e o painel usam outras
+ * duas — as três compartilham o `useLogout`.
  */
 export function LogoutButton({ label = "Sair", alwaysShowLabel, className }: LogoutButtonProps) {
   const { isDark } = useTheme();
-  const navigate = useNavigate();
-  const [busy, setBusy] = useState(false);
-
-  async function handleLogout() {
-    setBusy(true);
-    try {
-      await signOut(getFirebaseAuth());
-      toast.success("Você saiu da sua conta.");
-      navigate({ to: "/" });
-    } catch (err) {
-      console.warn("[logout] Falha ao encerrar a sessão:", err);
-      toast.error("Não foi possível sair agora. Tente novamente.");
-    } finally {
-      setBusy(false);
-    }
-  }
+  const { logout, busy } = useLogout();
 
   const tone = isDark
     ? "border-white/12 bg-white/[0.06] text-slate-200 hover:border-[#7C3AED]/45 hover:bg-[#7C3AED]/15 hover:text-white"
@@ -46,7 +30,7 @@ export function LogoutButton({ label = "Sair", alwaysShowLabel, className }: Log
   return (
     <button
       type="button"
-      onClick={handleLogout}
+      onClick={logout}
       disabled={busy}
       className={cn(
         "inline-flex shrink-0 items-center gap-1.5 rounded-full border px-4 py-2 text-xs font-bold transition-all duration-200 active:scale-95 disabled:opacity-50 sm:text-sm",

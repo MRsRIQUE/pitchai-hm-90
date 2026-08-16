@@ -1,0 +1,1137 @@
+/* ============================================================
+   DASHBOARD — casca dos painéis (/app e /admin)
+   Mesma paleta e mesma tipografia da landing, em layout de aplicação:
+   sidebar fixa escura + área de trabalho clara.
+   Tudo escopado sob `.dash-shell` para não vazar para o resto do app.
+   ============================================================ */
+.dash-shell {
+  --app-bg: #fbfbfa;
+  --app-surface: #ffffff;
+  --app-surface-2: #f4f4f2;
+  --app-ink: #0c0c0d;
+  --app-ink-2: #3d3d42;
+  --app-ink-3: #767680;
+  --app-line: rgba(12, 12, 13, 0.09);
+  --app-line-2: rgba(12, 12, 13, 0.055);
+  --app-accent: #6d28d9;
+  --app-accent-ink: #5b21b6;
+  --app-accent-bg: #f5f1fe;
+  --app-ok: #0f7b4f;
+  --app-ok-bg: #eaf6f0;
+  --app-warn: #a35a00;
+  --app-warn-bg: #fdf3e6;
+  --app-danger: #b4231f;
+  --app-danger-bg: #fdeceb;
+
+  --app-sidebar-bg: #0c0c0d;
+  --app-sidebar-ink: #fafafa;
+  --app-sidebar-ink-2: rgba(250, 250, 250, 0.58);
+  --app-sidebar-line: rgba(250, 250, 250, 0.1);
+
+  --app-sidebar-w: 252px;
+  --app-topbar-h: 68px;
+  --app-r-sm: 8px;
+  --app-r-md: 12px;
+  --app-r-lg: 16px;
+  --app-shadow-sm: 0 1px 2px rgba(12, 12, 13, 0.05);
+  --app-shadow-md: 0 4px 16px -4px rgba(12, 12, 13, 0.08), 0 1px 3px rgba(12, 12, 13, 0.04);
+
+  min-height: 100dvh;
+  background: var(--app-bg);
+  color: var(--app-ink);
+  font-family:
+    "Inter",
+    -apple-system,
+    BlinkMacSystemFont,
+    "Segoe UI",
+    sans-serif;
+  font-size: 15px;
+  line-height: 1.6;
+  letter-spacing: -0.011em;
+  -webkit-font-smoothing: antialiased;
+}
+
+html.dark .dash-shell {
+  --app-bg: #09070f;
+  --app-surface: #12101c;
+  --app-surface-2: #191626;
+  --app-ink: #f5f4f8;
+  --app-ink-2: #c3c0d0;
+  --app-ink-3: #8b8798;
+  --app-line: rgba(255, 255, 255, 0.09);
+  --app-line-2: rgba(255, 255, 255, 0.055);
+  --app-accent: #a78bfa;
+  --app-accent-ink: #c4b5fd;
+  --app-accent-bg: rgba(124, 58, 237, 0.14);
+  --app-ok: #4ade80;
+  --app-ok-bg: rgba(34, 197, 94, 0.12);
+  --app-warn: #fbbf24;
+  --app-warn-bg: rgba(245, 158, 11, 0.12);
+  --app-danger: #f87171;
+  --app-danger-bg: rgba(239, 68, 68, 0.12);
+  --app-sidebar-bg: #0a0813;
+  --app-shadow-md: 0 4px 16px -4px rgba(0, 0, 0, 0.5);
+}
+
+/* ------------------------------------------------------------
+   PONTE COM OS COMPONENTES EXISTENTES
+   O painel é montado com componentes antigos (Card, Button, Input do shadcn e
+   os cards do LiveDashboard), desenhados para a paleta escura do app. Em vez
+   de reescrever vinte arquivos, redefinimos aqui os tokens que eles já leem:
+   `bg-card` é `var(--card)`, `text-muted-foreground` é `var(--muted-foreground)`,
+   e assim por diante. Apontando esses tokens para a paleta do painel, todo
+   componente shadcn passa a acompanhar — inclusive no escuro, porque os
+   `--app-*` já trocam sozinhos.
+   As cores de marca e de estado (primary, secondary, success, destructive)
+   ficam de fora de propósito: são decisão de identidade, não de superfície.
+   ------------------------------------------------------------ */
+.dash-shell {
+  --background: var(--app-bg);
+  --foreground: var(--app-ink);
+  --card: var(--app-surface);
+  --card-foreground: var(--app-ink);
+  --elevated: var(--app-surface-2);
+  --popover: var(--app-surface);
+  --popover-foreground: var(--app-ink);
+  --muted: var(--app-surface-2);
+  --muted-foreground: var(--app-ink-3);
+  --subtle-foreground: var(--app-ink-3);
+  --border: var(--app-line);
+  --input: var(--app-line);
+  --ring: var(--app-accent);
+}
+
+.dash-shell a {
+  color: inherit;
+  text-decoration: none;
+}
+.dash-shell .serif {
+  font-family: "Instrument Serif", Georgia, serif;
+  font-weight: 400;
+  letter-spacing: -0.01em;
+}
+
+/* ------------------------------------------------------------
+   ESTRUTURA
+   ------------------------------------------------------------ */
+.dash-shell {
+  display: grid;
+  grid-template-columns: var(--app-sidebar-w) minmax(0, 1fr);
+}
+
+.app-body {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.app-main {
+  flex: 1;
+  min-width: 0;
+  padding: 28px 32px 72px;
+}
+.app-main-wrap {
+  max-width: 1080px;
+  margin: 0 auto;
+}
+
+/* ------------------------------------------------------------
+   SIDEBAR
+   ------------------------------------------------------------ */
+.app-sidebar {
+  position: sticky;
+  top: 0;
+  height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  background: var(--app-sidebar-bg);
+  color: var(--app-sidebar-ink);
+  border-right: 1px solid var(--app-sidebar-line);
+  z-index: 40;
+}
+
+.app-sidebar-head {
+  display: flex;
+  align-items: center;
+  height: var(--app-topbar-h);
+  padding: 0 18px;
+  flex: none;
+  border-bottom: 1px solid var(--app-sidebar-line);
+}
+.app-sidebar-head img,
+.app-sidebar-head > a > div > span:first-child {
+  width: 26px;
+  height: 26px;
+}
+.app-sidebar-head span:last-child {
+  font-size: 17px;
+  letter-spacing: -0.03em;
+}
+
+.app-nav {
+  flex: 1;
+  overflow-y: auto;
+  padding: 16px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.app-nav::-webkit-scrollbar {
+  width: 6px;
+}
+.app-nav::-webkit-scrollbar-thumb {
+  background: var(--app-sidebar-line);
+  border-radius: 3px;
+}
+
+.app-nav-label {
+  padding: 14px 10px 6px;
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--app-sidebar-ink-2);
+}
+.app-nav-label:first-child {
+  padding-top: 2px;
+}
+
+.app-nav-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 9px 10px;
+  border-radius: var(--app-r-md);
+  font-size: 14px;
+  font-weight: 500;
+  letter-spacing: -0.01em;
+  color: var(--app-sidebar-ink-2);
+  background: none;
+  border: none;
+  cursor: pointer;
+  text-align: left;
+  transition:
+    background 0.16s ease,
+    color 0.16s ease;
+}
+.app-nav-item:hover {
+  background: rgba(250, 250, 250, 0.06);
+  color: var(--app-sidebar-ink);
+}
+.app-nav-item.is-active {
+  background: rgba(250, 250, 250, 0.1);
+  color: var(--app-sidebar-ink);
+  font-weight: 600;
+}
+.app-nav-item svg {
+  width: 17px;
+  height: 17px;
+  flex: none;
+  opacity: 0.85;
+}
+.app-nav-item.is-active svg {
+  color: #a78bfa;
+  opacity: 1;
+}
+.app-nav-item-label {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* pastilha à direita do item: contador, "novo", "!" */
+.app-nav-badge {
+  flex: none;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 6px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+  background: rgba(250, 250, 250, 0.12);
+  color: var(--app-sidebar-ink);
+}
+.app-nav-badge[data-tone="accent"] {
+  background: #7c3aed;
+  color: #fff;
+}
+.app-nav-badge[data-tone="ok"] {
+  background: rgba(34, 197, 94, 0.2);
+  color: #6ee7a8;
+}
+.app-nav-badge[data-tone="warn"] {
+  background: rgba(245, 158, 11, 0.2);
+  color: #fcd34d;
+}
+
+.app-nav-sep {
+  height: 1px;
+  margin: 12px 10px;
+  background: var(--app-sidebar-line);
+}
+
+.app-sidebar-foot {
+  flex: none;
+  padding: 14px 18px;
+  border-top: 1px solid var(--app-sidebar-line);
+  font-size: 11.5px;
+  color: var(--app-sidebar-ink-2);
+}
+
+/* ------------------------------------------------------------
+   TOPBAR
+   ------------------------------------------------------------ */
+.app-topbar {
+  position: sticky;
+  top: 0;
+  z-index: 30;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  min-height: var(--app-topbar-h);
+  padding: 12px 32px;
+  background: color-mix(in srgb, var(--app-bg) 82%, transparent);
+  backdrop-filter: blur(12px);
+  border-bottom: 1px solid var(--app-line);
+}
+.app-topbar-title {
+  min-width: 0;
+  flex: 1;
+}
+.app-topbar-title h1 {
+  margin: 0;
+  font-size: 19px;
+  font-weight: 700;
+  letter-spacing: -0.025em;
+  line-height: 1.25;
+}
+.app-topbar-title p {
+  margin: 2px 0 0;
+  font-size: 13px;
+  color: var(--app-ink-3);
+  line-height: 1.4;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.app-topbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: none;
+}
+
+.app-burger {
+  display: none;
+  width: 38px;
+  height: 38px;
+  place-items: center;
+  border-radius: var(--app-r-md);
+  border: 1px solid var(--app-line);
+  background: var(--app-surface);
+  color: var(--app-ink-2);
+  cursor: pointer;
+  flex: none;
+}
+
+/* ------------------------------------------------------------
+   BOTÕES
+   ------------------------------------------------------------ */
+.app-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  height: 38px;
+  padding: 0 15px;
+  border-radius: 999px;
+  border: 1px solid var(--app-line);
+  background: var(--app-surface);
+  color: var(--app-ink-2);
+  font-size: 13.5px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  cursor: pointer;
+  white-space: nowrap;
+  transition:
+    background 0.16s ease,
+    border-color 0.16s ease,
+    color 0.16s ease,
+    transform 0.12s ease;
+}
+.app-btn:hover {
+  border-color: color-mix(in srgb, var(--app-accent) 40%, var(--app-line));
+  color: var(--app-ink);
+}
+.app-btn:active {
+  transform: scale(0.97);
+}
+.app-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.app-btn svg {
+  width: 15px;
+  height: 15px;
+  flex: none;
+}
+.app-btn--primary {
+  background: #7c3aed;
+  border-color: #7c3aed;
+  color: #fff;
+  box-shadow: 0 4px 16px -6px rgba(124, 58, 237, 0.6);
+}
+.app-btn--primary:hover {
+  background: #6d28d9;
+  border-color: #6d28d9;
+  color: #fff;
+}
+.app-btn--ghost {
+  background: none;
+  border-color: transparent;
+}
+.app-btn--ghost:hover {
+  background: var(--app-surface-2);
+}
+.app-btn--sm {
+  height: 32px;
+  padding: 0 12px;
+  font-size: 12.5px;
+}
+
+/* ------------------------------------------------------------
+   CARTÕES E BLOCOS
+   ------------------------------------------------------------ */
+.app-card {
+  background: var(--app-surface);
+  border: 1px solid var(--app-line);
+  border-radius: var(--app-r-lg);
+  padding: 20px;
+  box-shadow: var(--app-shadow-sm);
+}
+.app-card--flat {
+  box-shadow: none;
+  background: var(--app-surface-2);
+}
+.app-card-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+  margin-bottom: 14px;
+}
+.app-card-title {
+  margin: 0;
+  font-size: 15.5px;
+  font-weight: 700;
+  letter-spacing: -0.018em;
+}
+.app-card-desc {
+  margin: 3px 0 0;
+  font-size: 13.5px;
+  color: var(--app-ink-3);
+  line-height: 1.5;
+}
+
+.app-grid {
+  display: grid;
+  gap: 16px;
+}
+.app-grid--2 {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+.app-grid--3 {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+.app-grid--4 {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+.app-grid--5 {
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+}
+
+/* cartão de número: rótulo pequeno em cima, valor grande embaixo */
+.app-stat {
+  background: var(--app-surface);
+  border: 1px solid var(--app-line);
+  border-radius: var(--app-r-lg);
+  padding: 16px 18px;
+}
+.app-stat-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11.5px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--app-ink-3);
+}
+.app-stat-label svg {
+  width: 14px;
+  height: 14px;
+}
+.app-stat-value {
+  margin-top: 6px;
+  font-size: 26px;
+  font-weight: 700;
+  letter-spacing: -0.03em;
+  line-height: 1.1;
+}
+.app-stat-hint {
+  margin-top: 3px;
+  font-size: 12.5px;
+  color: var(--app-ink-3);
+}
+/* o número em si ganha cor quando o próprio valor é o alerta — custo no
+   vermelho, margem no verde. O rótulo continua neutro. */
+.app-stat-value[data-tone="ok"] {
+  color: var(--app-ok);
+}
+.app-stat-value[data-tone="warn"] {
+  color: var(--app-warn);
+}
+.app-stat-value[data-tone="danger"] {
+  color: var(--app-danger);
+}
+.app-stat-value[data-tone="accent"] {
+  color: var(--app-accent-ink);
+}
+
+/* etiqueta de estado */
+.app-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 9px;
+  border-radius: 999px;
+  font-size: 11.5px;
+  font-weight: 700;
+  letter-spacing: -0.005em;
+  background: var(--app-surface-2);
+  color: var(--app-ink-2);
+}
+.app-tag svg {
+  width: 12px;
+  height: 12px;
+}
+.app-tag[data-tone="ok"] {
+  background: var(--app-ok-bg);
+  color: var(--app-ok);
+}
+.app-tag[data-tone="warn"] {
+  background: var(--app-warn-bg);
+  color: var(--app-warn);
+}
+.app-tag[data-tone="danger"] {
+  background: var(--app-danger-bg);
+  color: var(--app-danger);
+}
+.app-tag[data-tone="accent"] {
+  background: var(--app-accent-bg);
+  color: var(--app-accent-ink);
+}
+
+/* ------------------------------------------------------------
+   PASSO A PASSO
+   ------------------------------------------------------------ */
+.app-progress {
+  height: 6px;
+  border-radius: 999px;
+  background: var(--app-surface-2);
+  overflow: hidden;
+}
+.app-progress-fill {
+  height: 100%;
+  border-radius: 999px;
+  background: linear-gradient(90deg, #7c3aed, #a78bfa);
+  transition: width 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* barra de dois segmentos (tokens de entrada vs saída): os dois preenchimentos
+   dividem a mesma trilha, então cada um leva sua própria largura em % */
+.app-progress--split {
+  display: flex;
+}
+.app-progress--split .app-progress-fill {
+  border-radius: 0;
+}
+.app-progress--split .app-progress-fill:first-child {
+  border-radius: 999px 0 0 999px;
+}
+.app-progress--split .app-progress-fill:last-child {
+  border-radius: 0 999px 999px 0;
+  background: linear-gradient(90deg, #c4b5fd, #ddd6fe);
+}
+
+.app-steps {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.app-step {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  width: 100%;
+  padding: 13px 14px;
+  border-radius: var(--app-r-md);
+  border: 1px solid var(--app-line);
+  background: var(--app-surface);
+  text-align: left;
+  cursor: pointer;
+  transition:
+    border-color 0.16s ease,
+    background 0.16s ease;
+}
+.app-step:hover {
+  border-color: color-mix(in srgb, var(--app-accent) 35%, var(--app-line));
+}
+.app-step[data-state="done"] {
+  background: var(--app-surface-2);
+  border-color: transparent;
+}
+.app-step[data-state="current"] {
+  border-color: var(--app-accent);
+  box-shadow: 0 0 0 3px var(--app-accent-bg);
+}
+.app-step-num {
+  flex: none;
+  width: 24px;
+  height: 24px;
+  display: grid;
+  place-items: center;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 700;
+  background: var(--app-surface-2);
+  color: var(--app-ink-3);
+}
+.app-step[data-state="done"] .app-step-num {
+  background: var(--app-ok-bg);
+  color: var(--app-ok);
+}
+.app-step[data-state="current"] .app-step-num {
+  background: #7c3aed;
+  color: #fff;
+}
+.app-step-num svg {
+  width: 13px;
+  height: 13px;
+}
+.app-step-body {
+  flex: 1;
+  min-width: 0;
+}
+.app-step-title {
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: -0.012em;
+}
+.app-step[data-state="done"] .app-step-title {
+  color: var(--app-ink-3);
+  text-decoration: line-through;
+  text-decoration-color: var(--app-line);
+}
+.app-step-desc {
+  margin-top: 2px;
+  font-size: 13px;
+  color: var(--app-ink-3);
+  line-height: 1.45;
+}
+
+/* ------------------------------------------------------------
+   TÍTULOS DE SEÇÃO
+   ------------------------------------------------------------ */
+.app-section {
+  margin-bottom: 28px;
+}
+.app-section:last-child {
+  margin-bottom: 0;
+}
+.app-section-head {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 14px;
+  margin-bottom: 14px;
+}
+.app-section-title {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--app-ink-3);
+}
+
+/* ------------------------------------------------------------
+   TABELAS
+   O admin é ferramenta de trabalho: a tabela é densa de propósito e o
+   scroll horizontal fica no wrapper, nunca no corpo da página.
+   ------------------------------------------------------------ */
+.app-main-wrap--wide {
+  max-width: 1440px;
+}
+
+.app-table-wrap {
+  overflow-x: auto;
+  border: 1px solid var(--app-line);
+  border-radius: var(--app-r-lg);
+  background: var(--app-surface);
+}
+.app-table-wrap::-webkit-scrollbar {
+  height: 8px;
+}
+.app-table-wrap::-webkit-scrollbar-thumb {
+  background: var(--app-line);
+  border-radius: 4px;
+}
+
+.app-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13.5px;
+}
+.app-table th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  padding: 10px 14px;
+  text-align: left;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--app-ink-3);
+  background: var(--app-surface-2);
+  border-bottom: 1px solid var(--app-line);
+  white-space: nowrap;
+}
+.app-table td {
+  padding: 11px 14px;
+  border-bottom: 1px solid var(--app-line-2);
+  vertical-align: middle;
+}
+.app-table tbody tr:last-child td {
+  border-bottom: none;
+}
+.app-table tbody tr:hover td {
+  background: var(--app-surface-2);
+}
+.app-table tr[data-tone="danger"] td {
+  background: var(--app-danger-bg);
+}
+.app-table tr[data-tone="warn"] td {
+  background: var(--app-warn-bg);
+}
+.app-table tr[data-tone="ok"] td {
+  background: var(--app-ok-bg);
+}
+/* números alinham à direita e usam largura fixa por dígito, senão a coluna dança */
+.app-table .num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+.app-table-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px;
+  white-space: nowrap;
+}
+
+/* ------------------------------------------------------------
+   FORMULÁRIOS
+   ------------------------------------------------------------ */
+.app-input,
+.app-select,
+.app-textarea {
+  width: 100%;
+  padding: 0 12px;
+  height: 38px;
+  border-radius: var(--app-r-md);
+  border: 1px solid var(--app-line);
+  background: var(--app-surface);
+  color: var(--app-ink);
+  font: inherit;
+  font-size: 14px;
+  transition:
+    border-color 0.16s ease,
+    box-shadow 0.16s ease;
+}
+.app-textarea {
+  height: auto;
+  min-height: 96px;
+  padding: 10px 12px;
+  line-height: 1.55;
+  resize: vertical;
+}
+.app-input::placeholder,
+.app-textarea::placeholder {
+  color: var(--app-ink-3);
+}
+.app-input:focus,
+.app-select:focus,
+.app-textarea:focus {
+  outline: none;
+  border-color: var(--app-accent);
+  box-shadow: 0 0 0 3px var(--app-accent-bg);
+}
+.app-input:disabled,
+.app-select:disabled,
+.app-textarea:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+.app-select {
+  appearance: none;
+  padding-right: 32px;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23767680' stroke-width='2.5' stroke-linecap='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 10px center;
+  background-size: 15px;
+}
+
+.app-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.app-field > label {
+  font-size: 12.5px;
+  font-weight: 600;
+  letter-spacing: -0.005em;
+  color: var(--app-ink-2);
+}
+.app-field-hint {
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--app-ink-3);
+}
+
+/* barra de busca e filtros acima de uma tabela; a última ação encosta à direita */
+.app-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 14px;
+}
+.app-toolbar .app-input {
+  width: auto;
+  min-width: 220px;
+  flex: 1;
+}
+.app-toolbar-end {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* grupo de botões exclusivos entre si */
+.app-segment {
+  display: inline-flex;
+  padding: 3px;
+  gap: 2px;
+  border-radius: 999px;
+  border: 1px solid var(--app-line);
+  background: var(--app-surface-2);
+}
+.app-segment button {
+  padding: 5px 13px;
+  border: none;
+  border-radius: 999px;
+  background: none;
+  color: var(--app-ink-3);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+  transition:
+    background 0.16s ease,
+    color 0.16s ease;
+}
+.app-segment button:hover {
+  color: var(--app-ink);
+}
+.app-segment button[aria-pressed="true"],
+.app-segment button.is-active {
+  background: var(--app-surface);
+  color: var(--app-ink);
+  box-shadow: var(--app-shadow-sm);
+}
+
+/* ------------------------------------------------------------
+   AVISOS E ESTADOS
+   ------------------------------------------------------------ */
+.app-alert {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 12px 14px;
+  border-radius: var(--app-r-md);
+  border: 1px solid transparent;
+  font-size: 13.5px;
+  line-height: 1.5;
+  background: var(--app-surface-2);
+  color: var(--app-ink-2);
+}
+.app-alert svg {
+  width: 16px;
+  height: 16px;
+  flex: none;
+  margin-top: 2px;
+}
+.app-alert[data-tone="info"] {
+  background: var(--app-accent-bg);
+  border-color: color-mix(in srgb, var(--app-accent) 22%, transparent);
+  color: var(--app-accent-ink);
+}
+.app-alert[data-tone="warn"] {
+  background: var(--app-warn-bg);
+  border-color: color-mix(in srgb, var(--app-warn) 26%, transparent);
+  color: var(--app-warn);
+}
+.app-alert[data-tone="danger"] {
+  background: var(--app-danger-bg);
+  border-color: color-mix(in srgb, var(--app-danger) 26%, transparent);
+  color: var(--app-danger);
+}
+
+.app-empty,
+.app-loading {
+  padding: 48px 20px;
+  text-align: center;
+  font-size: 14px;
+  color: var(--app-ink-3);
+}
+.app-empty-title {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--app-ink-2);
+  margin-bottom: 4px;
+}
+
+/* bolinha de status; só pulsa quando a conexão está de fato viva */
+.app-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  flex: none;
+  border-radius: 999px;
+  background: var(--app-ink-3);
+}
+.app-dot--live {
+  background: var(--app-ok);
+  box-shadow: 0 0 0 0 color-mix(in srgb, var(--app-ok) 60%, transparent);
+  animation: app-dot-pulse 2s ease-out infinite;
+}
+.app-dot--down {
+  background: var(--app-danger);
+}
+@keyframes app-dot-pulse {
+  0% {
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--app-ok) 55%, transparent);
+  }
+  70% {
+    box-shadow: 0 0 0 6px transparent;
+  }
+  100% {
+    box-shadow: 0 0 0 0 transparent;
+  }
+}
+
+.app-link-ext {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--app-accent-ink);
+  text-decoration: none;
+}
+.app-link-ext:hover {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.app-link-ext svg {
+  width: 13px;
+  height: 13px;
+}
+
+/* ------------------------------------------------------------
+   PONTE — CORES FIXAS DO TEMA ESCURO
+   O que sobra depois dos tokens: componentes que escreveram a cor na mão
+   (`text-white`, `bg-black/40`, `text-slate-300`). Mesma técnica que o
+   `marketing-theme.css` já usa para as telas antigas.
+
+   Duas restrições que fazem a regra ser correta e não só conveniente:
+   - só sob `html.light`, porque no escuro essas cores estão certas;
+   - só dentro de `.app-main` e `.app-topbar`. A sidebar é escura, e lá o
+     `text-white` da logo é o valor desejado — incluir `.dash-shell` inteiro
+     apagaria a marca contra o próprio fundo.
+
+   Isto é ponte, não destino: conforme cada componente for migrado para os
+   utilitários `app-*`, o seletor correspondente aqui pode sair.
+   ------------------------------------------------------------ */
+html.light .dash-shell :is(.app-main, .app-topbar) [class*="bg-white/"],
+html.light .dash-shell :is(.app-main, .app-topbar) [class*="bg-black/"],
+html.light .dash-shell :is(.app-main, .app-topbar) [class*="bg-[#171326]"] {
+  background-color: var(--app-surface) !important;
+  background-image: none !important;
+  border-color: var(--app-line) !important;
+}
+html.light .dash-shell :is(.app-main, .app-topbar) [class*="border-white/"] {
+  border-color: var(--app-line) !important;
+}
+
+html.light .dash-shell :is(.app-main, .app-topbar) [class~="text-white"],
+html.light .dash-shell :is(.app-main, .app-topbar) [class*="text-white/"] {
+  color: var(--app-ink-2) !important;
+}
+/* título mantém o contraste cheio; corpo fica um tom abaixo */
+html.light .dash-shell :is(.app-main, .app-topbar) :is(h1, h2, h3, h4)[class~="text-white"],
+html.light .dash-shell :is(.app-main, .app-topbar) :is(h1, h2, h3, h4)[class*="text-white/"] {
+  color: var(--app-ink) !important;
+}
+
+/* cinzas claros → tinta terciária */
+html.light .dash-shell :is(.app-main, .app-topbar) [class*="text-slate-2"],
+html.light .dash-shell :is(.app-main, .app-topbar) [class*="text-slate-3"],
+html.light .dash-shell :is(.app-main, .app-topbar) [class*="text-slate-4"],
+html.light .dash-shell :is(.app-main, .app-topbar) [class*="text-zinc-3"],
+html.light .dash-shell :is(.app-main, .app-topbar) [class*="text-zinc-4"],
+html.light .dash-shell :is(.app-main, .app-topbar) [class*="text-gray-3"],
+html.light .dash-shell :is(.app-main, .app-topbar) [class*="text-gray-4"] {
+  color: var(--app-ink-3) !important;
+}
+
+/* tons de marca e de estado calibrados para fundo escuro */
+html.light .dash-shell :is(.app-main, .app-topbar) [class*="text-purple-2"],
+html.light .dash-shell :is(.app-main, .app-topbar) [class*="text-purple-3"],
+html.light .dash-shell :is(.app-main, .app-topbar) [class*="text-purple-4"],
+html.light .dash-shell :is(.app-main, .app-topbar) [class*="text-violet-3"],
+html.light .dash-shell :is(.app-main, .app-topbar) [class*="text-violet-4"] {
+  color: var(--app-accent-ink) !important;
+}
+html.light .dash-shell :is(.app-main, .app-topbar) [class*="text-emerald-1"],
+html.light .dash-shell :is(.app-main, .app-topbar) [class*="text-emerald-3"],
+html.light .dash-shell :is(.app-main, .app-topbar) [class*="text-emerald-4"],
+html.light .dash-shell :is(.app-main, .app-topbar) [class*="text-green-3"],
+html.light .dash-shell :is(.app-main, .app-topbar) [class*="text-green-4"] {
+  color: var(--app-ok) !important;
+}
+html.light .dash-shell :is(.app-main, .app-topbar) [class*="text-amber-1"],
+html.light .dash-shell :is(.app-main, .app-topbar) [class*="text-amber-3"],
+html.light .dash-shell :is(.app-main, .app-topbar) [class*="text-amber-4"],
+html.light .dash-shell :is(.app-main, .app-topbar) [class*="text-yellow-3"],
+html.light .dash-shell :is(.app-main, .app-topbar) [class*="text-yellow-4"] {
+  color: var(--app-warn) !important;
+}
+html.light .dash-shell :is(.app-main, .app-topbar) [class*="text-red-3"],
+html.light .dash-shell :is(.app-main, .app-topbar) [class*="text-red-4"],
+html.light .dash-shell :is(.app-main, .app-topbar) [class*="text-rose-3"],
+html.light .dash-shell :is(.app-main, .app-topbar) [class*="text-rose-4"] {
+  color: var(--app-danger) !important;
+}
+
+/* ------------------------------------------------------------
+   MOBILE — a sidebar vira gaveta
+   ------------------------------------------------------------ */
+.app-scrim {
+  display: none;
+}
+
+@media (max-width: 1100px) {
+  .app-main,
+  .app-topbar {
+    padding-left: 20px;
+    padding-right: 20px;
+  }
+  .app-grid--4,
+  .app-grid--5 {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 900px) {
+  .dash-shell {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .app-burger {
+    display: grid;
+  }
+  .app-sidebar {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: min(84vw, var(--app-sidebar-w));
+    transform: translateX(-102%);
+    transition: transform 0.24s cubic-bezier(0.4, 0, 0.2, 1);
+    box-shadow: 0 0 60px rgba(0, 0, 0, 0.4);
+    z-index: 60;
+  }
+  .app-sidebar[data-open="true"] {
+    transform: translateX(0);
+  }
+  .app-scrim {
+    display: block;
+    position: fixed;
+    inset: 0;
+    z-index: 50;
+    background: rgba(12, 12, 13, 0.5);
+    backdrop-filter: blur(2px);
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.24s ease;
+  }
+  .app-scrim[data-open="true"] {
+    opacity: 1;
+    pointer-events: auto;
+  }
+  .app-grid--2,
+  .app-grid--3,
+  .app-grid--4,
+  .app-grid--5 {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .app-toolbar .app-input {
+    width: 100%;
+    flex: none;
+  }
+  .app-toolbar-end {
+    margin-left: 0;
+  }
+  .app-topbar-title p {
+    display: none;
+  }
+}
+
+@media (max-width: 560px) {
+  .app-main {
+    padding: 20px 14px 56px;
+  }
+  .app-topbar {
+    padding: 10px 14px;
+  }
+  .app-topbar-title h1 {
+    font-size: 17px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .app-sidebar,
+  .app-scrim,
+  .app-progress-fill {
+    transition: none;
+  }
+}

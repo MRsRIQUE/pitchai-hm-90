@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import {
@@ -14,6 +14,7 @@ import { toast } from "sonner";
 import { Link } from "@tanstack/react-router";
 import confetti from "canvas-confetti";
 import { connectSyncTokenToExtension } from "@/lib/live/extension-sync";
+import { useExtensionInstalled } from "@/components/live/LiveDashboard/sections/useExtensionInstalled";
 
 export function fireSuccessConfetti() {
   try {
@@ -29,44 +30,19 @@ export function fireSuccessConfetti() {
 }
 
 export function ExtensionStatusBanner({ syncToken }: { syncToken?: string }) {
-  const [installed, setInstalled] = useState<boolean>(() => {
-    return (
-      typeof window !== "undefined" &&
-      (Boolean((window as any).pitchAiExtensionInstalled) ||
-        Boolean(document.documentElement.getAttribute("data-pitchai-extension")))
-    );
-  });
+  // A detecção é compartilhada com o passo a passo do Início — antes cada um
+  // tinha o próprio polling e os dois podiam discordar por alguns segundos.
+  const installed = useExtensionInstalled();
   const [synced, setSynced] = useState<boolean>(false);
   const [syncing, setSyncing] = useState<boolean>(false);
 
+  // Confete só na virada: quem abre o painel com a extensão já instalada não
+  // ganhou nada agora.
+  const eraInstalada = useRef(installed);
   useEffect(() => {
-    function handleDetected() {
-      setInstalled(true);
-      fireSuccessConfetti();
-    }
-
-    window.addEventListener("pitchai-extension-detected", handleDetected);
-
-    // Polling para detectar a flag injetada pela extensão.
-    // Para assim que detectada (evita polling infinito em SPA).
-    const interval = setInterval(() => {
-      if (
-        (window as any).pitchAiExtensionInstalled ||
-        document.documentElement.getAttribute("data-pitchai-extension")
-      ) {
-        setInstalled((prev) => {
-          if (!prev) fireSuccessConfetti();
-          return true;
-        });
-        clearInterval(interval);
-      }
-    }, 1500);
-
-    return () => {
-      window.removeEventListener("pitchai-extension-detected", handleDetected);
-      clearInterval(interval);
-    };
-  }, []);
+    if (installed && !eraInstalada.current) fireSuccessConfetti();
+    eraInstalada.current = installed;
+  }, [installed]);
 
   const handleCopyChromeUrl = () => {
     navigator.clipboard.writeText("chrome://extensions");

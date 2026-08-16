@@ -167,7 +167,7 @@ export function VoiceSettings({
   }
 
   return (
-    <div id="sec-voz" className="scroll-mt-24 pt-2">
+    <div>
       <h4 className="mb-3 font-display text-sm font-semibold">
         Voz da IA
         <span className="ml-2 font-sans text-xs font-normal text-muted-foreground">

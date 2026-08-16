@@ -1,0 +1,756 @@
+/* ============================================================
+   SITE PAGE — moldura + nav da LP nas páginas internas
+   Complementa `landing.css`: só o que as páginas internas precisam além
+   do que a home já usa. Continua escopado sob `.landing`.
+   ============================================================ */
+
+/* A nav é fixed, então o conteúdo abre o mesmo espaço que o hero da home. */
+.landing .site-page-body {
+  padding-top: 150px;
+  padding-bottom: 96px;
+  position: relative;
+  z-index: 1;
+}
+
+/* Páginas com `grid={false}`: o canvas já não é montado, aqui some também o
+   quadriculado estático que o landing.css desenha no `::before`. */
+.landing.no-grid::before {
+  display: none;
+}
+
+/* O menu mobile lista rotas e o "Sair", que é um <button>; o landing.css só
+   estiliza os <a> do sheet, então o botão herda o mesmo tratamento aqui. */
+.landing .lp-nav-sheet button {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 10px 4px;
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: var(--frame-ink);
+  opacity: 0.86;
+}
+.landing .lp-nav-sheet button:hover {
+  opacity: 1;
+}
+
+/* ------------------------------------------------------------
+   CABEÇALHO DE PÁGINA
+   Reaproveita o `.sec-head` da LP (largura, respiro, eyebrow e lede já vêm
+   de lá). Só o h1 desce de tamanho: aqui ele é título de página, não a
+   manchete do hero. Escopado sob `.site-page-body` para não alcançar a home.
+   ------------------------------------------------------------ */
+.landing .site-page-body .sec-head h1 {
+  font-size: clamp(30px, 4vw, 42px);
+  line-height: 1.06;
+  letter-spacing: -0.034em;
+  font-weight: 600;
+  margin-bottom: 14px;
+}
+
+/* Estados de lista (carregando, vazio, erro) — mesma pausa em todas as
+   páginas internas. */
+.landing .site-page-note {
+  padding: 56px 0;
+  text-align: center;
+  font-size: 15px;
+  color: var(--ink-3);
+}
+
+/* O selo do `.badge` da LP aqui costuma levar um ícone junto do texto; sem
+   isto ele quebra em duas linhas e estoura a altura fixa da pastilha. */
+.landing .site-page-body .badge b {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  white-space: nowrap;
+}
+
+/* Linha de apoio logo abaixo do cabeçalho: sessão do usuário, avisos curtos. */
+.landing .site-page-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 14px;
+  margin-top: 18px;
+  font-size: 13.5px;
+  color: var(--ink-3);
+}
+.landing .site-page-meta a {
+  color: var(--accent-ink);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.landing .site-page-meta strong {
+  font-weight: 600;
+  color: var(--ink-2);
+}
+
+/* Bloco secundário, depois do conteúdo principal da página. */
+.landing .site-page-more {
+  margin-top: 72px;
+}
+.landing .site-page-stack {
+  display: grid;
+  gap: 16px;
+}
+
+/* ------------------------------------------------------------
+   /PLANOS — aviso de voz dentro do card de plano
+   O card inteiro é o `.plan` da LP; só esta faixa não tem primitivo lá.
+   ------------------------------------------------------------ */
+.landing .plan-audio {
+  display: flex;
+  gap: 9px;
+  margin-bottom: 18px;
+  padding: 11px 12px;
+  border: 1px solid rgba(109, 40, 217, 0.16);
+  border-radius: var(--r-md);
+  background: var(--accent-bg);
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--ink-2);
+}
+.landing .plan-audio svg {
+  flex: none;
+  width: 14px;
+  height: 14px;
+  margin-top: 2px;
+  color: var(--accent-ink);
+}
+.landing .plan-audio strong {
+  display: block;
+  font-weight: 600;
+  color: var(--ink);
+}
+/* plano sem voz: mesma caixa em tom neutro, sem pintar de alarme */
+.landing .plan-audio.is-off {
+  border-color: var(--line);
+  background: var(--surface-2);
+}
+.landing .plan-audio.is-off svg {
+  color: var(--ink-3);
+}
+
+/* ------------------------------------------------------------
+   /DOWNLOAD
+   ------------------------------------------------------------ */
+.landing .dl-banner {
+  margin-bottom: 34px;
+}
+/* O ExtensionStatusBanner é de outro dono e ainda traz utilitários do tema
+   escuro (text-white, text-slate-300). Sobre o fundo claro da LP eles somem;
+   até o componente ser migrado, só a cor do texto é corrigida aqui. */
+.landing .dl-banner .text-white {
+  color: var(--ink);
+}
+.landing .dl-banner .text-slate-300,
+.landing .dl-banner .text-amber-100,
+.landing .dl-banner .text-amber-300 {
+  color: var(--ink-2);
+}
+.landing .dl-banner .text-amber-400 {
+  color: var(--ink-3);
+}
+.landing .dl-banner .text-emerald-100,
+.landing .dl-banner .text-emerald-300,
+.landing .dl-banner .text-emerald-400 {
+  color: var(--ok);
+}
+
+.landing .card.dl-hero {
+  flex-direction: row;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+}
+.landing .dl-file {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  min-width: 0;
+}
+.landing .dl-file-ic {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 52px;
+  height: 52px;
+  border-radius: var(--r-md);
+  background: var(--accent);
+  color: #fff;
+}
+.landing .dl-file-ic svg {
+  width: 24px;
+  height: 24px;
+}
+.landing .dl-file-name {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  font-size: 17px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+}
+.landing .dl-tags {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 7px 12px;
+  margin-top: 7px;
+  font-size: 12.5px;
+  color: var(--ink-3);
+}
+.landing .dl-pill {
+  padding: 3px 8px;
+  border-radius: 999px;
+  background: var(--accent-bg);
+  color: var(--accent-ink);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+}
+.landing .dl-safe {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--ok);
+}
+.landing .dl-safe svg {
+  width: 13px;
+  height: 13px;
+}
+
+.landing .dl-help-btn {
+  margin-bottom: 18px;
+}
+.landing .dl-help-btn svg {
+  width: 14px;
+  height: 14px;
+}
+.landing .dl-help-chev {
+  transition: transform 0.18s ease;
+}
+.landing .dl-help-chev.is-open {
+  transform: rotate(180deg);
+}
+.landing .card.dl-help {
+  margin-bottom: 18px;
+  gap: 10px;
+}
+.landing .dl-help h3 {
+  font-size: 14.5px;
+  font-weight: 600;
+}
+.landing .dl-help code {
+  padding: 1px 5px;
+  border: 1px solid var(--line-2);
+  border-radius: 5px;
+  background: var(--surface-2);
+  font-size: 12.5px;
+}
+
+/* o botão de copiar mora dentro do card do passo 2 */
+.landing .dl-steps .btn {
+  align-self: flex-start;
+  height: 32px;
+  margin-top: 14px;
+  padding: 0 12px;
+  font-size: 12.5px;
+}
+.landing .dl-steps .btn svg {
+  width: 13px;
+  height: 13px;
+}
+.landing .dl-steps .step-n {
+  margin-bottom: 14px;
+}
+.landing .card.dl-next {
+  margin-top: 28px;
+}
+.landing .dl-next p {
+  font-size: 14.5px;
+}
+.landing .dl-next strong {
+  font-weight: 600;
+  color: var(--ink);
+}
+.landing .dl-next a {
+  color: var(--accent-ink);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+/* ------------------------------------------------------------
+   /INDIQUE — programa de afiliados
+   ------------------------------------------------------------ */
+.landing .rf-stack {
+  display: grid;
+  gap: 22px;
+}
+/* dentro da pilha o respiro é do gap, não do próprio cabeçalho */
+.landing .rf-stack .sec-head {
+  margin-bottom: 0;
+}
+
+.landing .card.rf-signin {
+  align-items: center;
+  gap: 16px;
+  padding: 40px 24px;
+  text-align: center;
+}
+.landing .rf-signin p {
+  color: var(--ink-2);
+}
+
+.landing .card.rf-activate,
+.landing .card.rf-link-card,
+.landing .card.rf-table-card {
+  padding: 22px 22px 24px;
+}
+.landing .rf-activate h3,
+.landing .rf-link-card h3 {
+  font-size: 16px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  margin-bottom: 6px;
+}
+.landing .rf-terms {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin: 14px 0;
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--ink-2);
+  cursor: pointer;
+}
+.landing .rf-terms input {
+  margin-top: 2px;
+  accent-color: var(--accent);
+}
+.landing .rf-activate-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+.landing .rf-activate-btn {
+  align-self: flex-start;
+}
+
+.landing .rf-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 14px;
+}
+.landing .rf-link {
+  flex: 1 1 280px;
+  min-width: 0;
+  height: 36px;
+  padding: 0 12px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: var(--surface-2);
+  color: var(--ink);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 13px;
+  outline: none;
+}
+.landing .rf-link:focus {
+  border-color: var(--accent);
+}
+.landing .rf-code {
+  margin-top: 12px;
+  font-size: 12px;
+  color: var(--ink-3);
+}
+.landing .rf-code b {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-weight: 500;
+  color: var(--ink-2);
+}
+
+.landing .rf-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.landing .rf-head h2 {
+  margin-bottom: 0;
+  font-size: 17px;
+  letter-spacing: -0.02em;
+}
+.landing .rf-filters {
+  display: inline-flex;
+  gap: 2px;
+  padding: 3px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--surface-2);
+}
+.landing .rf-filter {
+  padding: 5px 12px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--ink-3);
+  transition:
+    background 0.15s ease,
+    color 0.15s ease;
+}
+.landing .rf-filter:hover {
+  color: var(--ink);
+}
+.landing .rf-filter.is-on {
+  background: var(--accent);
+  color: #fff;
+}
+
+.landing .rf-scroll {
+  margin-top: 18px;
+  overflow-x: auto;
+}
+.landing .rf-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13.5px;
+}
+.landing .rf-table th {
+  padding: 0 12px 10px 0;
+  border-bottom: 1px solid var(--line);
+  text-align: left;
+  font-size: 11.5px;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+  white-space: nowrap;
+}
+.landing .rf-table td {
+  padding: 11px 12px 11px 0;
+  border-bottom: 1px solid var(--line-2);
+  color: var(--ink-2);
+  white-space: nowrap;
+}
+/* as colunas numéricas encostam quando a tabela rola no celular */
+.landing .rf-table .num {
+  padding-right: 0;
+  padding-left: 18px;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+.landing .rf-table .rf-plan {
+  font-size: 12px;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  color: var(--ink);
+}
+.landing .rf-table .rf-comm {
+  font-weight: 600;
+  color: var(--ink);
+}
+.landing .rf-status {
+  display: inline-block;
+  padding: 3px 9px;
+  border-radius: 999px;
+  background: var(--surface-2);
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--ink-2);
+  text-transform: capitalize;
+}
+.landing .rf-status.is-pago {
+  background: var(--accent-bg);
+  color: var(--accent-ink);
+}
+.landing .rf-foot {
+  margin-top: 18px;
+  font-size: 12px;
+  color: var(--ink-3);
+}
+/* a nota e os estados vazios já vivem dentro do card: menos respiro */
+.landing .rf-table-card .site-page-note {
+  padding: 30px 0 6px;
+}
+
+/* ------------------------------------------------------------
+   /LIVES — histórico de sessões
+   ------------------------------------------------------------ */
+.landing .lv-back {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.landing .lv-back svg {
+  width: 14px;
+  height: 14px;
+}
+.landing .lv-spin {
+  width: 15px;
+  height: 15px;
+  animation: lv-spin 0.9s linear infinite;
+}
+@keyframes lv-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.landing .lv-stats {
+  margin-bottom: 26px;
+}
+.landing .card.lv-empty {
+  gap: 8px;
+  text-align: center;
+  padding: 40px 24px;
+}
+.landing .lv-empty h3 {
+  font-size: 16px;
+  font-weight: 600;
+}
+.landing .lv-empty p {
+  font-size: 14px;
+  color: var(--ink-2);
+}
+.landing .lv-empty a {
+  color: var(--accent-ink);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.landing .lv-list {
+  display: grid;
+  gap: 10px;
+}
+/* numa lista longa o levantar do `.card` vira agitação: fica só o realce */
+.landing .card.lv-row {
+  flex-direction: row;
+  align-items: flex-start;
+  gap: 16px;
+  padding: 16px 18px;
+}
+.landing .card.lv-row:hover {
+  transform: none;
+  box-shadow: var(--shadow-md);
+}
+.landing .lv-row-main {
+  flex: 1;
+  min-width: 0;
+}
+.landing .lv-title {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: -0.015em;
+}
+.landing .lv-dur {
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--surface-2);
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--ink-3);
+}
+.landing .lv-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 16px;
+  margin-top: 8px;
+  font-size: 12.5px;
+  color: var(--ink-3);
+}
+.landing .lv-meta span {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+.landing .lv-meta svg {
+  width: 12px;
+  height: 12px;
+}
+.landing .lv-cost {
+  font-weight: 600;
+  color: var(--ink);
+}
+.landing .lv-products {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 10px;
+}
+.landing .lv-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 9px;
+  border-radius: 999px;
+  background: var(--accent-bg);
+  color: var(--accent-ink);
+  font-size: 11.5px;
+}
+.landing .lv-tag svg {
+  width: 11px;
+  height: 11px;
+}
+.landing .lv-more {
+  align-self: center;
+  font-size: 11.5px;
+  color: var(--ink-3);
+}
+.landing .btn.lv-del {
+  flex: none;
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  border-radius: 9px;
+}
+.landing .btn.lv-del svg {
+  width: 15px;
+  height: 15px;
+}
+.landing .btn.lv-del:hover {
+  color: #dc2626;
+}
+
+/* ------------------------------------------------------------
+   /QUENTES — grade do ranking
+   O card é um `.card` da LP (borda, sombra, hover e dark mode saem de lá);
+   aqui só tiramos o respiro interno para a capa sangrar até a borda.
+   ------------------------------------------------------------ */
+.landing .hot-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(232px, 1fr));
+  gap: 16px;
+}
+.landing .card.hot-card {
+  padding: 0;
+}
+.landing .hot-cover {
+  position: relative;
+  flex: none;
+  aspect-ratio: 4 / 3;
+  background: var(--surface-2);
+  border-bottom: 1px solid var(--line);
+}
+.landing .hot-cover img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.landing .hot-cover-empty {
+  display: grid;
+  place-items: center;
+  height: 100%;
+  font-size: 32px;
+}
+.landing .hot-rank,
+.landing .hot-flag {
+  position: absolute;
+  top: 10px;
+  padding: 5px 9px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1;
+}
+/* as duas pastilhas ficam sobre a foto, então não podem depender dos tokens
+   de tema: pretinho translúcido e roxo da marca funcionam no claro e no escuro */
+.landing .hot-rank {
+  left: 10px;
+  background: rgba(12, 12, 13, 0.72);
+  color: #fff;
+  font-variant-numeric: tabular-nums;
+  backdrop-filter: blur(4px);
+}
+.landing .hot-flag {
+  right: 10px;
+  background: var(--accent);
+  color: #fff;
+}
+.landing .hot-body {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 8px;
+  padding: 16px 16px 18px;
+}
+.landing .hot-body .card-tag {
+  margin-bottom: 0;
+}
+.landing .hot-name {
+  display: -webkit-box;
+  overflow: hidden;
+  font-size: 14.5px;
+  font-weight: 580;
+  line-height: 1.4;
+  letter-spacing: -0.018em;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+.landing .hot-foot {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: auto;
+  padding-top: 4px;
+}
+.landing .hot-price {
+  font-size: 18px;
+  font-weight: 640;
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.landing .hot-meta {
+  margin-top: 2px;
+  font-size: 11.5px;
+  color: var(--ink-3);
+}
+/* o botão da LP encolhe dentro do card para não competir com o preço */
+.landing .hot-card .btn {
+  flex: none;
+  height: 32px;
+  padding: 0 13px;
+  font-size: 13px;
+}
+
+@media (max-width: 850px) {
+  .landing .site-page-body {
+    padding-top: 104px;
+    padding-bottom: 72px;
+  }
+}
+
+@media (max-width: 600px) {
+  .landing .hot-grid {
+    grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+    gap: 12px;
+  }
+  /* o CTA do download não cabe ao lado do arquivo em tela estreita */
+  .landing .card.dl-hero .btn {
+    width: 100%;
+    height: auto;
+    padding: 13px 18px;
+    white-space: normal;
+  }
+  /* em duas colunas o botão não cabe ao lado do preço: ele desce e ocupa a
+     largura do card em vez de espremer o valor */
+  .landing .hot-foot {
+    flex-wrap: wrap;
+    align-items: flex-start;
+  }
+  .landing .hot-card .btn {
+    width: 100%;
+  }
+}

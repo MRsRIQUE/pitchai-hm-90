@@ -1,7 +1,7 @@
-﻿import { createFileRoute, Link } from "@tanstack/react-router";
+import { createFileRoute } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { fetchRanking } from "@/lib/live/admin";
-import { SiteNav } from "@/components/live/SiteNav";
+import { SitePageFrame } from "@/components/live/SitePageFrame";
 
 export const Route = createFileRoute("/quentes")({
   head: () => ({
@@ -32,59 +32,49 @@ function QuentesPage() {
   });
 
   return (
-    <div className="marketing-page min-h-dvh">
-      <SiteNav />
-
-      <main className="desktop-rail py-8">
-        <h1 className="marketing-title text-4xl sm:text-5xl">Produtos quentes 🔥</h1>
-        <p className="mt-2 text-sm text-white/60">
-          Seleção da equipe Pitch AI com os produtos que mais estão vendendo em live. Clique para
-          abrir a página do produto.
-        </p>
+    <SitePageFrame>
+      <div className="wrap">
+        <header className="sec-head">
+          <div className="eyebrow">Curadoria Pitch AI</div>
+          <h1>
+            Produtos <em className="h1-serif">quentes</em> 🔥
+          </h1>
+          <p>
+            Seleção da equipe Pitch AI com os produtos que mais estão vendendo em live. Clique para
+            abrir a página do produto.
+          </p>
+        </header>
 
         {isLoading ? (
-          <p className="py-10 text-center text-sm text-white/50">Carregando…</p>
+          <p className="site-page-note">Carregando…</p>
         ) : items.length === 0 ? (
-          <p className="py-10 text-center text-sm text-white/50">
-            Nenhum produto no ranking ainda.
-          </p>
+          <p className="site-page-note">Nenhum produto no ranking ainda.</p>
         ) : (
-          <div className="desktop-card-grid mt-6">
+          <div className="hot-grid">
             {items.map((p, i) => (
-              <article key={p.id} className="marketing-panel overflow-hidden rounded-2xl">
-                <div className="relative aspect-[4/3] bg-black/40">
+              <article key={p.id} className="card hot-card">
+                <div className="hot-cover">
                   {p.imagem_url ? (
-                    <img
-                      src={p.imagem_url}
-                      alt={p.nome}
-                      loading="lazy"
-                      className="h-full w-full object-cover"
-                    />
+                    <img src={p.imagem_url} alt={p.nome} loading="lazy" />
                   ) : (
-                    <div className="grid h-full place-items-center text-4xl">🛍️</div>
+                    <div className="hot-cover-empty" aria-hidden="true">
+                      🛍️
+                    </div>
                   )}
-                  <span className="absolute left-2 top-2 rounded-full bg-black/70 px-2 py-0.5 font-mono text-xs">
-                    #{i + 1}
-                  </span>
-                  {p.destaque && (
-                    <span className="absolute right-2 top-2 rounded-full bg-[#FF6B35] px-2 py-0.5 text-xs font-semibold">
-                      Destaque
-                    </span>
-                  )}
+                  <span className="hot-rank">#{i + 1}</span>
+                  {p.destaque && <span className="hot-flag">Destaque</span>}
                 </div>
-                <div className="space-y-2 p-4">
-                  <h2 className="line-clamp-2 text-sm font-semibold">{p.nome}</h2>
-                  {p.categoria && (
-                    <span className="inline-block rounded bg-white/10 px-2 py-0.5 text-[11px] text-white/60">
-                      {p.categoria}
-                    </span>
-                  )}
-                  <div className="flex items-end justify-between pt-1">
+
+                <div className="hot-body">
+                  <h2 className="hot-name">{p.nome}</h2>
+                  {p.categoria && <div className="card-tag">{p.categoria}</div>}
+
+                  <div className="hot-foot">
                     <div>
-                      <div className="font-mono text-lg font-bold text-[#00E676]">
+                      <div className="hot-price">
                         {p.preco != null ? brl(Number(p.preco)) : "—"}
                       </div>
-                      <div className="text-[11px] text-white/40">
+                      <div className="hot-meta">
                         {p.vendas.toLocaleString("pt-BR")} vendas
                         {p.comissao_pct != null ? ` · ${Number(p.comissao_pct)}% comissão` : ""}
                       </div>
@@ -94,7 +84,7 @@ function QuentesPage() {
                         href={p.link}
                         target="_blank"
                         rel="noreferrer nofollow"
-                        className="rounded-lg bg-[#7C3AED] px-3 py-1.5 text-xs font-semibold hover:bg-[#6D28D9]"
+                        className="btn btn-primary"
                       >
                         Abrir
                       </a>
@@ -105,7 +95,7 @@ function QuentesPage() {
             ))}
           </div>
         )}
-      </main>
-    </div>
+      </div>
+    </SitePageFrame>
   );
 }

@@ -312,7 +312,7 @@ export function LiveStudioCard({ compact = false }: { compact?: boolean } = {}) 
   const restante = autoStop ? Math.max(0, autoStopMin * 60 - elapsed) : 0;
 
   return (
-    <Card id="sec-studio" className="scroll-mt-24 space-y-4 p-5">
+    <Card className="space-y-4 p-5">
       <div className="flex items-start justify-between gap-3">
         <div className="flex items-center gap-2.5">
           <Video className="h-4 w-4 text-primary" />

@@ -43,22 +43,23 @@ interface ThemeContextValue {
 const ThemeContext = createContext<ThemeContextValue | null>(null);
 
 /**
- * Tema claro/escuro compartilhado por toda a árvore (SiteNav, landing, app).
+ * Tema claro/escuro compartilhado por toda a árvore (landing, páginas internas
+ * e painéis).
  * O primeiro render (SSR e hidratação) é sempre "dark" para casar com o
  * servidor; o tema real é aplicado num effect pós-hidratação. A classe
  * <html class="dark|light"> é definida por um script inline no head antes
  * do primeiro paint, então não há flash de cor.
  */
 export function ThemeProvider({ children }: { children: ReactNode }) {
-  const [theme, setTheme] = useState<ThemeMode>(() => {
-    if (typeof document !== "undefined" && document.documentElement.classList.contains("light")) {
-      return "light";
-    }
-    return readStored() ?? "dark";
-  });
+  // O estado inicial é uma constante de propósito: ler `document` ou o
+  // localStorage aqui faz a hidratação divergir do HTML do servidor (que não
+  // tem como saber a preferência) e o React descarta a árvore.
+  const [theme, setTheme] = useState<ThemeMode>("dark");
+  const [resolved, setResolved] = useState(false);
 
   useEffect(() => {
     setTheme(readStored() ?? getSystemTheme());
+    setResolved(true);
     const syncAcrossTabs = (event: StorageEvent) => {
       if (event.key === STORAGE_KEY && (event.newValue === "dark" || event.newValue === "light")) {
         setTheme(event.newValue);
@@ -69,13 +70,17 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
   }, []);
 
   useEffect(() => {
+    // Até o tema real ser lido, quem manda no <html> é o script inline do head.
+    // Escrever antes disso repintaria a tela de escuro e voltaria — o flash que
+    // o script existe para evitar.
+    if (!resolved) return;
     applyTheme(theme);
     try {
       window.localStorage.setItem(STORAGE_KEY, theme);
     } catch {
       /* ignore */
     }
-  }, [theme]);
+  }, [theme, resolved]);
 
   const toggle = useCallback(() => setTheme((t) => (t === "dark" ? "light" : "dark")), []);
 

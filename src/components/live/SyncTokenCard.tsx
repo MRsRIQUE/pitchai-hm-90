@@ -17,7 +17,6 @@ import {
   Eye,
   EyeOff,
   User,
-  LogOut,
   Mail,
   CheckCircle2,
   Zap,
@@ -29,7 +28,6 @@ import {
   sendPasswordResetEmail,
   signInWithPopup,
   onAuthStateChanged,
-  signOut as firebaseSignOut,
 } from "firebase/auth";
 import { getFirebaseAuth, googleProvider } from "@/lib/firebase";
 import { ensureAccountProfile } from "@/lib/account-profile";
@@ -241,21 +239,6 @@ export function SyncTokenCard() {
       toast.error("Erro ao enviar e-mail: " + (err?.message || "Verifique o endereço."));
     } finally {
       setAuthing(false);
-    }
-  }
-
-  // Logout handler
-  async function handleSignOut() {
-    try {
-      const fbAuth = getFirebaseAuth();
-      await firebaseSignOut(fbAuth);
-      setStatus("signed-out");
-      setUserEmail("");
-      setUserPhoto(null);
-      setToken("");
-      toast.info("Sessão encerrada.");
-    } catch {
-      toast.error("Erro ao sair.");
     }
   }
 
@@ -519,15 +502,6 @@ export function SyncTokenCard() {
             <p className="text-[10px] text-muted-foreground font-mono">Conta Autenticada</p>
           </div>
         </div>
-
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={handleSignOut}
-          className="h-8 shrink-0 text-xs gap-1 text-muted-foreground hover:text-foreground"
-        >
-          <LogOut className="h-3.5 w-3.5" /> Sair
-        </Button>
       </div>
 
       <ExtensionStatusBanner syncToken={token} />

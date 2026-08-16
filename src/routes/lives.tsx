@@ -1,10 +1,8 @@
-﻿import { createFileRoute, Link } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
 import { onAuthStateChanged } from "firebase/auth";
 import { getFirebaseAuth } from "@/lib/firebase";
 import { requireAuthBeforeLoad } from "@/lib/auth-guard";
-import { Card } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
 import {
   Loader2,
   ArrowLeft,
@@ -17,7 +15,7 @@ import {
 } from "lucide-react";
 import { deleteSession, listMySessions, type LiveSessionRow } from "@/lib/live/sync";
 import { toast } from "sonner";
-import { SiteNav } from "@/components/live/SiteNav";
+import { SitePageFrame } from "@/components/live/SitePageFrame";
 
 export const Route = createFileRoute("/lives")({
   beforeLoad: requireAuthBeforeLoad,
@@ -106,58 +104,56 @@ function LivesPage() {
   }, [rows]);
 
   return (
-    <main className="marketing-page min-h-screen bg-background">
-      <SiteNav />
-      <header className="border-b border-border bg-background/80">
-        <div className="desktop-rail flex items-center justify-between gap-3 py-3">
-          <Link
-            to="/app"
-            className="inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground"
-          >
-            <ArrowLeft className="h-4 w-4" /> Voltar ao painel
-          </Link>
-          <h1 className="marketing-title text-2xl">Minhas lives</h1>
-          <Button variant="ghost" size="sm" onClick={refresh} disabled={loading}>
-            {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : "Atualizar"}
-          </Button>
-        </div>
-      </header>
+    /* lista longa: o quadriculado sai para não competir com as linhas */
+    <SitePageFrame grid={false}>
+      <div className="wrap">
+        <header className="sec-head">
+          <div className="eyebrow">Histórico</div>
+          <h1>
+            Minhas <em className="h1-serif">lives</em>
+          </h1>
+          <div className="site-page-meta">
+            <Link to="/app" className="lv-back">
+              <ArrowLeft /> Voltar ao painel
+            </Link>
+            <button type="button" className="btn btn-outline" onClick={refresh} disabled={loading}>
+              {loading ? <Loader2 className="lv-spin" /> : "Atualizar"}
+            </button>
+          </div>
+        </header>
 
-      <div className="desktop-rail space-y-5 py-6">
-        {status === "loading" && (
-          <Card className="flex items-center gap-2 p-6 text-sm text-muted-foreground">
-            <Loader2 className="h-4 w-4 animate-spin" /> Carregando…
-          </Card>
-        )}
+        {status === "loading" && <p className="site-page-note">Carregando…</p>}
 
         {status === "signed-out" && (
-          <Card className="space-y-2 p-6">
-            <div className="text-sm font-semibold">Faça login pra ver seu histórico</div>
-            <p className="text-xs text-muted-foreground">
-              <Link to="/entrar" search={{ next: "/lives" }} className="text-primary underline">
+          <div className="card lv-empty">
+            <h3>Faça login pra ver seu histórico</h3>
+            <p>
+              <Link to="/entrar" search={{ next: "/lives" }}>
                 Entrar na minha conta
               </Link>{" "}
               pra sincronizar o histórico das suas lives.
             </p>
-          </Card>
+          </div>
         )}
 
         {status === "ok" && (
           <>
-            <div className="desktop-card-grid">
-              <StatCard label="Respondidas" value={totals.answered} icon={MessageCircle} />
-              <StatCard label="Ignoradas" value={totals.ignored} icon={Mic} />
-              <StatCard label="Bloqueadas" value={totals.blocked} icon={Ban} />
-              <StatCard label="Custo estimado" value={fmtBRL(totals.cost)} icon={DollarSign} />
+            <div className="stats-grid lv-stats">
+              <Stat label="Respondidas" value={totals.answered.toLocaleString("pt-BR")} />
+              <Stat label="Ignoradas" value={totals.ignored.toLocaleString("pt-BR")} />
+              <Stat label="Bloqueadas" value={totals.blocked.toLocaleString("pt-BR")} />
+              <Stat label="Custo estimado" value={fmtBRL(totals.cost)} />
             </div>
 
             {rows.length === 0 ? (
-              <Card className="p-8 text-center text-sm text-muted-foreground">
-                Nenhuma live registrada ainda. Instale a extensão, cole seu sync token e comece uma
-                live no TikTok — o histórico aparece aqui.
-              </Card>
+              <div className="card lv-empty">
+                <p>
+                  Nenhuma live registrada ainda. Instale a extensão, cole seu sync token e comece
+                  uma live no TikTok — o histórico aparece aqui.
+                </p>
+              </div>
             ) : (
-              <div className="space-y-2">
+              <div className="lv-list">
                 {rows.map((r) => (
                   <SessionRow key={r.id} row={r} onDelete={refresh} />
                 ))}
@@ -166,29 +162,16 @@ function LivesPage() {
           </>
         )}
       </div>
-    </main>
+    </SitePageFrame>
   );
 }
 
-function StatCard({
-  label,
-  value,
-  icon: Icon,
-}: {
-  label: string;
-  value: number | string;
-  icon: React.ComponentType<{ className?: string }>;
-}) {
+function Stat({ label, value }: { label: string; value: string }) {
   return (
-    <Card className="flex items-center gap-3 p-4">
-      <div className="grid h-10 w-10 place-items-center rounded-full bg-primary/15 text-primary">
-        <Icon className="h-5 w-5" />
-      </div>
-      <div>
-        <div className="text-xs text-muted-foreground">{label}</div>
-        <div className="text-lg font-semibold">{value}</div>
-      </div>
-    </Card>
+    <div className="stat">
+      <div className="stat-n">{value}</div>
+      <div className="stat-l">{label}</div>
+    </div>
   );
 }
 
@@ -210,69 +193,57 @@ function SessionRow({ row, onDelete }: { row: LiveSessionRow; onDelete: () => vo
   }
 
   return (
-    <Card className="p-4">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div className="min-w-0 flex-1">
-          <div className="text-sm font-semibold">
-            {fmtDate(row.started_at)}{" "}
-            <span className="ml-1 rounded-full bg-muted px-2 py-0.5 text-[10px] font-normal text-muted-foreground">
-              {fmtDuration(row.started_at, row.ended_at)}
-              {row.ended_at ? "" : " · em andamento"}
-            </span>
-          </div>
-          <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
-            <span>
-              <MessageCircle className="mr-1 inline h-3 w-3" />
-              {row.messages_answered} respondidas
-            </span>
-            <span>
-              <Mic className="mr-1 inline h-3 w-3" />
-              {row.messages_ignored} ignoradas
-            </span>
-            <span>
-              <Ban className="mr-1 inline h-3 w-3" />
-              {row.messages_blocked} bloqueadas
-            </span>
-            <span>
-              tokens: {row.tokens_in.toLocaleString()} in · {row.tokens_out.toLocaleString()} out
-            </span>
-            <span>TTS: {row.tts_seconds}s</span>
-            <span className="font-medium text-foreground">
-              <DollarSign className="mr-0.5 inline h-3 w-3" />
-              {fmtBRL(row.estimated_cost_cents)}
-            </span>
-          </div>
-          {products.length > 0 && (
-            <div className="mt-2 flex flex-wrap gap-1">
-              {products.slice(0, 8).map((p, i) => (
-                <span
-                  key={i}
-                  className="inline-flex items-center gap-1 rounded-full bg-primary/10 px-2 py-0.5 text-[11px] text-primary"
-                >
-                  <ShoppingBag className="h-3 w-3" />
-                  {p.name}
-                </span>
-              ))}
-              {products.length > 8 && (
-                <span className="text-[11px] text-muted-foreground">+{products.length - 8}</span>
-              )}
-            </div>
-          )}
+    <article className="card lv-row">
+      <div className="lv-row-main">
+        <div className="lv-title">
+          {fmtDate(row.started_at)}
+          <span className="lv-dur">
+            {fmtDuration(row.started_at, row.ended_at)}
+            {row.ended_at ? "" : " · em andamento"}
+          </span>
         </div>
-        <Button
-          size="icon"
-          variant="ghost"
-          onClick={handleDelete}
-          disabled={busy}
-          aria-label="Apagar"
-        >
-          {busy ? (
-            <Loader2 className="h-4 w-4 animate-spin" />
-          ) : (
-            <Trash2 className="h-4 w-4 text-destructive" />
-          )}
-        </Button>
+
+        <div className="lv-meta">
+          <span>
+            <MessageCircle /> {row.messages_answered} respondidas
+          </span>
+          <span>
+            <Mic /> {row.messages_ignored} ignoradas
+          </span>
+          <span>
+            <Ban /> {row.messages_blocked} bloqueadas
+          </span>
+          <span>
+            tokens: {row.tokens_in.toLocaleString("pt-BR")} in ·{" "}
+            {row.tokens_out.toLocaleString("pt-BR")} out
+          </span>
+          <span>TTS: {row.tts_seconds}s</span>
+          <span className="lv-cost">
+            <DollarSign /> {fmtBRL(row.estimated_cost_cents)}
+          </span>
+        </div>
+
+        {products.length > 0 && (
+          <div className="lv-products">
+            {products.slice(0, 8).map((p, i) => (
+              <span className="lv-tag" key={i}>
+                <ShoppingBag /> {p.name}
+              </span>
+            ))}
+            {products.length > 8 && <span className="lv-more">+{products.length - 8}</span>}
+          </div>
+        )}
       </div>
-    </Card>
+
+      <button
+        type="button"
+        className="btn btn-ghost lv-del"
+        onClick={handleDelete}
+        disabled={busy}
+        aria-label="Apagar"
+      >
+        {busy ? <Loader2 className="lv-spin" /> : <Trash2 />}
+      </button>
+    </article>
   );
 }

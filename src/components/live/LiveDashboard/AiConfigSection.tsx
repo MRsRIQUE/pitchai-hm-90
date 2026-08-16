@@ -10,6 +10,7 @@ import { useLiveStore } from "@/stores/useLiveStore";
 import { useShallow } from "zustand/react/shallow";
 import { PresetPicker } from "../PresetPicker";
 import { type AIContext } from "@/lib/live/config";
+import { formatarPreco } from "./sections/produto";
 
 export interface AiConfigSectionProps {
   compact?: boolean;
@@ -82,7 +83,7 @@ export function AiConfigSection({ compact = false }: AiConfigSectionProps) {
   }
 
   return (
-    <div id="sec-contexto" className="scroll-mt-24 pt-2">
+    <div>
       <h4 className="mb-3 font-display text-sm font-semibold">
         Contexto da IA
         <span className="ml-2 font-sans text-xs font-normal text-muted-foreground">
@@ -117,16 +118,20 @@ export function AiConfigSection({ compact = false }: AiConfigSectionProps) {
                   key={produto.id}
                   type="button"
                   onClick={() => activateProduct(produto.id)}
-                  className={`inline-flex max-w-full items-center gap-1.5 rounded-lg border px-3 py-2 text-left text-xs transition-colors ${
+                  className={`inline-flex min-w-0 max-w-[min(280px,100%)] items-center gap-1.5 rounded-lg border px-3 py-2 text-left text-xs transition-colors ${
                     produto.active
                       ? "border-primary/60 bg-primary/15 text-foreground"
                       : "border-border bg-background/60 text-muted-foreground hover:border-primary/35 hover:text-foreground"
                   }`}
-                  title="Usar este produto nas respostas e roteiros"
+                  title={produto.name}
                 >
                   {produto.active && <CheckCircle2 className="h-3.5 w-3.5 shrink-0 text-primary" />}
-                  <span className="truncate">{produto.name}</span>
-                  {produto.price && <span className="shrink-0 opacity-70">{produto.price}</span>}
+                  {/* min-w-0 no próprio span: como filho flex ele nasce com
+                      min-width auto e o truncate não teria efeito nenhum. */}
+                  <span className="min-w-0 truncate">{produto.name}</span>
+                  {formatarPreco(produto) ? (
+                    <span className="shrink-0 opacity-70">{formatarPreco(produto)}</span>
+                  ) : null}
                 </button>
               ))}
             </div>
@@ -136,7 +141,7 @@ export function AiConfigSection({ compact = false }: AiConfigSectionProps) {
             </p>
           )}
           {config.produtos.some((produto) => produto.active) && (
-            <p className="mt-2 text-xs text-primary">
+            <p className="mt-2 line-clamp-2 text-xs text-primary">
               Produto ativo: {config.produtos.find((produto) => produto.active)?.name}
             </p>
           )}

@@ -62,7 +62,7 @@ export function WordFilterSection() {
   const totalBloqueado = totalPadrao + proprios.length;
 
   return (
-    <Card id="sec-filtro" className="scroll-mt-24 p-5">
+    <Card className="p-5">
       <div className="flex items-start justify-between gap-4">
         <div className="flex items-start gap-3">
           <div className="mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary ring-1 ring-inset ring-primary/20">
