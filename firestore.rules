@@ -15,9 +15,13 @@ service cloud.firestore {
       return request.auth != null;
     }
 
-    // Identidade de servidor: conta Firebase (email/senha) usada pelo backend.
-    // Deve ser criada no console Firebase (Authentication > Users) com o mesmo
-    // email configurado em FIREBASE_SERVER_EMAIL.
+    // LEGADO. O backend não usa mais esta conta: rotinas sem usuário passaram a
+    // autenticar com service account, cujo token não passa por estas regras.
+    // A conta continua liberada aqui só para não derrubar o servidor caso o
+    // deploy aconteça antes de FIREBASE_SERVICE_ACCOUNT estar configurada.
+    // Assim que o checkout voltar a funcionar com a service account, remova esta
+    // função (e os `isServer()` abaixo) e apague a conta em Authentication >
+    // Users — enquanto ela existir, a senha dela vale acesso de servidor.
     function isServer() {
       return isSignedIn()
         && request.auth.token.email == 'pitchaihm-server@gen-lang-client-0224756084.firebaseapp.com';
@@ -224,7 +228,9 @@ service cloud.firestore {
     }
 
     // ------------------------------------------------------------------
-    // Admins — leitura pública (verificação de papel), escrita via servidor
+    // Admins — cada conta lê só o próprio doc (verificação de papel) e a
+    // escrita é via servidor. `get` separado de `list`: liberar `list` deixaria
+    // enumerar os UIDs de todos os administradores.
     // ------------------------------------------------------------------
 
     match /admins/{uid} {

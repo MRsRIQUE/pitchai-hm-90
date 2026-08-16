@@ -42,8 +42,17 @@
     canvas: null,
     ctx: null,
     rafId: null,
+    pumpStarted: false,
+    drawTimer: null,
+    lastRafAt: 0,
+    pumpFps: 0,
+    framesDrawn: 0,
     canvasStream: null,
     videoTrack: null,
+    videoSource: "canvas", // "canvas" | "element"
+    elementStream: null,
+    elementTrack: null,
+    blackTicks: 0,
     audioCtx: null,
     destNode: null,
     sourceGain: null,
@@ -51,6 +60,8 @@
     toneOsc: null,
     toneGain: null,
     toneTimer: null,
+    playTimer: null,
+    mutedFallback: false,
     videoSrcNode: null,
     audioSrcNode: null,
     audioTrack: null,
@@ -110,9 +121,14 @@
     return Boolean(track && state.syntheticTracks.has(track));
   }
 
+  // O elemento precisa ficar imperceptível, mas NÃO "invisível" para o Chrome:
+  // fora da viewport ou com opacity:0 o navegador suspende o decodificador de
+  // vídeo e mantém só o áudio — que é exatamente o sintoma de áudio ok/vídeo
+  // preto. Por isso: dentro da viewport, 2px, opacidade mínima porém não zero.
   function appendHiddenMedia(element) {
     element.style.cssText =
-      "position:fixed;left:-99999px;top:0;width:2px;height:2px;opacity:0;pointer-events:none";
+      "position:fixed;left:0;top:0;width:2px;height:2px;opacity:0.01;" +
+      "z-index:2147483647;pointer-events:none;border:0;padding:0;margin:0";
     (document.documentElement || document.body).appendChild(element);
     return element;
   }
@@ -171,47 +187,152 @@
     );
   }
 
+  function paintFrame() {
+    const { canvas, ctx, videoEl } = state;
+    if (!canvas || !ctx) return;
+
+    if (videoEl?.readyState >= 2 && videoEl.videoWidth && videoEl.videoHeight) {
+      ctx.fillStyle = "#000";
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      const canvasRatio = canvas.width / canvas.height;
+      const videoRatio = videoEl.videoWidth / videoEl.videoHeight;
+      let width;
+      let height;
+      if (videoRatio > canvasRatio) {
+        height = canvas.height;
+        width = height * videoRatio;
+      } else {
+        width = canvas.width;
+        height = width / videoRatio;
+      }
+      try {
+        ctx.drawImage(
+          videoEl,
+          (canvas.width - width) / 2,
+          (canvas.height - height) / 2,
+          width,
+          height,
+        );
+      } catch {}
+      state.framesDrawn += 1;
+    } else {
+      drawPlaceholder(ctx, canvas.width, canvas.height);
+    }
+  }
+
   function startCanvasPump() {
     ensureCanvas();
-    if (state.rafId) return;
+    if (state.pumpStarted) return;
+    state.pumpStarted = true;
 
-    const draw = () => {
-      const { canvas, ctx, videoEl } = state;
-      if (!canvas || !ctx) return;
-
-      if (videoEl?.readyState >= 2 && videoEl.videoWidth && videoEl.videoHeight) {
-        ctx.fillStyle = "#000";
-        ctx.fillRect(0, 0, canvas.width, canvas.height);
-        const canvasRatio = canvas.width / canvas.height;
-        const videoRatio = videoEl.videoWidth / videoEl.videoHeight;
-        let width;
-        let height;
-        if (videoRatio > canvasRatio) {
-          height = canvas.height;
-          width = height * videoRatio;
-        } else {
-          width = canvas.width;
-          height = width / videoRatio;
-        }
-        try {
-          ctx.drawImage(
-            videoEl,
-            (canvas.width - width) / 2,
-            (canvas.height - height) / 2,
-            width,
-            height,
-          );
-        } catch {}
-      } else {
-        drawPlaceholder(ctx, canvas.width, canvas.height);
-      }
-      state.rafId = requestAnimationFrame(draw);
+    const rafLoop = () => {
+      state.lastRafAt = Date.now();
+      paintFrame();
+      state.rafId = requestAnimationFrame(rafLoop);
     };
+    try {
+      state.rafId = requestAnimationFrame(rafLoop);
+    } catch {}
 
-    state.rafId = requestAnimationFrame(draw);
+    // O TikTok captura dentro de um iframe que pode não estar sendo renderizado
+    // (display:none). Nesses documentos o requestAnimationFrame NUNCA dispara —
+    // o canvas ficaria sem nenhum quadro e a página mostra "Sem feed de vídeo",
+    // mesmo com o áudio (WebAudio não depende de renderização) funcionando.
+    // Este timer garante os quadros e fica quieto quando o rAF dá conta.
+    const startTimer = () => {
+      clearInterval(state.drawTimer);
+      state.pumpFps = state.fps;
+      state.drawTimer = setInterval(
+        () => {
+          if (state.fps !== state.pumpFps) {
+            startTimer();
+            return;
+          }
+          if (Date.now() - state.lastRafAt < 250) return;
+          paintFrame();
+        },
+        Math.max(16, Math.round(1000 / state.fps)),
+      );
+    };
+    startTimer();
+  }
+
+  // Caminho alternativo ao canvas: captura direto do <video>, pela pipeline de
+  // mídia. Não passa por drawImage, então sobrevive a GPUs cujo decodificador
+  // decodifica mas não devolve o quadro para leitura (preto no canvas).
+  function ensureElementTrack(force = false) {
+    const video = ensureVideoElement();
+    if (typeof video.captureStream !== "function") return null;
+    if (force || !isLiveTrack(state.elementTrack, "video")) {
+      try {
+        state.elementStream = video.captureStream();
+      } catch (error) {
+        console.warn(TAG, "captureStream do elemento falhou:", error?.message);
+        return null;
+      }
+      // O áudio continua saindo pelo grafo WebAudio; a trilha desta captura
+      // fica desligada para não duplicar a voz na transmissão.
+      state.elementStream.getAudioTracks().forEach((track) => {
+        track.enabled = false;
+      });
+      state.elementTrack = markSynthetic(state.elementStream.getVideoTracks()[0] || null);
+      if (state.elementTrack) {
+        try {
+          state.elementTrack.contentHint = "motion";
+        } catch {}
+      }
+    }
+    return state.elementTrack;
+  }
+
+  // Amostra barata: se o vídeo avança e o canvas segue totalmente preto, o
+  // drawImage não está recebendo quadro nenhum.
+  function canvasLooksBlack() {
+    const { canvas, ctx } = state;
+    if (!canvas || !ctx || !canvas.width || !canvas.height) return false;
+    try {
+      const points = [
+        [0.25, 0.25],
+        [0.75, 0.35],
+        [0.5, 0.5],
+        [0.5, 0.75],
+      ];
+      for (const [px, py] of points) {
+        const pixel = ctx.getImageData(
+          Math.floor(canvas.width * px),
+          Math.floor(canvas.height * py),
+          1,
+          1,
+        ).data;
+        if (pixel[0] > 8 || pixel[1] > 8 || pixel[2] > 8) return false;
+      }
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  async function switchToElementSource(reason) {
+    if (state.videoSource === "element") return;
+    const track = ensureElementTrack(true);
+    if (!track) return;
+    state.videoSource = "element";
+    state.blackTicks = 0;
+    console.warn(TAG, "trocando a fonte de vídeo para o elemento:", reason);
+    try {
+      await injectIntoLiveSenders();
+    } catch (error) {
+      console.warn(TAG, "troca de fonte não chegou aos envios:", error?.message);
+    }
   }
 
   function ensureVideoTrack(force = false) {
+    if (state.videoSource === "element") {
+      const elementTrack = ensureElementTrack(force);
+      if (elementTrack) return elementTrack;
+      state.videoSource = "canvas"; // sem suporte a captureStream: volta ao canvas
+    }
+
     const canvas = ensureCanvas();
     startCanvasPump();
     if (force || !isLiveTrack(state.videoTrack, "video")) {
@@ -356,15 +477,54 @@
     ensureVideoTrack(forceVideoTrack);
     await configureAudio();
     if (!state.videoUrl) return;
-    if (!tolerantPlay) {
+    await startPlayback(video, tolerantPlay);
+    startPlaybackWatchdog();
+  }
+
+  // Autoplay: o Chrome só libera play() sem gesto se o elemento estiver mudo —
+  // e o clique do usuário acontece no iframe do painel, que não vale como gesto
+  // para esta página. Então tocamos mudo para os quadros fluírem e tiramos o
+  // mudo no primeiro clique da página, que é quando o áudio poderia sair.
+  async function startPlayback(video, tolerant) {
+    try {
+      video.muted = false;
       await video.play();
+      state.mutedFallback = false;
       return;
+    } catch (error) {
+      if (error?.name !== "NotAllowedError" && !tolerant) throw error;
     }
+    video.muted = true;
     try {
       await video.play();
+      state.mutedFallback = true;
     } catch (error) {
-      console.warn(TAG, "vídeo aguardando gesto do usuário:", error?.message);
+      state.mutedFallback = false;
+      console.warn(TAG, "vídeo não iniciou:", error?.message);
+      if (!tolerant) throw error;
     }
+  }
+
+  // Cobre o caso de o elemento parar sozinho (troca de src, aba em segundo
+  // plano) enquanto a fonte virtual está no ar.
+  function startPlaybackWatchdog() {
+    if (state.playTimer) return;
+    state.playTimer = setInterval(() => {
+      const video = state.videoEl;
+      if (!state.enabled || !state.videoUrl || !video) return;
+      if (video.paused) {
+        startPlayback(video, true).catch(() => {});
+        return;
+      }
+      // Tocando e com o canvas totalmente preto: o quadro decodificado não está
+      // chegando ao drawImage (falha de readback do decodificador por hardware).
+      // Depois de ~6s assim, trocamos para a captura direta do elemento.
+      if (state.videoSource !== "canvas" || video.currentTime < 0.3) return;
+      state.blackTicks = canvasLooksBlack() ? state.blackTicks + 1 : 0;
+      if (state.blackTicks >= 3) {
+        switchToElementSource("canvas preto com o vídeo tocando");
+      }
+    }, 2000);
   }
 
   function armPlaybackOnGesture() {
@@ -374,9 +534,15 @@
           await state.audioCtx.resume();
         } catch {}
       }
-      if (state.enabled && state.videoUrl && state.videoEl?.paused) {
+      const video = state.videoEl;
+      if (!state.enabled || !state.videoUrl || !video) return;
+      if (state.mutedFallback && video.muted) {
+        video.muted = false;
+        state.mutedFallback = false;
+      }
+      if (video.paused) {
         try {
-          await state.videoEl.play();
+          await video.play();
         } catch {}
       }
     };
@@ -577,7 +743,9 @@
       const base = nativeSettings ? nativeSettings() : {};
       const extra =
         kind === "video"
-          ? { width: state.width, height: state.height, frameRate: state.fps, resizeMode: "none" }
+          ? state.videoSource === "element"
+            ? { resizeMode: "none" } // captura direta: vale a resolução do arquivo
+            : { width: state.width, height: state.height, frameRate: state.fps, resizeMode: "none" }
           : {
               sampleRate: state.audioCtx?.sampleRate || 48000,
               channelCount: 2,
@@ -724,6 +892,14 @@
         state.pcs.add(pc);
         pc.addEventListener("connectionstatechange", () => {
           if (pc.connectionState === "closed") state.pcs.delete(pc);
+          // Um envio que nasce depois da troca de fonte precisa nascer com ela.
+          if (
+            pc.connectionState === "connected" &&
+            state.enabled &&
+            state.videoSource === "element"
+          ) {
+            injectIntoLiveSenders().catch(() => {});
+          }
         });
         return pc;
       },
@@ -883,12 +1059,40 @@
     return oldFps !== state.fps;
   }
 
+  // "decodificados" é a prova definitiva: se o tempo do vídeo avança e esse
+  // contador não, quem parou foi o decodificador — não o nosso laço de desenho.
+  function videoDiagnostics() {
+    const video = state.videoEl;
+    if (!video) return { elemento: "ausente" };
+    let decoded = null;
+    try {
+      decoded =
+        video.getVideoPlaybackQuality?.().totalVideoFrames ?? video.webkitDecodedFrameCount ?? null;
+    } catch {}
+    return {
+      ready: video.readyState,
+      paused: video.paused,
+      muted: video.muted,
+      tempo: Math.round((video.currentTime || 0) * 10) / 10,
+      largura: video.videoWidth,
+      decodificados: decoded,
+      erro: video.error?.message || null,
+    };
+  }
+
   function publicStatus(message = "") {
     return {
+      video: videoDiagnostics(),
+      videoSource: state.videoSource,
       enabled: state.enabled,
       published: state.published,
       force: state.force,
       tone: state.tone,
+      muted: state.mutedFallback,
+      audioContext: state.audioCtx?.state || "ausente",
+      playing: Boolean(state.videoEl && !state.videoEl.paused),
+      framesDrawn: state.framesDrawn,
+      rafAlive: Date.now() - state.lastRafAt < 1000,
       deviceLabels: { video: deviceLabel("video"), audio: deviceLabel("audio") },
       videoName: state.videoName,
       audioName: state.audioName,
@@ -930,15 +1134,20 @@
         throw error;
       }
       const replaced = await injectIntoLiveSenders();
+      // Sem gesto na página o vídeo só toca mudo e o AudioContext fica suspenso:
+      // é preciso um clique na própria página do TikTok para liberar o áudio.
+      const needsClick = state.mutedFallback || state.audioCtx?.state === "suspended";
+      const base = replaced
+        ? `${replaced} track(s) atualizado(s) no TikTok`
+        : `Selecione "${DEVICE_SPECS.video.base}" em Fonte de vídeo e "${DEVICE_SPECS.audio.base}" em Fonte de áudio`;
       return publicStatus(
-        replaced
-          ? `${replaced} track(s) atualizado(s) no TikTok`
-          : `Selecione "${DEVICE_SPECS.video.base}" em Fonte de vídeo e "${DEVICE_SPECS.audio.base}" em Fonte de áudio`,
+        needsClick ? `${base} · clique uma vez na página do TikTok para liberar o áudio` : base,
       );
     }
     if (command === "deactivate") {
       state.enabled = false;
       state.published = false;
+      state.mutedFallback = false;
       announceDevices();
       const result = await restoreLiveSenders();
       stopUnusedIssuedTracks();

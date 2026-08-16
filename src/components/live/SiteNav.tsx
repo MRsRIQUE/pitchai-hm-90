@@ -1,6 +1,10 @@
+import { useEffect, useState } from "react";
 import { Link } from "@tanstack/react-router";
+import { onAuthStateChanged } from "firebase/auth";
 import { PitchAiLogo } from "@/components/live/PitchAiLogo";
+import { LogoutButton } from "@/components/live/LogoutButton";
 import { Sparkles, ArrowUpRight } from "lucide-react";
+import { getFirebaseAuth } from "@/lib/firebase";
 import { useTheme } from "@/lib/use-theme";
 
 const LINKS = [
@@ -15,6 +19,12 @@ const LINKS = [
 export function SiteNav() {
   const { isDark } = useTheme();
   const effTone = isDark ? "dark" : "light";
+  const [authed, setAuthed] = useState(false);
+
+  useEffect(() => {
+    const unsub = onAuthStateChanged(getFirebaseAuth(), (user) => setAuthed(Boolean(user)));
+    return () => unsub();
+  }, []);
 
   const wrap =
     effTone === "dark"
@@ -44,9 +54,13 @@ export function SiteNav() {
 
         {/* Ações / CTA */}
         <div className="flex items-center gap-2.5 text-sm">
-          <Link to="/entrar" className={`${linkClass} hidden sm:inline-block`}>
-            Entrar
-          </Link>
+          {authed ? (
+            <LogoutButton label="Sair" className="hidden px-3 py-1.5 sm:inline-flex" />
+          ) : (
+            <Link to="/entrar" className={`${linkClass} hidden sm:inline-block`}>
+              Entrar
+            </Link>
+          )}
 
           <Link
             to="/app"

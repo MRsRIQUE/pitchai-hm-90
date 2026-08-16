@@ -77,6 +77,7 @@ import {
 import { QuickStartModal } from "../QuickStartModal";
 import { useUserSubscription } from "@/hooks/useUserSubscription";
 import { PaymentGuardOverlay } from "../PaymentGuardModal";
+import { LogoutButton } from "../LogoutButton";
 import { useLiveStore } from "@/stores/useLiveStore";
 import { useShallow } from "zustand/react/shallow";
 import { ProductsSection } from "./ProductsSection";
@@ -131,6 +132,10 @@ export function LiveDashboard() {
     return (
       <main className="marketing-page min-h-screen px-4 py-8 sm:px-6">
         <div className="mx-auto max-w-6xl">
+          {/* Quem chega aqui ainda não tem plano — precisa conseguir sair da conta. */}
+          <div className="mb-4 flex justify-end">
+            <LogoutButton label="Sair da conta" alwaysShowLabel />
+          </div>
           <PaymentGuardOverlay />
         </div>
       </main>
@@ -627,6 +632,7 @@ function LiveDashboardContent() {
               <Save className="h-3.5 w-3.5" />
               Salvar
             </Button>
+            <LogoutButton label="Sair" />
           </div>
         </div>
       </div>

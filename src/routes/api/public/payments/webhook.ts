@@ -2,7 +2,17 @@ import { createFileRoute } from "@tanstack/react-router";
 import { z } from "zod";
 import { type StripeEnv, verifyWebhook } from "@/lib/stripe.server";
 import { entitlementPlanId, findPitchaiPlan } from "@/lib/live/plans";
-import { fsGet, fsSet, fsQuery, setSubscription } from "@/lib/firebase.server";
+import {
+  fsCreateIfAbsent,
+  fsDelete,
+  fsGet,
+  fsQuery,
+  fsSet,
+  setSubscription,
+} from "@/lib/firebase.server";
+
+/** `verifyWebhook` devolve o envelope cru do Stripe; `id` é a chave de dedupe. */
+type StripeEvent = { id?: string; type: string; data: { object: any } };
 
 const subscriptionSchema = z.object({
   id: z.string(),
@@ -104,15 +114,26 @@ async function registerReferralCommission(args: {
   if (!referrerId) return;
 
   const rate = 0.6;
-  // Gera um ID único mesmo se `periodEnd` vier null (caso de `customer.subscription.created`).
-  // Antes usava `${subscriptionId}:${periodEnd ?? "current"}` que colidia em reenvios do webhook.
-  const invoiceId = `${subscriptionId}:${periodEnd ?? "initial"}`;
+  // ID determinístico por ciclo de cobrança. O `Date.now()` que ficava aqui
+  // gerava um ID novo a cada reenvio do Stripe e lançava uma segunda comissão
+  // de 60% sobre a mesma cobrança. Sem ciclo conhecido, o lançamento é
+  // provisório ("init") e é substituído quando o ciclo chega.
+  const provisionalId = `${subscriptionId}:init`;
+  const invoiceId = periodEnd ? `${subscriptionId}:${periodEnd}` : provisionalId;
 
   try {
-    const existing = await fsGet(`referral_commissions/${invoiceId}`, { mode: "server" });
-    // Webhooks podem ser reenviados. Nunca reabra uma comissão já paga.
-    if (existing?.data?.status === "pago") return;
-    await fsSet(
+    if (periodEnd) {
+      // Remove o provisório do mesmo ciclo inicial para não pagar duas vezes —
+      // só enquanto ninguém tiver liquidado a comissão.
+      const provisional = await fsGet(`referral_commissions/${provisionalId}`, {
+        mode: "server",
+      }).catch(() => null);
+      if (provisional?.data?.status === "pendente") {
+        await fsDelete(`referral_commissions/${provisionalId}`, { mode: "server" });
+      }
+    }
+
+    const created = await fsCreateIfAbsent(
       `referral_commissions/${invoiceId}`,
       {
         referrerUid: referrerId,
@@ -131,6 +152,9 @@ async function registerReferralCommission(args: {
       },
       { mode: "server" },
     );
+    if (!created) {
+      console.log(`[stripe-webhook] comissão ${invoiceId} já registrada — nada a fazer`);
+    }
   } catch (error) {
     console.error("[stripe-webhook] commission error:", error);
   }
@@ -166,7 +190,53 @@ async function revokePendingCommissions(userId: string): Promise<void> {
 }
 
 async function handleWebhook(req: Request, env: StripeEnv) {
-  const event = await verifyWebhook(req, env);
+  const event = (await verifyWebhook(req, env)) as StripeEvent;
+  const eventId = event.id;
+
+  // Idempotência: o Stripe reenvia o mesmo evento em timeout, erro 5xx ou
+  // replay manual. O marcador é criado com pré-condição no próprio Firestore,
+  // então apenas o primeiro processamento passa — inclusive sob reenvios
+  // simultâneos, que um get-antes-de-set deixaria escapar.
+  if (eventId) {
+    const first = await fsCreateIfAbsent(
+      `payment_events/${eventId}`,
+      {
+        event_id: eventId,
+        type: event.type,
+        env,
+        received_at: new Date().toISOString(),
+      },
+      { mode: "server" },
+    );
+    if (!first) {
+      console.log(`[stripe-webhook] evento ${eventId} já processado — reenvio ignorado`);
+      return;
+    }
+  } else {
+    console.warn("[stripe-webhook] evento sem id — processando sem dedupe");
+  }
+
+  try {
+    await dispatchEvent(event, env);
+  } catch (error) {
+    // Libera o marcador para que o reenvio do Stripe consiga tentar de novo;
+    // mantê-lo transformaria uma falha temporária em ativação perdida.
+    if (eventId) {
+      await fsDelete(`payment_events/${eventId}`, { mode: "server" }).catch(() => undefined);
+    }
+    throw error;
+  }
+
+  if (eventId) {
+    await fsSet(
+      `payment_events/${eventId}`,
+      { processed_at: new Date().toISOString() },
+      { mode: "server" },
+    ).catch(() => undefined);
+  }
+}
+
+async function dispatchEvent(event: StripeEvent, env: StripeEnv) {
   switch (event.type) {
     case "customer.subscription.created":
     case "customer.subscription.updated": {

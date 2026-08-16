@@ -1013,6 +1013,42 @@
       input.click();
     });
 
+    // Diagnóstico ao vivo da fonte virtual: o motor roda na página, então esta
+    // linha é a única forma de ver o que está acontecendo sem abrir o DevTools.
+    let diagTimer = null;
+    function renderDiag(status) {
+      const el = document.getElementById("pnl-media-diag");
+      if (!el) return;
+      const v = status.video || {};
+      el.textContent =
+        `fonte ${status.videoSource || "?"} · quadros ${status.framesDrawn ?? "?"} · ` +
+        `raf ${status.rafAlive ? "on" : "off"} · decod ${v.decodificados ?? "?"} · ` +
+        `t ${v.tempo ?? "?"}s · ready ${v.ready ?? "?"} · ` +
+        `${v.paused ? "pausado" : "tocando"}${v.muted ? " (mudo)" : ""} · ` +
+        `audio ${status.audioContext || "?"} · ${status.peerConnections ?? 0}pc` +
+        (v.erro ? ` · erro: ${v.erro}` : "");
+      if (status.videoSource === "element") {
+        info.textContent =
+          "Fonte trocada para captura direta do vídeo (o canvas não recebia quadros desta GPU).";
+      }
+    }
+    function startDiag() {
+      clearInterval(diagTimer);
+      diagTimer = setInterval(async () => {
+        try {
+          renderDiag(await sendMedia("status"));
+        } catch {
+          /* aba recarregada: o próximo ciclo volta a responder */
+        }
+      }, 2000);
+    }
+    function stopDiag() {
+      clearInterval(diagTimer);
+      diagTimer = null;
+      const el = document.getElementById("pnl-media-diag");
+      if (el) el.textContent = "";
+    }
+
     async function startLive() {
       if (!mediaFiles.video) {
         info.textContent = "Escolha primeiro o vídeo em “⬆ Escolher vídeo”";
@@ -1040,6 +1076,8 @@
           timeEl.textContent = fmt(elapsed);
         }, 1000);
         info.textContent = status.message || "Fonte virtual ativa no TikTok";
+        renderDiag(status);
+        startDiag();
       } catch (error) {
         info.textContent = error.message;
       }
@@ -1049,6 +1087,7 @@
       live = false;
       clearInterval(tick);
       tick = null;
+      stopDiag();
       video.pause();
       info.textContent = "Restaurando câmera e microfone…";
       try {

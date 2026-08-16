@@ -1,12 +1,35 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { fsCreate, fsSet, verifyFirebaseIdToken } from "@/lib/firebase.server";
 import { findPitchaiPlan } from "@/lib/live/plans";
+import { throttle } from "@/lib/live/rate-limit.server";
 import { createStripeClient, getStripeErrorMessage, type StripeEnv } from "@/lib/stripe.server";
+
+// Cada POST aceito cria um documento no Firestore e um customer/sessão no
+// Stripe, então o endpoint precisa de teto próprio. O limite por IP corta o
+// abuso antes mesmo de gastar uma verificação de token; o limite por conta
+// corta o loop de um usuário legítimo com a tela travada.
+const IP_LIMIT = { limit: 30, windowMs: 10 * 60_000 };
+const USER_LIMIT = { limit: 6, windowMs: 10 * 60_000 };
+
+function clientIp(request: Request): string {
+  const forwarded = request.headers.get("x-forwarded-for") || "";
+  return forwarded.split(",")[0].trim() || request.headers.get("x-real-ip") || "desconhecido";
+}
+
+function tooManyRequests(retryAfter: number): Response {
+  return Response.json(
+    { error: "Muitas tentativas de pagamento. Aguarde alguns minutos e tente novamente." },
+    { status: 429, headers: { "retry-after": String(retryAfter) } },
+  );
+}
 
 export const Route = createFileRoute("/api/checkout/start")({
   server: {
     handlers: {
       POST: async ({ request }) => {
+        const byIp = throttle(`checkout:ip:${clientIp(request)}`, IP_LIMIT);
+        if (!byIp.ok) return tooManyRequests(byIp.retryAfter);
+
         const token = (request.headers.get("authorization") || "")
           .replace(/^Bearer\s+/i, "")
           .trim();
@@ -14,6 +37,9 @@ export const Route = createFileRoute("/api/checkout/start")({
           return Response.json({ error: "Crie sua conta antes de pagar." }, { status: 401 });
         const user = await verifyFirebaseIdToken(token).catch(() => null);
         if (!user?.email) return Response.json({ error: "Sessão inválida." }, { status: 401 });
+
+        const byUser = throttle(`checkout:uid:${user.uid}`, USER_LIMIT);
+        if (!byUser.ok) return tooManyRequests(byUser.retryAfter);
 
         const body = await request.json().catch(() => ({}));
         const plan = findPitchaiPlan(String(body.plan || ""));
@@ -88,6 +114,9 @@ export const Route = createFileRoute("/api/checkout/start")({
           if (!session.url) throw new Error("Stripe não retornou a URL do checkout.");
           return Response.json({ checkoutUrl: session.url });
         } catch (error) {
+          // O detalhe fica só no log: as mensagens de erro do Firestore e do
+          // Stripe carregam caminho de documento, uid e id de preço, e chegavam
+          // inteiras à tela do comprador.
           console.error("[checkout/start]", getStripeErrorMessage(error));
           return Response.json(
             { error: "Não foi possível iniciar o pagamento. Tente novamente em instantes." },
