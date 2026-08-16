@@ -24,6 +24,7 @@ const FILES = [
   "content.js",
   "dom-map.js",
   "hook.js",
+  "media-injector.js",
   "net-bridge.js",
   "regions.js",
   "panel.html",

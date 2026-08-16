@@ -3,7 +3,6 @@ import firebaseConfigData from "../../firebase-applet-config.json";
 export const FIREBASE_PROJECT_ID = firebaseConfigData.projectId;
 export const FIREBASE_API_KEY = firebaseConfigData.apiKey;
 export const FIREBASE_DATABASE_ID = firebaseConfigData.firestoreDatabaseId;
-export const FIREBASE_SERVER_EMAIL = process.env.FIREBASE_SERVER_EMAIL || "";
 
 const IDENTITYTOOLKIT_URL = "https://identitytoolkit.googleapis.com/v1";
 const FIRESTORE_BASE_URL = `https://firestore.googleapis.com/v1/projects/${FIREBASE_PROJECT_ID}/databases/${FIREBASE_DATABASE_ID}`;
@@ -44,20 +43,117 @@ export async function verifyFirebaseIdToken(idToken: string): Promise<FirebaseUs
 }
 
 // ---------------------------------------------------------------------------
-// Auth de servidor (sem service account): usa uma conta Firebase criada no
-// console com email/senha e faz signInWithPassword via REST.
+// Auth de servidor: service account (fluxo OAuth2 JWT-bearer).
+//
+// Substitui o login email/senha da antiga conta técnica. O access token emitido
+// para a service account tem acesso administrativo ao Firestore e NÃO passa
+// pelas regras de segurança, então rotinas sem usuário (webhook de pagamento,
+// jobs) deixam de depender de `firestore.rules` estar publicado e de uma senha
+// que também serviria para logar no app como usuário comum.
 // ---------------------------------------------------------------------------
 
+const GOOGLE_TOKEN_URI = "https://oauth2.googleapis.com/token";
+const FIRESTORE_SCOPE = "https://www.googleapis.com/auth/datastore";
+
+type ServiceAccountCredentials = { clientEmail: string; privateKey: string };
+
+let serviceAccountCache: ServiceAccountCredentials | null | undefined;
+
+/**
+ * Aceita a credencial em dois formatos:
+ *  - FIREBASE_SERVICE_ACCOUNT: o JSON da service account (texto ou base64);
+ *  - FIREBASE_CLIENT_EMAIL + FIREBASE_PRIVATE_KEY: os dois campos avulsos.
+ */
+function loadServiceAccount(): ServiceAccountCredentials | null {
+  if (serviceAccountCache !== undefined) return serviceAccountCache;
+
+  const raw = (process.env.FIREBASE_SERVICE_ACCOUNT || "").trim();
+  if (raw) {
+    // Painéis de deploy costumam quebrar JSON multilinha, então o valor também
+    // pode vir em base64.
+    const json = raw.startsWith("{") ? raw : Buffer.from(raw, "base64").toString("utf8");
+    try {
+      const parsed = JSON.parse(json);
+      if (parsed?.client_email && parsed?.private_key) {
+        serviceAccountCache = {
+          clientEmail: String(parsed.client_email),
+          privateKey: normalizePrivateKey(String(parsed.private_key)),
+        };
+        return serviceAccountCache;
+      }
+    } catch {
+      // Cai no formato avulso abaixo; o erro concreto é reportado por quem chama.
+    }
+  }
+
+  const clientEmail = (process.env.FIREBASE_CLIENT_EMAIL || "").trim();
+  const privateKey = process.env.FIREBASE_PRIVATE_KEY || "";
+  if (clientEmail && privateKey) {
+    serviceAccountCache = { clientEmail, privateKey: normalizePrivateKey(privateKey) };
+    return serviceAccountCache;
+  }
+
+  serviceAccountCache = null;
+  return null;
+}
+
+/** Variáveis de ambiente entregam a chave PEM com "\n" literal. */
+function normalizePrivateKey(key: string): string {
+  return key.replace(/\\n/g, "\n").trim();
+}
+
+function pemToPkcs8(pem: string): ArrayBuffer {
+  const body = pem
+    .replace(/-----BEGIN [^-]+-----/g, "")
+    .replace(/-----END [^-]+-----/g, "")
+    .replace(/\s+/g, "");
+  const buf = Buffer.from(body, "base64");
+  return buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength) as ArrayBuffer;
+}
+
+function base64url(input: string | ArrayBuffer): string {
+  const bytes = typeof input === "string" ? new TextEncoder().encode(input) : new Uint8Array(input);
+  return Buffer.from(bytes).toString("base64url");
+}
+
+async function signServiceAccountJwt(account: ServiceAccountCredentials): Promise<string> {
+  const issuedAt = Math.floor(Date.now() / 1000);
+  const header = base64url(JSON.stringify({ alg: "RS256", typ: "JWT" }));
+  const claims = base64url(
+    JSON.stringify({
+      iss: account.clientEmail,
+      scope: FIRESTORE_SCOPE,
+      aud: GOOGLE_TOKEN_URI,
+      iat: issuedAt,
+      exp: issuedAt + 3600,
+    }),
+  );
+  const signingInput = `${header}.${claims}`;
+  const key = await crypto.subtle.importKey(
+    "pkcs8",
+    pemToPkcs8(account.privateKey),
+    { name: "RSASSA-PKCS1-v1_5", hash: "SHA-256" },
+    false,
+    ["sign"],
+  );
+  const signature = await crypto.subtle.sign(
+    "RSASSA-PKCS1-v1_5",
+    key,
+    new TextEncoder().encode(signingInput),
+  );
+  return `${signingInput}.${base64url(signature)}`;
+}
+
 let serverTokenCache: { token: string; expiresAt: number } | undefined;
-// Promise em-flight para evitar 2 chamadas concorrentes a signInWithPassword
-// que poderiam invalidar o token da primeira chamada (race condition).
+// Promise em-flight para evitar duas trocas de token concorrentes.
 let inflightServerToken: Promise<string> | null = null;
 
 async function acquireServerToken(): Promise<string> {
-  const email = process.env.FIREBASE_SERVER_EMAIL;
-  const password = process.env.FIREBASE_SERVER_PASSWORD;
-  if (!email || !password) {
-    throw new Error("FIREBASE_SERVER_EMAIL/FIREBASE_SERVER_PASSWORD nao configurados");
+  const account = loadServiceAccount();
+  if (!account) {
+    throw new Error(
+      "Credenciais de servidor Firebase nao configuradas (FIREBASE_SERVICE_ACCOUNT ou FIREBASE_CLIENT_EMAIL/FIREBASE_PRIVATE_KEY)",
+    );
   }
   if (serverTokenCache && serverTokenCache.expiresAt > Date.now() + 60_000) {
     return serverTokenCache.token;
@@ -66,25 +162,26 @@ async function acquireServerToken(): Promise<string> {
     return inflightServerToken;
   }
   inflightServerToken = (async () => {
-    const res = await fetch(
-      `${IDENTITYTOOLKIT_URL}/accounts:signInWithPassword?key=${FIREBASE_API_KEY}`,
-      {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ email, password, returnSecureToken: true }),
-      },
-    );
+    const assertion = await signServiceAccountJwt(account);
+    const res = await fetch(GOOGLE_TOKEN_URI, {
+      method: "POST",
+      headers: { "content-type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({
+        grant_type: "urn:ietf:params:oauth:grant-type:jwt-bearer",
+        assertion,
+      }),
+    });
     const body = await res.json().catch(() => ({}));
-    if (!res.ok || !body?.idToken) {
+    if (!res.ok || !body?.access_token) {
       // Evita vazamento de credenciais em logs — mensagem genérica sanitizada.
-      throw new Error("Falha ao autenticar servidor Firebase");
+      throw new Error("Falha ao autenticar service account do Firebase");
     }
-    const expiresInSeconds = Number(body?.expiresIn ?? 3600);
+    const expiresInSeconds = Number(body?.expires_in ?? 3600);
     serverTokenCache = {
-      token: body.idToken,
+      token: body.access_token,
       expiresAt: Date.now() + (expiresInSeconds - 60) * 1000,
     };
-    return body.idToken as string;
+    return body.access_token as string;
   })();
   try {
     return await inflightServerToken;
@@ -101,9 +198,10 @@ async function authorization(
 ): Promise<{ headers: Record<string, string>; key: string }> {
   if (mode === "server") {
     // Server functions autenticadas podem encaminhar o token Firebase que já
-    // foi verificado pelo middleware. As regras do Firestore continuam sendo
-    // a autoridade e só concedem privilégios a administradores. Rotinas sem
-    // usuário (webhooks/jobs) seguem usando a conta técnica abaixo.
+    // foi verificado pelo middleware; nesse caminho quem manda são as regras
+    // do Firestore, e o acesso vale o do próprio usuário — não é privilegiado.
+    // Rotinas sem usuário (webhooks/jobs) usam a service account abaixo, que
+    // tem acesso administrativo.
     if (userToken) {
       return { headers: { authorization: `Bearer ${userToken}` }, key: "" };
     }
@@ -269,6 +367,43 @@ export async function fsSet(
     const body = await res.json().catch(() => ({}));
     throw new Error(`Firestore PATCH ${path} falhou: ${body?.error?.message ?? res.status}`);
   }
+}
+
+/**
+ * Cria o documento somente se ele ainda não existir, e responde se a criação
+ * foi mesmo desta chamada. A pré-condição `currentDocument.exists=false` é
+ * avaliada pelo servidor do Firestore, então dois reenvios simultâneos do mesmo
+ * webhook não conseguem criar o documento duas vezes — é o que dá idempotência
+ * real, coisa que um get-seguido-de-set não garante.
+ *
+ * @returns true se este chamador criou o documento; false se já existia.
+ */
+export async function fsCreateIfAbsent(
+  path: string,
+  data: Record<string, unknown>,
+  options: { mode?: FirestoreAuthMode; userToken?: string } = {},
+): Promise<boolean> {
+  const { headers, key } = await authorization(options.mode ?? "public", options.userToken);
+  const params = [key ? key.slice(1) : "", "currentDocument.exists=false"]
+    .filter(Boolean)
+    .join("&");
+  const url = `${FIRESTORE_BASE_URL}/documents/${path}?${params}`;
+  const res = await fetch(url, {
+    method: "PATCH",
+    headers: { "content-type": "application/json", ...headers },
+    body: JSON.stringify({
+      fields: Object.fromEntries(Object.entries(data).map(([k, v]) => [k, encodeValue(v)])),
+    }),
+  });
+  if (res.ok) return true;
+  const body = await res.json().catch(() => ({}));
+  const status = body?.error?.status;
+  if (res.status === 409 || status === "FAILED_PRECONDITION" || status === "ALREADY_EXISTS") {
+    return false;
+  }
+  throw new Error(
+    `Firestore CREATE-IF-ABSENT ${path} falhou: ${body?.error?.message ?? res.status}`,
+  );
 }
 
 export async function fsDelete(

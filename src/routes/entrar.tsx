@@ -1,16 +1,18 @@
 import { createFileRoute, Link, useNavigate, useSearch } from "@tanstack/react-router";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { toast } from "sonner";
-import { Eye, EyeOff, Loader2, Lock, Mail } from "lucide-react";
+import { Eye, EyeOff, Loader2, Lock, LogOut, Mail } from "lucide-react";
 import {
   signInWithPopup,
   onAuthStateChanged,
   signInWithEmailAndPassword,
   createUserWithEmailAndPassword,
   sendPasswordResetEmail,
+  signOut,
 } from "firebase/auth";
 import { getFirebaseAuth, googleProvider } from "@/lib/firebase";
 import { ensureAccountProfile } from "@/lib/account-profile";
+import { hasActiveAccess } from "@/lib/live/access-check";
 
 type Search = { next?: string; mode?: "login" | "signup" };
 
@@ -80,7 +82,7 @@ function EntrarPage() {
   const { next, mode: requestedMode } = useSearch({ from: "/entrar" });
   const navigate = useNavigate();
   const [mode, setMode] = useState<"login" | "signup" | "forgot">(requestedMode || "login");
-  const authActionInProgress = useRef(false);
+  const [sessionEmail, setSessionEmail] = useState<string | null>(null);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
@@ -123,20 +125,58 @@ function EntrarPage() {
     return !nextEmailError && !nextPasswordError && !nextConfirmError;
   }
 
+  // Só observamos a sessão para avisar quem já está conectado — nenhuma
+  // navegação automática acontece aqui. Antes este efeito redirecionava sozinho
+  // assim que o Firebase reidratava a sessão salva no navegador, e a tela de
+  // login "pulava" para o destino sem o usuário clicar em nada.
   useEffect(() => {
-    const fbAuth = getFirebaseAuth();
-    // Apenas onAuthStateChanged dirá o estado real (incluindo persistence
-    // hydrated). Evitamos a chamada concorrente `currentUser?.getIdToken().then(...)`
-    // que causava double-navigate quando o usuário já estava logado.
-    const unsubFb = onAuthStateChanged(fbAuth, (user) => {
-      if (user && !authActionInProgress.current) {
-        navigate({ to: dest });
-      }
+    const unsubFb = onAuthStateChanged(getFirebaseAuth(), (user) => {
+      setSessionEmail(user?.email ?? null);
     });
     return () => {
       unsubFb();
     };
-  }, [dest, navigate]);
+  }, []);
+
+  /**
+   * Destino pós-autenticação: o painel exige plano ativo, então quem não tem
+   * assinatura cai na tela de planos. Um `next` explícito (/admin, /indique…)
+   * é sempre respeitado — só o painel passa pela checagem de licença.
+   */
+  async function goAfterAuth(uid: string) {
+    if (dest !== "/app") {
+      navigate({ to: dest });
+      return;
+    }
+    const active = await hasActiveAccess(uid);
+    navigate({ to: active ? "/app" : "/planos" });
+  }
+
+  /** Continua com a sessão que já existe no navegador — sempre por clique. */
+  async function continueWithSession() {
+    const user = getFirebaseAuth().currentUser;
+    if (!user) return;
+    setBusy(true);
+    try {
+      await goAfterAuth(user.uid);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  /** Encerra a sessão atual para permitir login com outra conta. */
+  async function useAnotherAccount() {
+    setBusy(true);
+    try {
+      await signOut(getFirebaseAuth());
+      setPassword("");
+      toast.success("Sessão encerrada. Entre com a conta que quiser.");
+    } catch {
+      toast.error("Não foi possível encerrar a sessão. Tente novamente.");
+    } finally {
+      setBusy(false);
+    }
+  }
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
@@ -145,19 +185,18 @@ function EntrarPage() {
     if (!validateForm()) return;
 
     setBusy(true);
-    authActionInProgress.current = true;
     const fbAuth = getFirebaseAuth();
     try {
       if (mode === "login") {
         const { user } = await signInWithEmailAndPassword(fbAuth, email, password);
         await ensureAccountProfile(user);
         toast.success("Login efetuado com sucesso!");
-        navigate({ to: dest });
+        await goAfterAuth(user.uid);
       } else if (mode === "signup") {
         const { user } = await createUserWithEmailAndPassword(fbAuth, email, password);
         await ensureAccountProfile(user);
         toast.success("Conta criada! Redirecionando...");
-        navigate({ to: dest });
+        await goAfterAuth(user.uid);
       } else {
         await sendPasswordResetEmail(fbAuth, email, {
           url: window.location.origin + "/reset-password",
@@ -170,20 +209,18 @@ function EntrarPage() {
     } catch (err) {
       toast.error(translateAuthError(err));
     } finally {
-      authActionInProgress.current = false;
       setBusy(false);
     }
   }
 
   async function google() {
     setBusy(true);
-    authActionInProgress.current = true;
     try {
       const fbAuth = getFirebaseAuth();
       const { user } = await signInWithPopup(fbAuth, googleProvider);
       await ensureAccountProfile(user);
       toast.success("Autenticado com Google com sucesso!");
-      navigate({ to: dest });
+      await goAfterAuth(user.uid);
     } catch (err) {
       console.warn(
         "[entrar] Falha no login Google:",
@@ -191,7 +228,6 @@ function EntrarPage() {
       );
       toast.error(translateAuthError(err));
     } finally {
-      authActionInProgress.current = false;
       setBusy(false);
     }
   }
@@ -228,6 +264,35 @@ function EntrarPage() {
         </div>
 
         <div className="marketing-panel rounded-2xl p-6 backdrop-blur-2xl">
+          {/* Sessão salva no navegador: nada acontece sozinho, o usuário decide
+              se continua com ela ou entra com outra conta. */}
+          {sessionEmail && (
+            <div className="mb-5 rounded-xl border border-[#8b5cf6]/30 bg-[#8b5cf6]/10 p-4">
+              <p className="text-xs text-white/70">
+                Você já está conectado como{" "}
+                <strong className="break-all text-white">{sessionEmail}</strong>.
+              </p>
+              <div className="mt-3 flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  onClick={continueWithSession}
+                  disabled={busy}
+                  className="inline-flex items-center gap-1.5 rounded-lg bg-gradient-to-br from-[#8b5cf6] to-[#a855f7] px-3.5 py-2 text-xs font-semibold text-white transition hover:opacity-90 disabled:opacity-50"
+                >
+                  Continuar com esta conta
+                </button>
+                <button
+                  type="button"
+                  onClick={useAnotherAccount}
+                  disabled={busy}
+                  className="inline-flex items-center gap-1.5 rounded-lg border border-white/12 bg-white/5 px-3.5 py-2 text-xs font-semibold text-white/75 transition hover:bg-white/10 hover:text-white disabled:opacity-50"
+                >
+                  <LogOut className="h-3.5 w-3.5" /> Entrar com outra conta
+                </button>
+              </div>
+            </div>
+          )}
+
           {mode !== "forgot" && (
             <>
               <button

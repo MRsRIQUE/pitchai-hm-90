@@ -871,6 +871,65 @@
     let live = false;
     let elapsed = 0;
     let tick = null;
+    const mediaFiles = { video: null, audio: null };
+
+    // ---- Ponte com a fonte virtual (media-injector.js, MAIN world da página) ----
+    const MEDIA_CONTROL = "__pitchai_media_control__";
+    const MEDIA_ACK = "__pitchai_media_ack__";
+    const pendingMedia = new Map();
+    let mediaSeq = 0;
+    const pageOrigin = (() => {
+      try {
+        return new URL(document.referrer).origin;
+      } catch {
+        return "*";
+      }
+    })();
+
+    window.addEventListener("message", (event) => {
+      const data = event.data;
+      if (!data || data.source !== MEDIA_ACK) return;
+      const pending = pendingMedia.get(data.requestId);
+      if (!pending) return;
+      pendingMedia.delete(data.requestId);
+      clearTimeout(pending.timer);
+      if (data.ok) pending.resolve(data.status || {});
+      else pending.reject(new Error(data.error || "Falha ao configurar a fonte virtual"));
+    });
+
+    function mediaConfig() {
+      const num = (id, fallback) => {
+        const value = Number(document.getElementById(id)?.value);
+        return Number.isFinite(value) && value > 0 ? value : fallback;
+      };
+      const checked = (id, fallback) => document.getElementById(id)?.checked ?? fallback;
+      return {
+        width: num("pnl-media-width", 1280),
+        height: num("pnl-media-height", 720),
+        fps: num("pnl-media-fps", 30),
+        loop: checked("pnl-media-loop", true),
+        force: checked("pnl-media-force", true),
+        tone: checked("pnl-media-tone", true),
+        audioMode: document.getElementById("pnl-media-audio-mode")?.value || "video",
+      };
+    }
+
+    function sendMedia(command, payload = {}) {
+      if (window.parent === window) {
+        return Promise.reject(
+          new Error("Abra o painel dentro da aba do TikTok para usar a fonte virtual"),
+        );
+      }
+      const requestId = `media-${++mediaSeq}`;
+      return new Promise((resolve, reject) => {
+        const timer = setTimeout(() => {
+          pendingMedia.delete(requestId);
+          reject(new Error("A página do TikTok não respondeu; recarregue a aba"));
+        }, 15000);
+        pendingMedia.set(requestId, { resolve, reject, timer });
+        window.parent.postMessage({ source: MEDIA_CONTROL, command, requestId, payload }, pageOrigin);
+      });
+    }
 
     const fmt = (s) => {
       const m = Math.floor(s / 60),
@@ -921,39 +980,134 @@
         stopTracks();
         if (fileUrl) URL.revokeObjectURL(fileUrl);
         fileUrl = URL.createObjectURL(f);
+        mediaFiles.video = f;
         video.srcObject = null;
         video.src = fileUrl;
         video.loop = true;
         video.muted = false;
-        info.textContent = "Arquivo: " + f.name;
+        info.textContent = `Vídeo: ${f.name} — clique em "Usar vídeo no TikTok"`;
       };
       input.click();
     });
 
-    function startLive() {
-      if (!video.srcObject && !video.src) {
-        info.textContent = "Escolha primeiro a fonte de vídeo";
+    const audioModeSelect = document.getElementById("pnl-media-audio-mode");
+    const audioButton = document.getElementById("pnl-src-audio");
+    const syncAudioButton = () => {
+      if (audioButton) {
+        audioButton.style.display = audioModeSelect?.value === "separate" ? "" : "none";
+      }
+    };
+    audioModeSelect?.addEventListener("change", syncAudioButton);
+    syncAudioButton();
+
+    audioButton?.addEventListener("click", () => {
+      const input = document.createElement("input");
+      input.type = "file";
+      input.accept = "audio/*";
+      input.onchange = () => {
+        const f = input.files?.[0];
+        if (!f) return;
+        mediaFiles.audio = f;
+        info.textContent = `Áudio: ${f.name}`;
+      };
+      input.click();
+    });
+
+    // Diagnóstico ao vivo da fonte virtual: o motor roda na página, então esta
+    // linha é a única forma de ver o que está acontecendo sem abrir o DevTools.
+    let diagTimer = null;
+    function renderDiag(status) {
+      const el = document.getElementById("pnl-media-diag");
+      if (!el) return;
+      const v = status.video || {};
+      el.textContent =
+        `fonte ${status.videoSource || "?"} · quadros ${status.framesDrawn ?? "?"} · ` +
+        `raf ${status.rafAlive ? "on" : "off"} · decod ${v.decodificados ?? "?"} · ` +
+        `t ${v.tempo ?? "?"}s · ready ${v.ready ?? "?"} · ` +
+        `${v.paused ? "pausado" : "tocando"}${v.muted ? " (mudo)" : ""} · ` +
+        `audio ${status.audioContext || "?"} · ${status.peerConnections ?? 0}pc` +
+        (v.erro ? ` · erro: ${v.erro}` : "");
+      if (status.videoSource === "element") {
+        info.textContent =
+          "Fonte trocada para captura direta do vídeo (o canvas não recebia quadros desta GPU).";
+      }
+    }
+    function startDiag() {
+      clearInterval(diagTimer);
+      diagTimer = setInterval(async () => {
+        try {
+          renderDiag(await sendMedia("status"));
+        } catch {
+          /* aba recarregada: o próximo ciclo volta a responder */
+        }
+      }, 2000);
+    }
+    function stopDiag() {
+      clearInterval(diagTimer);
+      diagTimer = null;
+      const el = document.getElementById("pnl-media-diag");
+      if (el) el.textContent = "";
+    }
+
+    async function startLive() {
+      if (!mediaFiles.video) {
+        info.textContent = "Escolha primeiro o vídeo em “⬆ Escolher vídeo”";
         return;
       }
-      live = true;
-      elapsed = 0;
-      video.play().catch(() => {});
-      clearInterval(tick);
-      tick = setInterval(() => {
-        elapsed++;
-        timeEl.textContent = fmt(elapsed);
-      }, 1000);
-      info.textContent = "Pré-visualização local ativa (não inicia o TikTok)";
+      const config = mediaConfig();
+      if (config.audioMode === "separate" && !mediaFiles.audio) {
+        info.textContent = "Escolha o arquivo de áudio separado";
+        return;
+      }
+
+      info.textContent = "Ativando a fonte virtual no TikTok…";
+      try {
+        const status = await sendMedia("activate", {
+          config,
+          videoFile: mediaFiles.video,
+          audioFile: mediaFiles.audio,
+        });
+        live = true;
+        elapsed = 0;
+        video.play().catch(() => {});
+        clearInterval(tick);
+        tick = setInterval(() => {
+          elapsed++;
+          timeEl.textContent = fmt(elapsed);
+        }, 1000);
+        info.textContent = status.message || "Fonte virtual ativa no TikTok";
+        renderDiag(status);
+        startDiag();
+      } catch (error) {
+        info.textContent = error.message;
+      }
     }
-    function stopLive(reason) {
+
+    async function stopLive() {
       live = false;
       clearInterval(tick);
       tick = null;
+      stopDiag();
       video.pause();
-      info.textContent = "Pré-visualização pausada";
+      info.textContent = "Restaurando câmera e microfone…";
+      try {
+        const status = await sendMedia("deactivate");
+        info.textContent = status.message || "Fonte virtual desligada";
+      } catch (error) {
+        info.textContent = error.message;
+      }
     }
+
     document.getElementById("pnl-live-start").addEventListener("click", () => startLive());
     document.getElementById("pnl-live-stop").addEventListener("click", () => stopLive());
+    document.getElementById("pnl-media-refresh")?.addEventListener("click", async () => {
+      try {
+        const status = await sendMedia("refresh");
+        info.textContent = status.message || "Lista de fontes atualizada";
+      } catch (error) {
+        info.textContent = error.message;
+      }
+    });
 
     // O agendamento real roda no content script, mesmo com este painel fechado.
     setInterval(() => {

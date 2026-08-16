@@ -16,7 +16,8 @@
     "test:e2e:install": "playwright install --with-deps chromium webkit",
     "test:perf": "node node_modules/@playwright/test/cli.js test e2e/perf.spec.ts --project=desktop",
     "test:smoke": "node node_modules/@playwright/test/cli.js test e2e/perf.spec.ts --project=desktop",
-    "build:extension": "node scripts/pack-extension.mjs"
+    "build:extension": "node scripts/pack-extension.mjs",
+    "deploy:rules": "firebase deploy --only firestore:rules"
   },
   "dependencies": {
     "@ai-sdk/openai-compatible": "^2.0.48",
