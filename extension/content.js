@@ -3876,10 +3876,16 @@
       if (expectedPid && parsed?.pid && String(parsed.pid) !== String(expectedPid)) continue;
       const parsedName = normKey(parsed?.name || "");
       if (parsedName === key) return c;
-      if (expectedPid && parsedName && parsedName !== key) continue;
       const t = normKey(`${parsed?.name || ""} ${c.textContent || ""}`);
       if (!t) continue;
-      if (parsedName && key.length >= 12 && parsedName.includes(key)) return c;
+      // A vitrine virtualizada pode truncar o título do card; aceita a relação
+      // somente quando o fragmento ainda é suficientemente longo.
+      if (
+        parsedName &&
+        ((key.length >= 12 && parsedName.includes(key)) ||
+          (parsedName.length >= 12 && key.includes(parsedName)))
+      )
+        return c;
       const hits = words.filter((w) => t.includes(w)).length;
       if (hits > bestHits) {
         bestHits = hits;
