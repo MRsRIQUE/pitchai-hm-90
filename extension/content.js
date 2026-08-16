@@ -1844,33 +1844,33 @@
     return { passes, complete };
   }
 
-  /** Lê a vitrine: rede (API do TikTok) + container mapeado + fallback heurístico. */
+  /** Lê a vitrine: o DOM mapeado é a verdade; a rede só enriquece. A API do TikTok
+   *  entrega na mesma página a vitrine da live E o catálogo completo da conta
+   *  (pesquisa/estoque) — por isso produtos vindos só da rede só entram quando o
+   *  DOM não entregou nenhuma vitrine (setor ainda não mapeado). */
   async function scrapeCatalog({ deep = false } = {}) {
     const results = new Map();
     const resultsIdx = new Map(); // normKey(name) -> chave em results (O(1) sem O(n²))
     refreshAccountNames();
 
-    // 1) fonte mais confiável: payload da própria API do TikTok
+    // 1) rede coletada à parte: aplicada só depois de conhecer a vitrine do DOM
+    const netItems = [];
     for (const p of net.products.values()) {
       if (isBadProductName(p.name)) continue;
-      upsertProduct(
-        results,
-        {
-          pid: p.pid || "",
-          name: p.name,
-          price: p.price || "",
-          description: p.description || "",
-          // A foto e o preço numérico vêm daqui, da API — remontar o produto
-          // sem eles era o que apagava a imagem que o hook já tinha lido.
-          ...(p.priceCents != null ? { priceCents: p.priceCents } : {}),
-          ...(p.priceMaxCents != null ? { priceMaxCents: p.priceMaxCents } : {}),
-          ...(p.currency ? { currency: p.currency } : {}),
-          ...(p.imageUrl ? { imageUrl: p.imageUrl } : {}),
-        },
-        resultsIdx,
-      );
+      netItems.push({
+        pid: p.pid || "",
+        name: p.name,
+        price: p.price || "",
+        description: p.description || "",
+        // A foto e o preço numérico vêm daqui, da API — remontar o produto
+        // sem eles era o que apagava a imagem que o hook já tinha lido.
+        ...(p.priceCents != null ? { priceCents: p.priceCents } : {}),
+        ...(p.priceMaxCents != null ? { priceMaxCents: p.priceMaxCents } : {}),
+        ...(p.currency ? { currency: p.currency } : {}),
+        ...(p.imageUrl ? { imageUrl: p.imageUrl } : {}),
+      });
     }
-    const apiCount = results.size;
+    const apiCount = netItems.length;
 
     const cards = new Set();
     const domKeys = new Set();
@@ -1990,6 +1990,30 @@
       domKeys.add(key);
       upsertProduct(results, parsed, resultsIdx);
     });
+
+    // 2) verdades da vitrine: o que o DOM do setor entregou (vazio enquanto o
+    //    setor não está mapeado — nesse caso a rede vira fallback).
+    const vitrinePids = new Set();
+    const vitrineNames = [];
+    for (const p of results.values()) {
+      if (p.pid) vitrinePids.add(String(p.pid));
+      if (p.name) vitrineNames.push(p.name);
+    }
+    const hasVitrine = vitrinePids.size > 0 || vitrineNames.length > 0;
+    const vitrineNameKeys = new Set(vitrineNames.map((n) => normKey(n)));
+
+    // 3) rede enriquece produtos que existem na vitrine (preço/descrição/pid) e
+    //    só adiciona produtos novos quando o DOM não entregou nenhuma vitrine.
+    for (const item of netItems) {
+      const key = productKey(item);
+      if (!key || isBadProductName(item.name)) continue;
+      const inVitrine =
+        (item.pid && vitrinePids.has(String(item.pid))) ||
+        vitrineNameKeys.has(normKey(item.name)) ||
+        vitrineNames.some((n) => namesMatch(n, item.name));
+      if (hasVitrine && !inVitrine) continue;
+      upsertProduct(results, item, resultsIdx);
+    }
 
     lastScrape = { api: apiCount, dom: domCount, total: results.size, at: Date.now() };
     return Array.from(results.values());
@@ -4042,7 +4066,8 @@
 
   // ---------- Auto-fixar produto ----------
   const PIN_RX = /fixar|pin|destacar|topo|apresentar|mostrar/i;
-  const PIN_DANGER_RX = /remover|excluir|apagar|editar|comprar|carrinho|detalhes|desafixar|unpin/i;
+  const PIN_DANGER_RX =
+    /remover|excluir|apagar|editar|comprar|carrinho|detalhes|desafixar|unpin|cancelar|parar/i;
   const UNPIN_RX = /desafixar|unpin|remover (do )?destaque|parar de apresentar|cancelar apresenta/i;
   const CONFIRM_RX = /^(confirmar|apresentar|fixar|sim|ok|continuar)$/i;
   const PINNED_RX = /(fixado|apresentando|em destaque|no topo|unpin|desafixar|cancelar apresenta)/i;
@@ -4070,9 +4095,17 @@
       if (PIN_RX.test(label) && !PIN_DANGER_RX.test(label)) return b.closest("button") || b;
     }
     // Fallback seguro para versões do TikTok que usam um único botão sem texto.
-    // Nunca clica às cegas quando o card possui várias ações.
+    // Nunca clica às cegas quando o card possui várias ações, nem quando o único
+    // botão visível é o de desafixar (aria-pressed / classe unpin).
     const visibleButtons = btns.filter((b) => b.tagName === "BUTTON" && DM()?.util?.isVisible?.(b));
-    if (visibleButtons.length === 1) return visibleButtons[0];
+    if (visibleButtons.length === 1) {
+      const only = visibleButtons[0];
+      const pressed = only.getAttribute?.("aria-pressed") === "true";
+      const label = actionLabel(only).toLowerCase();
+      const looksUnpin =
+        pressed || UNPIN_RX.test(label) || /unpin|unfix|desafix/i.test(`${only.className || ""}`);
+      if (!looksUnpin) return only;
+    }
     return null;
   }
 
@@ -4085,21 +4118,32 @@
   function findUnpinButton(card) {
     let buttons = [];
     try {
-      buttons = Array.from(card.querySelectorAll('button, [role="button"], a[role="button"]'));
+      buttons = Array.from(
+        card.querySelectorAll(
+          'button, [role="button"], a[role="button"], [class*="unpin" i], [class*="unfix" i]',
+        ),
+      );
     } catch {}
     return (
       buttons.find(
         (button) =>
           DM()?.util?.isVisible?.(button) &&
-          (UNPIN_RX.test(actionLabel(button)) || button.getAttribute?.("aria-pressed") === "true"),
+          (UNPIN_RX.test(actionLabel(button)) ||
+            button.getAttribute?.("aria-pressed") === "true" ||
+            /unpin|unfix|desafix/i.test(`${button.className || ""}`)),
       ) || null
     );
   }
 
   function isPinnedCard(card) {
     if (!card?.isConnected) return false;
-    if (PINNED_RX.test((card.textContent || "").toLowerCase())) return true;
-    return !!findUnpinButton(card);
+    // Sinal mais forte primeiro: botão de desafixar / aria-pressed. O texto do
+    // card ("fixado", "em destaque"…) fica só como fallback, porque descrição
+    // de produto pode conter essas palavras e inverter o estado.
+    if (findUnpinButton(card)) return true;
+    const pinBtn = findPinButton(card);
+    if (pinBtn && pinBtn.getAttribute?.("aria-pressed") === "true") return true;
+    return PINNED_RX.test((card.textContent || "").toLowerCase());
   }
 
   /** Alguns fluxos abrem um modal "Apresentar produto?" — confirma automaticamente. */
@@ -4236,20 +4280,28 @@
       .filter((w) => w.length > 3)
       .slice(0, 4);
     let best = null;
-    let bestHits = 0;
+    let bestScore = 0;
+    let tie = false;
     for (const c of cards) {
       const parsed = parseProductCard(c);
       if (expectedPid && parsed?.pid && String(parsed.pid) !== String(expectedPid)) continue;
       const t = normKey(`${parsed?.name || ""} ${c.textContent || ""}`);
       if (!t) continue;
-      if (t.includes(key)) return c;
+      // substring completa do nome vale o máximo; senão conta palavras em comum
+      const exact = t.includes(key) ? words.length + 1 : 0;
       const hits = words.filter((w) => t.includes(w)).length;
-      if (hits > bestHits) {
-        bestHits = hits;
+      const score = Math.max(exact, hits);
+      if (score > bestScore) {
+        bestScore = score;
         best = c;
+        tie = false;
+      } else if (score === bestScore && score > 0) {
+        tie = true;
       }
     }
-    return bestHits >= Math.max(1, Math.ceil(words.length / 2)) ? best : null;
+    // Empate de pontuação = ambiguidade: melhor não clicar do que fixar errado.
+    if (tie) return null;
+    return bestScore >= Math.max(1, Math.ceil(words.length / 2)) ? best : null;
   }
 
   async function pinProduct(alvo) {
@@ -4290,7 +4342,9 @@
     if (!button) {
       return { ok: false, changed: false, reason: "botão de desafixar não encontrado" };
     }
-    const pinnedName = parseProductCard(pinned)?.name || "";
+    const pinnedInfo = parseProductCard(pinned);
+    const pinnedName = pinnedInfo?.name || "";
+    const pinnedPid = pinnedInfo?.pid || "";
     realClick(button);
     await confirmPinDialog();
     for (let attempt = 0; attempt < 10; attempt++) {
@@ -4298,7 +4352,7 @@
       const current = pinned.isConnected
         ? pinned
         : pinnedName
-          ? await locateProductCard(pinnedName)
+          ? await locateProductCard(pinnedName, pinnedPid)
           : null;
       if (!current || !isPinnedCard(current)) {
         return { ok: true, changed: true, reason: "produto anterior desfixado" };
@@ -5778,11 +5832,11 @@
     const listenBtn = el(
       "button",
       {
-        class: "pitchai-btn" + (cfg.respostasIA ? " primary" : ""),
+        class: "pitchai-btn" + (replyAutomationEnabled(cfg) ? " primary" : ""),
         id: "pitchai-listen",
         title: "Ligar/desligar a leitura do chat pela IA",
       },
-      cfg.respostasIA ? LISTEN_ON_LABEL : LISTEN_OFF_LABEL,
+      replyAutomationEnabled(cfg) ? LISTEN_ON_LABEL : LISTEN_OFF_LABEL,
     );
     // Estado visual da escuta em um lugar só (clique e eco do painel).
     const applyListenUi = (on) => {
@@ -5792,9 +5846,16 @@
     listenBtn.addEventListener("click", async () => {
       const on = !listenBtn.classList.contains("primary");
       applyListenUi(on); // feedback imediato
-      // gravação incremental para não sobrescrever o que o painel salvou
-      const saved = await updateConfig((fresh) => {
-        fresh.respostasIA = on;
+      // O botão é o interruptor mestre da IA: liga/desliga a leitura do chat.
+      // Ao LIGAR não força a voz — se o vendedor deixou só "responder no chat",
+      // mantém texto puro; sem nenhum canal ativo, assume a voz (padrão).
+      await updateConfig((fresh) => {
+        if (on) {
+          if (!fresh.respostasIA && !fresh.responderNoChat) fresh.respostasIA = true;
+        } else {
+          fresh.respostasIA = false;
+          fresh.responderNoChat = false;
+        }
         return fresh;
       }).catch(() => null);
       if (on) {
@@ -5808,10 +5869,8 @@
         }
       } else {
         stopPitchLoop();
-        if (!saved?.responderNoChat) {
-          stopChatListener();
-          sessionEnd();
-        }
+        stopChatListener();
+        sessionEnd();
       }
     });
 
@@ -5982,7 +6041,7 @@
         }
         master.classList.toggle("on", !!c.protecaoGeral);
         master.setAttribute("aria-pressed", String(!!c.protecaoGeral));
-        applyListenUi(!!c.respostasIA);
+        applyListenUi(replyAutomationEnabled(c));
         if (replyAutomationEnabled(c)) {
           sessionStart();
           startChatListener().catch(() => {});
