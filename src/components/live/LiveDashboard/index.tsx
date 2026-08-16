@@ -39,6 +39,7 @@ import {
   Bot,
   CheckCircle2,
   Eye,
+  MessageSquare,
   Flame,
   Sun,
   Moon,
@@ -821,7 +822,7 @@ function LiveDashboardContent() {
                     </div>
                   </Card>
 
-                  {/* Respostas IA */}
+                  {/* Respostas por voz */}
                   <Card className="p-4">
                     <div className="flex items-start gap-3">
                       <div className="mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary ring-1 ring-inset ring-primary/20">
@@ -829,14 +830,14 @@ function LiveDashboardContent() {
                       </div>
                       <div className="min-w-0 flex-1">
                         <div className="flex items-center justify-between gap-3">
-                          <h4 className="font-semibold">Respostas automáticas da IA</h4>
+                          <h4 className="font-semibold">Respostas automáticas por voz</h4>
                           <Switch
                             checked={config.respostasIA}
                             onCheckedChange={(v) => update("respostasIA", v)}
                           />
                         </div>
                         <p className="mt-1 text-sm text-muted-foreground">
-                          Responde os comentários pelo{" "}
+                          Lê os comentários e responde por voz usando o{" "}
                           <span className="font-semibold text-foreground">produto ativo</span>
                           {activeProduct
                             ? ` (${activeProduct.name})`
@@ -847,7 +848,29 @@ function LiveDashboardContent() {
                     </div>
                   </Card>
 
-                  {/* Revisar antes de falar */}
+                  {/* Respostas em texto no chat */}
+                  <Card className="p-4">
+                    <div className="flex items-start gap-3">
+                      <div className="mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary ring-1 ring-inset ring-primary/20">
+                        <MessageSquare className="h-[18px] w-[18px]" strokeWidth={2.2} />
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center justify-between gap-3">
+                          <h4 className="font-semibold">Responder no chat automaticamente</h4>
+                          <Switch
+                            checked={config.responderNoChat}
+                            onCheckedChange={(v) => update("responderNoChat", v)}
+                          />
+                        </div>
+                        <p className="mt-1 text-sm text-muted-foreground">
+                          Digita respostas curtas no chat do TikTok com intervalo anti-spam. Não
+                          substitui uma mensagem que você estiver digitando.
+                        </p>
+                      </div>
+                    </div>
+                  </Card>
+
+                  {/* Revisar antes de responder */}
                   <Card className="p-4">
                     <div className="flex items-start gap-3">
                       <div className="mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-secondary/15 text-secondary ring-1 ring-inset ring-secondary/25">
@@ -855,15 +878,15 @@ function LiveDashboardContent() {
                       </div>
                       <div className="min-w-0 flex-1">
                         <div className="flex items-center justify-between gap-3">
-                          <h4 className="font-semibold">Confirmar respostas antes de falar</h4>
+                          <h4 className="font-semibold">Confirmar respostas antes de enviar</h4>
                           <Switch
                             checked={config.revisarAntesDeEnviar}
                             onCheckedChange={(v) => update("revisarAntesDeEnviar", v)}
                           />
                         </div>
                         <p className="mt-1 text-sm text-muted-foreground">
-                          Antes de a IA falar, você vê a resposta e aprova. Bom para os primeiros
-                          dias de live.
+                          Antes de responder por voz ou texto, você vê a resposta e aprova. Bom para
+                          os primeiros dias de live.
                         </p>
                       </div>
                     </div>

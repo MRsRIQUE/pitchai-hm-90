@@ -122,6 +122,7 @@ export const LIVE_CONTROL_KEYS = [
   "violacao",
   "autoMod",
   "respostasIA",
+  "responderNoChat",
   "revisarAntesDeEnviar",
 ] as const;
 

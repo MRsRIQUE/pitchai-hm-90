@@ -741,7 +741,7 @@
     if (extSecurity.isLocked) return;
     if (demo.isOn()) return;
     const cfg = await loadConfig();
-    if (!cfg.respostasIA) return;
+    if (!replyAutomationEnabled(cfg)) return;
     net.msgAt = Date.now();
     net.msgCount += list.length;
     chatState.detectVia = chatState.observer ? chatState.detectVia || "rede" : "rede";
@@ -834,6 +834,7 @@
     autoFixar: { enabled: false, query: "", minSec: 20, maxSec: 60, ids: [], names: [] },
     encerrarTempo: { enabled: false, minutes: 120 },
     respostasIA: true,
+    responderNoChat: false,
     notificacoesVenda: true,
     voz: {
       id: "nova",
@@ -879,6 +880,10 @@
       demo: { ...DEFAULTS.demo, ...(stored.demo || {}) },
       produtos: Array.isArray(stored.produtos) ? stored.produtos : [],
     };
+  }
+
+  function replyAutomationEnabled(cfg) {
+    return !!(cfg?.respostasIA || cfg?.responderNoChat);
   }
 
   async function loadConfig() {
@@ -1952,18 +1957,20 @@
           monitorEl.pause();
         } catch {}
       }
-      return a.play().catch(() => {});
+      await a.play();
+      return true;
     } catch {
-      return Promise.resolve();
+      return false;
     }
   }
 
   async function speakText(text, cfg) {
-    if (extSecurity.isLocked) return;
+    if (extSecurity.isLocked) return false;
     const ctx = classifyContext(text);
     const voice = resolveVoice(cfg, ctx);
     activity.setNowSpeaking({ text, ctx });
     const startedAt = Date.now();
+    let spoken = false;
     try {
       const authHeaders = await signRequest(cfg.syncToken, "tts_speak");
       const r = await fetch(`${API_BASE}/api/public/tts/speak`, {
@@ -1979,7 +1986,8 @@
         throw new Error(`voz ${r.status}${detail ? ` · ${detail.slice(0, 100)}` : ""}`);
       }
       const blob = await r.blob();
-      await playAudio(URL.createObjectURL(blob), cfg);
+      spoken = await playAudio(URL.createObjectURL(blob), cfg);
+      if (!spoken) throw new Error("o navegador não iniciou a reprodução da voz");
       await waitForAudioEnd();
     } catch (error) {
       activity.log({
@@ -1989,6 +1997,7 @@
       });
     }
     activity.setNowSpeaking(null);
+    if (!spoken) return false;
     // OpenAI tts-1: ~$0.015 / 1k chars. Cost stored in cents (USD ~= BRL for estimate).
     const chars = (text || "").length;
     const seconds = Math.max(1, Math.round((Date.now() - startedAt) / 1000));
@@ -1997,6 +2006,7 @@
     // If active product, mark it as pitched (once)
     const ativo = (cfg.produtos || []).find((p) => p.active);
     if (ativo) sessionEvent({ kind: "product", product: { id: ativo.id, name: ativo.name } });
+    return true;
   }
 
   // ---------- Chat state ----------
@@ -2017,11 +2027,16 @@
     detectVia: null,
     healthTimer: null,
     healthEl: null,
+    sentReplies: new Map(),
+    lastChatSendAt: 0,
   };
   const MIN_INTERVAL_MS = 4000;
+  const CHAT_SEND_INTERVAL_MS = 6000;
   const PITCH_IDLE_MS = 8000;
   const NO_MSG_WARN_MS = 60000;
   const CHAT_DEDUPE_MS = 45000;
+  const SENT_REPLY_TTL_MS = 60000;
+  const MAX_CHAT_QUEUE = 20;
 
   function splitPitchLines(script) {
     if (!script) return [];
@@ -2158,8 +2173,51 @@
     editor.dispatchEvent(new Event("change", { bubbles: true }));
   }
 
+  function normalizedReplyText(value) {
+    return String(value || "")
+      .replace(/\s+/g, " ")
+      .trim()
+      .toLowerCase();
+  }
+
+  function rememberSentReply(value) {
+    const normalized = normalizedReplyText(value);
+    if (!normalized) return;
+    const now = Date.now();
+    chatState.sentReplies.set(normalized, now);
+    for (const [text, at] of chatState.sentReplies) {
+      if (now - at > SENT_REPLY_TTL_MS) chatState.sentReplies.delete(text);
+    }
+  }
+
+  function isRecentlySentReply(value) {
+    const normalized = normalizedReplyText(value);
+    if (!normalized) return false;
+    const sentAt = chatState.sentReplies.get(normalized) || 0;
+    if (!sentAt || Date.now() - sentAt > SENT_REPLY_TTL_MS) {
+      if (sentAt) chatState.sentReplies.delete(normalized);
+      return false;
+    }
+    return true;
+  }
+
+  let chatSendChain = Promise.resolve();
+
+  /** Serializa envios para aprovação manual e automação nunca disputarem o editor. */
+  function sendChatReply(reply) {
+    const run = chatSendChain.then(
+      () => sendChatReplyUnlocked(reply),
+      () => sendChatReplyUnlocked(reply),
+    );
+    chatSendChain = run.then(
+      () => undefined,
+      () => undefined,
+    );
+    return run;
+  }
+
   /** Escreve e envia a resposta no campo real "Digite algo..." do TikTok. */
-  async function sendChatReply(reply) {
+  async function sendChatReplyUnlocked(reply) {
     let editor = await mapNode("chatReply", true);
     if (!editor || !DM()?.util?.isVisible?.(editor)) return false;
     const value = String(reply || "")
@@ -2167,9 +2225,20 @@
       .trim()
       .slice(0, 100);
     if (!value) return false;
+    // Nunca apaga uma mensagem que o apresentador esteja digitando manualmente.
+    if (chatEditorValue(editor).trim()) return false;
+    const waitMs = CHAT_SEND_INTERVAL_MS - (Date.now() - chatState.lastChatSendAt);
+    if (waitMs > 0) await sleep(waitMs);
+    const current = await loadConfig();
+    if (!current.responderNoChat || extSecurity.isLocked) return false;
+    if (chatEditorValue(editor).trim()) return false;
+    chatState.lastChatSendAt = Date.now();
     writeChatEditor(editor, value);
     await sleep(80);
     if (!chatEditorValue(editor)) return false;
+    // Marca antes do Enter porque o hook de rede pode devolver a mensagem ao
+    // feed antes de o DOM limpar o editor.
+    rememberSentReply(value);
 
     for (const type of ["keydown", "keypress", "keyup"]) {
       editor.dispatchEvent(
@@ -2184,7 +2253,10 @@
       );
     }
     await sleep(350);
-    if (!chatEditorValue(editor)) return true;
+    if (!chatEditorValue(editor)) {
+      rememberSentReply(value);
+      return true;
+    }
 
     // Algumas versões do TikTok ignoram Enter e exigem o botão de envio.
     let scope = editor.parentElement;
@@ -2215,7 +2287,50 @@
     if (send) realClick(send);
     await sleep(400);
     editor = (await mapNode("chatReply")) || editor;
-    return !chatEditorValue(editor);
+    const sent = !chatEditorValue(editor);
+    // Em resultado ambíguo, mantém a supressão pelo TTL: é mais seguro ignorar
+    // uma frase idêntica por 60s do que responder ao próprio eco em loop.
+    return sent;
+  }
+
+  async function deliverReply(item, reply, cfg) {
+    cfg = await loadConfig();
+    if (!replyAutomationEnabled(cfg)) {
+      activity.markStatus(item.id, "ignored", "automação de respostas desligada", reply);
+      return false;
+    }
+    let delivered = false;
+    if (cfg.responderNoChat) {
+      const sent = await sendChatReply(reply);
+      delivered ||= sent;
+      if (!sent) {
+        activity.log({
+          type: "error",
+          text: "Resposta em texto não enviada: campo do TikTok indisponível ou em uso.",
+          ts: Date.now(),
+        });
+        try {
+          DM()?.invalidate?.("chatReply");
+        } catch {}
+      }
+    }
+    // Os canais são independentes: uma falha no chat nunca impede a resposta por voz.
+    if (cfg.respostasIA) {
+      const spoken = await speakText(reply, cfg);
+      delivered ||= spoken;
+    }
+    if (delivered) {
+      activity.markStatus(item.id, "answered", null, reply);
+      sessionEvent({ kind: "answered" });
+    } else {
+      activity.markStatus(
+        item.id,
+        "failed",
+        "resposta criada, mas nenhum canal confirmou o envio",
+        reply,
+      );
+    }
+    return delivered;
   }
 
   async function processQueue() {
@@ -2225,7 +2340,7 @@
       return;
     }
     const cfg = await loadConfig();
-    if (!cfg.respostasIA) return;
+    if (!replyAutomationEnabled(cfg)) return;
 
     // Trava de segurança: verifica credencial e cota
     const unlocked = await checkExtensionLock(cfg.syncToken);
@@ -2252,7 +2367,7 @@
     chatState.busy = true;
 
     try {
-      await waitForAudioEnd();
+      if (cfg.respostasIA) await waitForAudioEnd();
       const systemPrompt = buildSystemPrompt(cfg);
       const authHeaders = await signRequest(cfg.syncToken, "chat_reply");
       const r = await fetch(`${API_BASE}/api/public/chat/reply`, {
@@ -2295,23 +2410,12 @@
             if (cfg.revisarAntesDeEnviar) {
               activity.addPending(item, reply, cfg);
             } else {
-              const sent = await sendChatReply(reply);
-              if (!sent) {
-                activity.markStatus(
-                  item.id,
-                  "failed",
-                  "resposta criada, mas o campo de envio do TikTok não confirmou o envio",
-                  reply,
-                );
-                try {
-                  DM()?.invalidate?.("chatReply");
-                } catch {}
+              const delivered = await deliverReply(item, reply, cfg);
+              if (!delivered) {
                 chatState.busy = false;
                 setTimeout(processQueue, 500);
                 return;
               }
-              activity.markStatus(item.id, "answered", null, reply);
-              sessionEvent({ kind: "answered" });
               // Gemini flash: ~$0.075/1M in + $0.30/1M out. Rough cents estimate.
               const inTok = Math.round(((item.text || "").length + 200) / 4);
               const outTok = Math.round(reply.length / 4);
@@ -2322,7 +2426,6 @@
                 tokens_out: outTok,
                 estimated_cost_cents: cents,
               });
-              await speakText(reply, cfg);
             }
           } else {
             activity.markStatus(item.id, "ignored", "empty");
@@ -2386,6 +2489,9 @@
   }
 
   function enqueueMessage(msg) {
+    // A mensagem enviada pela própria extensão reaparece no feed. Não a trate
+    // como uma nova pergunta, evitando um ciclo de respostas automáticas.
+    if (isRecentlySentReply(msg.text)) return;
     const key = `${msg.author}|${msg.text}`.toLowerCase();
     const now = Date.now();
     const last = chatState.seen.get(key) || 0;
@@ -2412,6 +2518,10 @@
       if (f.block) {
         activity.markStatus(id, "blocked", f.reason);
         sessionEvent({ kind: "blocked" });
+        return;
+      }
+      if (chatState.queue.length >= MAX_CHAT_QUEUE) {
+        activity.markStatus(id, "ignored", "fila cheia · proteção anti-spam");
         return;
       }
       chatState.queue.push(entry);
@@ -4384,19 +4494,21 @@
       };
       const speak = document.createElement("button");
       speak.className = "pitchai-btn primary";
-      speak.textContent = "▶ Enviar e falar";
+      speak.textContent = cfg.responderNoChat
+        ? cfg.respostasIA
+          ? "▶ Enviar e falar"
+          : "▶ Enviar no chat"
+        : "▶ Falar";
       speak.onclick = async () => {
         speak.disabled = true;
-        const sent = await sendChatReply(item.reply);
-        if (!sent) {
-          markStatus(item.id, "failed", "campo de resposta do TikTok não confirmou o envio");
+        const current = await loadConfig();
+        if (!replyAutomationEnabled(current)) {
+          markStatus(item.id, "ignored", "automação de respostas desligada");
           closeReviewToast();
           return;
         }
-        markStatus(item.id, "answered", null, item.reply);
-        sessionEvent({ kind: "answered" });
         closeReviewToast(false);
-        await speakText(item.reply, cfg);
+        await deliverReply(item, item.reply, current);
         showNextReview();
       };
       actions.append(skip, speak);
@@ -4898,10 +5010,10 @@
       const on = !listenBtn.classList.contains("primary");
       applyListenUi(on); // feedback imediato
       // gravação incremental para não sobrescrever o que o painel salvou
-      await updateConfig((fresh) => {
+      const saved = await updateConfig((fresh) => {
         fresh.respostasIA = on;
         return fresh;
-      }).catch(() => {});
+      }).catch(() => null);
       if (on) {
         sessionStart();
         const ok = await startChatListener();
@@ -4912,8 +5024,11 @@
           }, 1000);
         }
       } else {
-        stopChatListener();
-        sessionEnd();
+        stopPitchLoop();
+        if (!saved?.responderNoChat) {
+          stopChatListener();
+          sessionEnd();
+        }
       }
     });
 
@@ -4921,7 +5036,7 @@
       "button",
       {
         class: "pitchai-btn" + (cfg.revisarAntesDeEnviar ? " primary" : ""),
-        title: "Confirmar cada resposta antes de a IA falar",
+        title: "Confirmar cada resposta antes de a IA enviar ou falar",
       },
       cfg.revisarAntesDeEnviar ? "👀 Confirmando" : "👀 Confirmar",
     );
@@ -5039,7 +5154,7 @@
     header.append(brandGroup, controlsGroup, actionsGroup);
     document.body.appendChild(header);
 
-    if (cfg.respostasIA) {
+    if (replyAutomationEnabled(cfg)) {
       let tries = 0;
       const iv = setInterval(async () => {
         if ((await startChatListener()) || ++tries > 30) clearInterval(iv);
@@ -5085,6 +5200,13 @@
         master.classList.toggle("on", !!c.protecaoGeral);
         master.setAttribute("aria-pressed", String(!!c.protecaoGeral));
         applyListenUi(!!c.respostasIA);
+        if (replyAutomationEnabled(c)) {
+          sessionStart();
+          startChatListener().catch(() => {});
+        } else {
+          stopChatListener();
+          sessionEnd();
+        }
         const wants = !!c.demo?.enabled;
         // ignora o eco da nossa própria gravação (senão start/stop roda duas vezes)
         if (wants !== demo.isOn() && Date.now() - _demoSelfWrite > 1500) {

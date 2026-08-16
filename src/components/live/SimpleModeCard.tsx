@@ -2,7 +2,14 @@ import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { Link } from "@tanstack/react-router";
-import { ShoppingBag, Sparkles, Volume2, ShieldCheck, Settings2 } from "lucide-react";
+import {
+  MessageSquare,
+  ShoppingBag,
+  Sparkles,
+  Volume2,
+  ShieldCheck,
+  Settings2,
+} from "lucide-react";
 import type { LiveConfig } from "@/lib/live/config";
 import { VOICES } from "@/lib/live/voices";
 import { cn } from "@/lib/utils";
@@ -86,12 +93,19 @@ export function SimpleModeCard({
       </div>
 
       {/* Status — liga/desliga o essencial */}
-      <div className="grid gap-2 sm:grid-cols-3">
+      <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
         <Toggle
           icon={<Sparkles className="h-4 w-4 text-primary" />}
-          label="IA responde o chat"
+          label="Responder por voz"
           checked={cfg.respostasIA}
           onChange={(v) => setCfg((c) => ({ ...c, respostasIA: v }))}
+        />
+        <Toggle
+          icon={<MessageSquare className="h-4 w-4 text-primary" />}
+          label="Responder em texto"
+          checked={cfg.responderNoChat}
+          onChange={(v) => setCfg((c) => ({ ...c, responderNoChat: v }))}
+          hint="envia no chat do TikTok"
         />
         <Toggle
           icon={<ShieldCheck className="h-4 w-4 text-primary" />}

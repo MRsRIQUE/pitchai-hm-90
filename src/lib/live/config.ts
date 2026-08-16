@@ -43,6 +43,8 @@ export type LiveConfig = {
   };
   encerrarTempo: { enabled: boolean; minutes: number };
   respostasIA: boolean;
+  /** Envia a resposta gerada também como texto no chat do TikTok. */
+  responderNoChat: boolean;
   notificacoesVenda: boolean;
   /** Som de caixa registradora a cada venda detectada. */
   somVenda: { enabled: boolean; volume: number };
@@ -110,6 +112,7 @@ export const DEFAULT_CONFIG: LiveConfig = {
   autoFixar: { enabled: false, query: "", minSec: 20, maxSec: 60, ids: [] },
   encerrarTempo: { enabled: false, minutes: 120 },
   respostasIA: true,
+  responderNoChat: false,
   notificacoesVenda: true,
   somVenda: { enabled: true, volume: 0.8 },
 

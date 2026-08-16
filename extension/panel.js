@@ -174,6 +174,7 @@
   ];
   const DEFAULTS = {
     respostasIA: true,
+    responderNoChat: false,
     revisarAntesDeEnviar: false,
     protecaoGeral: false,
     violacao: true,

@@ -98,7 +98,7 @@
         <img src="icon.png" class="pnl-img-logo" alt="" />
         <div class="pnl-brand-text">
           <span class="pnl-logo">Pitch AI <b>LIVE</b></span>
-          <span class="pnl-ver">v0.16.2</span>
+          <span class="pnl-ver">v0.16.3</span>
         </div>
       </div>
       <div class="pnl-header-actions">
@@ -166,8 +166,8 @@
             <span>💡</span>
             <div>
               <strong>Como funciona a IA na sua Live:</strong>
-              Ela lê as perguntas do chat do TikTok e responde com voz ao vivo. Você pode ativar
-              filtros de segurança e confirmar cada resposta antes de a IA falar.
+              Ela lê as perguntas do chat do TikTok e pode responder por voz, por texto no chat ou
+              pelos dois canais. Você escolhe abaixo como a IA deve responder.
             </div>
           </div>
 
@@ -197,10 +197,21 @@
 
               <div class="pnl-row">
                 <div>
-                  <h3>Confirmar respostas antes de falar</h3>
+                  <h3>Responder no chat automaticamente</h3>
                   <p>
-                    Antes de a IA falar, você vê a resposta e aprova. Bom para os primeiros dias de
-                    live. É o mesmo botão “👀 Confirmar” da barra da live.
+                    A IA digita e envia respostas curtas no chat do TikTok. Possui intervalo
+                    anti-spam e não substitui um texto que você estiver digitando.
+                  </p>
+                </div>
+                <button class="pnl-toggle" data-key="responderNoChat"></button>
+              </div>
+
+              <div class="pnl-row">
+                <div>
+                  <h3>Confirmar respostas antes de enviar</h3>
+                  <p>
+                    Antes de a IA responder por voz ou texto, você vê a resposta e aprova. Bom para
+                    os primeiros dias de live. É o mesmo botão “👀 Confirmar” da barra.
                   </p>
                 </div>
                 <button class="pnl-toggle" data-key="revisarAntesDeEnviar"></button>
@@ -632,13 +643,13 @@
               <div class="pnl-card-title">
                 <span class="pnl-card-icon">👀</span>
                 <div>
-                  <h3>Confirmar respostas antes de falar</h3>
+                  <h3>Confirmar respostas antes de enviar</h3>
                   <p>Opção avançada — normalmente pode ficar desligada</p>
                 </div>
               </div>
               <p class="pnl-sub" style="margin-top: 8px">
-                A contagem começa somente quando a extensão detectar que a LIVE realmente iniciou.
-                Ao atingir o limite, ela encerra a transmissão automaticamente.
+                Revise uma única resposta antes de ela ser enviada por texto, falada ou usada nos
+                dois canais ativos.
               </p>
               <button class="pnl-toggle" data-key="revisarAntesDeEnviar"></button>
             </div>

@@ -152,6 +152,7 @@ export const ConfigSchema = z.object({
   // Configurações principais
   syncToken: z.string().optional(),
   respostasIA: z.boolean().default(true),
+  responderNoChat: z.boolean().default(false),
   revisarAntesDeEnviar: z.boolean().default(false),
   protecaoGeral: z.boolean().default(false),
   violacao: z.boolean().default(true),
@@ -189,6 +190,7 @@ export type Config = z.infer<typeof ConfigSchema>;
 export const DEFAULT_CONFIG: Config = {
   syncToken: "",
   respostasIA: true,
+  responderNoChat: false,
   revisarAntesDeEnviar: false,
   protecaoGeral: false,
   violacao: true,
@@ -245,7 +247,7 @@ export const DEFAULT_CONFIG: Config = {
   produtos: [],
   roteirosPorProduto: {},
   ultimoRoteiro: "",
-  version: "0.16.2",
+  version: "0.16.3",
   lastUpdated: Date.now(),
 };
 
