@@ -93,6 +93,32 @@ export function isBadProductName(name: string | null | undefined): boolean {
 }
 
 /**
+ * Corta o rabo de metadados do card (cronômetro de oferta, estoque, frete)
+ * que a emenda do textContent cola no fim do título.
+ *
+ * O primeiro replace desgruda só o rótulo com inicial maiúscula colado em
+ * minúscula ("CozinhaTermina em" → "Cozinha Termina em"): assim o split com
+ * \b passa a enxergar a fronteira, e palavras que só CONTÊM o rótulo ficam
+ * inteiras ("Kit Determina em Pó" não vira "Kit Dete"). Cópia do content.js —
+ * as duas não podem divergir (ver tests/vitrine-products.test.ts).
+ */
+export function stripProductMeta(raw: string | null | undefined): string {
+  let s = String(raw || "");
+  s = s.replace(
+    /(\p{Ll})(Termina\s+em|Em\s+estoque|Demonstra[çc][ãa]o\s+solicitada|Frete\s+gr[áa]tis)/gu,
+    "$1 $2",
+  );
+  s =
+    s.split(
+      /\b(?:em\s+estoque|demonstra[çc][ãa]o\s+solicitada|termina\s+em|frete\s+gr[áa]tis)\b/i,
+    )[0] || s;
+  // Sobras do cronômetro/promoção quando vêm depois do trecho cortado.
+  s = s.replace(/(?:\s*\d{1,2}:\d{2}:\d{2}\s*)+$/, "");
+  s = s.replace(/\s+(?:de|por)$/i, "");
+  return cleanName(s);
+}
+
+/**
  * Extrai o nome de um produto a partir do texto bruto
  */
 export function inferNameFromProductText(text: string, price?: string): string {
@@ -106,11 +132,8 @@ export function inferNameFromProductText(text: string, price?: string): string {
     s = s.split(price)[0] || s;
   }
 
-  // Remove termos de metadados (ex: "em estoque", "frete grátis")
-  s =
-    s.split(
-      /\b(?:em\s+estoque|demonstra[çc][ãa]o\s+solicitada|termina\s+em|frete\s+gr[áa]tis)\b/i,
-    )[0] || s;
+  // Remove termos de metadados (ex: "em estoque", "frete grátis"), colados ou não
+  s = stripProductMeta(s);
 
   // Remove preço no formato "R$ 100"
   s = s.replace(/\s+R\$\s?\d[\d.,].*$/i, "");

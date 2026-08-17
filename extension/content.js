@@ -1165,6 +1165,9 @@
     /(gerenciador\s+de\s+live|pesquisar\s+id|todas\s+as\s+categorias|todo\s+o\s+estoque|lista\s+de\s+produtos\s+nesta\s+live|portugu[eê]s\s+do\s+brasil|\bsair\b|pitcha[ií]\s+live)/i;
   const PRODUCT_META_RX =
     /(em\s+estoque|demonstra[çc][ãa]o\s+solicitada|termina\s+em|frete\s+gr[áa]tis|vendidos?|sold|estoque:?\s*\d+)/i;
+  // Rabo numérico que sobra quando o rótulo é cortado do texto ("...em estoque"
+  // deixa ": 18,8 mil", "...solicitada" deixa ": 0"). Não é descrição de nada.
+  const COUNTER_LINE_RX = /^:?\s*[\d.,]+\s*(mil|un(id\.?)?|pcs?|peças?)?\s*$/i;
   const PRODUCT_UI_RX =
     /^(?:carrinho|adicionado ao carrinho|cliques?|fixar|desafixar|editar|excluir|remover|mover para o topo|demonstra[çc][ãa]o solicitada)(?:\s*\d+)?$/i;
   // rótulos de menu de conta que grudam no nome do perfil (ex.: "arthurdias993Sair")
@@ -1398,17 +1401,59 @@
     }
   }
 
-  function inferNameFromProductText(text, price) {
-    let s = cleanName(text);
-    s = s.replace(/^\d+\s+/, "");
-    if (price) s = s.split(price)[0] || s;
+  /**
+   * Corta o rabo de metadados do card (cronômetro de oferta, estoque, frete)
+   * que a emenda do textContent cola no fim do título.
+   *
+   * O primeiro replace desgruda só o rótulo com inicial maiúscula colado em
+   * minúscula ("CozinhaTermina em" → "Cozinha Termina em"): assim o split com
+   * \b passa a enxergar a fronteira, e palavras que só CONTÊM o rótulo ficam
+   * inteiras ("Kit Determina em Pó" não vira "Kit Dete"). Sem o passo anterior,
+   * o \b nunca casa no texto emendado e o cronômetro sobrevive no nome.
+   */
+  function stripProductMeta(raw) {
+    let s = String(raw || "");
+    s = s.replace(
+      /(\p{Ll})(Termina\s+em|Em\s+estoque|Demonstra[çc][ãa]o\s+solicitada|Frete\s+gr[áa]tis)/gu,
+      "$1 $2",
+    );
     s =
       s.split(
         /\b(?:em\s+estoque|demonstra[çc][ãa]o\s+solicitada|termina\s+em|frete\s+gr[áa]tis)\b/i,
       )[0] || s;
+    // Sobras do cronômetro/promoção quando vêm depois do trecho cortado.
+    s = s.replace(/(?:\s*\d{1,2}:\d{2}:\d{2}\s*)+$/, "");
+    s = s.replace(/\s+(?:de|por)$/i, "");
+    return cleanName(s);
+  }
+
+  function inferNameFromProductText(text, price) {
+    let s = cleanName(text);
+    s = s.replace(/^\d+\s+/, "");
+    if (price) s = s.split(price)[0] || s;
+    s = stripProductMeta(s);
     s = s.replace(/\s+R\$\s?\d[\d.,].*$/i, "");
     s = s.replace(/\s+\d+\s*$/, "");
     return cleanName(s);
+  }
+
+  /**
+   * Linhas úteis para descrição: separa o texto nos metadados do card e joga
+   * fora preço, badge, rótulo de UI e contador. Sem isso a descrição vira o
+   * resto emendado do card ("R$ 33,99Em estoque: 18,8 milDemonstração...").
+   */
+  function descriptionLines(text) {
+    return String(text || "")
+      .split(/[\n·|]|\b(?:em\s+estoque|demonstra[çc][ãa]o\s+solicitada|termina\s+em)\b/i)
+      .map(cleanName)
+      .filter(
+        (l) =>
+          l.length > 3 &&
+          !BADGE_RX.test(l) &&
+          !PRICE_RX.test(l) &&
+          !PRODUCT_META_RX.test(l) &&
+          !COUNTER_LINE_RX.test(l),
+      );
   }
 
   function shouldDropStoredProduct(prod) {
@@ -1423,16 +1468,35 @@
   function cleanupProducts(cfg) {
     if (!cfg || !Array.isArray(cfg.produtos)) return false;
     const before = cfg.produtos.length;
+    let repaired = false;
     const keep = new Map();
     const keepIdx = new Map(); // normKey(name) -> chave em keep (O(1) sem varrer o mapa)
     cfg.produtos.forEach((p) => {
+      // Nomes gravados antes do filtro novo trazem o cronômetro da oferta colado
+      // ("...CozinhaTermina em 04:08:53De"): corta o rabo em vez de derrubar o
+      // produto, que pode ser o ativo e ter edição manual do usuário.
+      const nome = stripProductMeta(p.name || "");
+      if (nome && nome !== p.name) {
+        p.name = nome;
+        repaired = true;
+      }
+      // Descrição que começa com preço é resto emendado do card
+      // ("R$ 33,99Em estoque: 18,8 milDemonstração..."), não texto do usuário.
+      const desc = String(p.description || "");
+      if (/^(de|por)?\s*(R\$|US\$|\$|€|£)\s?\d/i.test(desc)) {
+        const limpa = descriptionLines(desc).join(" · ").slice(0, 400);
+        if (limpa !== desc) {
+          p.description = limpa;
+          repaired = true;
+        }
+      }
       if (shouldDropStoredProduct(p)) return;
       if (!productKey(p)) return;
       upsertProduct(keep, p, keepIdx);
     });
     cfg.produtos = Array.from(keep.values());
     if (!cfg.produtos.some((p) => p.active) && cfg.produtos[0]) cfg.produtos[0].active = true;
-    return cfg.produtos.length !== before;
+    return repaired || cfg.produtos.length !== before;
   }
 
   const PRICE_RX = /(R\$|US\$|\$|€|£)\s?\d[\d.,]*/i;
@@ -1620,9 +1684,29 @@
     return false;
   }
 
+  /**
+   * textContent emenda o texto de elementos irmãos sem espaço
+   * ("CozinhaTermina em 04:08:53"), e os filtros — feitos para texto com
+   * espaço — deixam o lixo passar. textOf junta os nós de texto com espaço,
+   * como o innerText faria, mas sem forçar layout a cada card varrido.
+   */
+  function textOf(el) {
+    let out = "";
+    try {
+      const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
+      for (let n = walker.nextNode(); n; n = walker.nextNode()) {
+        const v = (n.nodeValue || "").trim();
+        if (v) out += `${v} `;
+      }
+    } catch {
+      out = el?.textContent || "";
+    }
+    return out.replace(/\s+/g, " ").trim();
+  }
+
   /** Extrai nome/preço/descrição de um card, exigindo evidência mínima. */
   function parseProductCard(card) {
-    const text = (card.textContent || "").replace(/\s+/g, " ").trim();
+    const text = textOf(card);
     if (text.length < 5 || text.length > 800) return null;
     if (PRODUCT_CHROME_RX.test(text) && !PRICE_RX.test(text)) return null;
     // descarta wrappers de perfil/chat/avatar sem depender de refreshAccountNames
@@ -1654,7 +1738,9 @@
       );
     } catch {}
     for (const t of titleNodes) {
-      const s0 = cleanName(t.getAttribute?.("title") || t.textContent || "");
+      // O cronômetro da oferta mora dentro do próprio título: sem o strip, o
+      // candidato bom era recusado pelo PRODUCT_META_RX e sobrava só o lixo.
+      const s0 = stripProductMeta(t.getAttribute?.("title") || textOf(t));
       if (
         s0.length >= 4 &&
         !PRICE_RX.test(s0) &&
@@ -1683,7 +1769,7 @@
       if (aria.length >= 4 && !BADGE_RX.test(aria) && !PRODUCT_UI_RX.test(aria)) name = aria;
     }
     if (!name) {
-      const linhas = text.split(/[\n·|]/).map(cleanName);
+      const linhas = text.split(/[\n·|]/).map((l) => stripProductMeta(l));
       name =
         linhas.find(
           (l) =>
@@ -1699,12 +1785,7 @@
     name = cleanName(name);
     if (isBadProductName(name)) return null;
 
-    const description = text
-      .replace(name, "")
-      .replace(price, "")
-      .split(/[\n·|]/)
-      .map(cleanName)
-      .filter((l) => l.length > 3 && !BADGE_RX.test(l))
+    const description = descriptionLines(text.replace(name, "").replace(price, ""))
       .slice(0, 3)
       .join(" · ")
       .slice(0, 400);

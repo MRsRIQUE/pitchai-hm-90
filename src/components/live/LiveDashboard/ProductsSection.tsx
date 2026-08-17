@@ -283,9 +283,12 @@ export function ProductsSection({ compact = false }: ProductsSectionProps) {
           </div>
         </div>
 
-        <div className="grid gap-4 md:grid-cols-[220px_1fr]">
+        {/* minmax(0,1fr) + min-w-0 nas colunas: o mínimo padrão do grid é o
+            conteúdo, então um nome longo sem quebra (vindo da vitrine) empurra
+            a coluna do editor para fora do cartão. */}
+        <div className="grid gap-4 md:grid-cols-[220px_minmax(0,1fr)]">
           {/* Lista de produtos */}
-          <div>
+          <div className="min-w-0">
             <div className="mb-2 flex items-center justify-between">
               <span className="text-xs uppercase tracking-wide text-muted-foreground">
                 Seus produtos
@@ -334,7 +337,7 @@ export function ProductsSection({ compact = false }: ProductsSectionProps) {
           </div>
 
           {/* Editor de produto */}
-          <div>
+          <div className="min-w-0">
             {editing ? (
               <div className="space-y-3">
                 {/* Como o produto vai aparecer para o usuário: foto (ou fallback)

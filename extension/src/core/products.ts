@@ -11,6 +11,7 @@ import {
   namesMatch,
   isBadProductName,
   cleanName,
+  stripProductMeta,
   normKey,
   parsePriceCents,
   currencyFromPrice,
@@ -177,11 +178,8 @@ export function inferNameFromProductText(text: string, price?: string): string {
     s = s.split(price)[0] || s;
   }
 
-  // Remove termos de metadados
-  s =
-    s.split(
-      /\b(?:em\s+estoque|demonstra[çc][ãa]o\s+solicitada|termina\s+em|frete\s+gr[áa]tis)\b/i,
-    )[0] || s;
+  // Remove termos de metadados, colados ou não (stripProductMeta desgruda o textContent)
+  s = stripProductMeta(s);
 
   s = s.replace(/\s+R\$\s?\d[\d.,].*$/i, ""); // Remove preço
   s = s.replace(/\s+\d+\s*$/, ""); // Remove números no final

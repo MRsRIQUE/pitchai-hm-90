@@ -9,6 +9,7 @@ import {
   isUsableImageUrl,
   parsePriceCents,
   pickBestSrcsetUrl,
+  stripProductMeta,
 } from "../src/utils/string";
 
 /**
@@ -137,6 +138,89 @@ describe("filtro de nome no content.js distribuído", () => {
   it("rejeita as frases de estado vazio da vitrine", () => {
     expect(isBadProductNameDistribuido("Ainda não há produtos")).toBe(true);
     expect(isBadProductNameDistribuido("Os produtos adicionados aparecerão aqui")).toBe(true);
+  });
+});
+
+/**
+ * O card de oferta relâmpago cola o cronômetro no título via textContent
+ * ("CozinhaTermina em 04:08:53Termina em 04:08:53De"): o split de metadados
+ * com \b não enxerga fronteira nenhuma no texto emendado, e o nome ia para o
+ * painel com o cronômetro inteiro — o bug visto no print do usuário.
+ */
+const NOME_COM_CRONOMETRO =
+  "Cortador Ralador Fatiador Manual 16 Peças Legumes Verduras Frutas Vegetais " +
+  "CozinhaTermina em 04:08:53Termina em 04:08:53De";
+const NOME_LIMPO_DO_CRONOMETRO =
+  "Cortador Ralador Fatiador Manual 16 Peças Legumes Verduras Frutas Vegetais Cozinha";
+
+describe("cronômetro de oferta colado no nome (content.js distribuído)", () => {
+  const distribuido = carregarDoContentJs(
+    "const BADGE_RX =",
+    "function cleanupProducts(cfg) {",
+    "({ stripProductMeta, inferNameFromProductText, descriptionLines, cleanupProducts })",
+    { PRICE_RX: /(R\$|US\$|\$|€|£)\s?\d[\d.,]*/i },
+  ) as {
+    stripProductMeta: (raw: unknown) => string;
+    inferNameFromProductText: (text: string, price?: string) => string;
+    descriptionLines: (text: string) => string[];
+    cleanupProducts: (cfg: { produtos: Record<string, unknown>[] }) => boolean;
+  };
+
+  it("corta o cronômetro colado no fim do nome", () => {
+    expect(distribuido.stripProductMeta(NOME_COM_CRONOMETRO)).toBe(NOME_LIMPO_DO_CRONOMETRO);
+  });
+
+  it("não corta palavra que só contém o rótulo", () => {
+    expect(distribuido.stripProductMeta("Kit Determina em Pó 500g")).toBe(
+      "Kit Determina em Pó 500g",
+    );
+  });
+
+  it("mantém os nomes reais do catálogo intactos", () => {
+    for (const nome of NOMES_LEGITIMOS) {
+      expect(distribuido.stripProductMeta(nome), nome).toBe(nome);
+    }
+  });
+
+  it("infere o nome limpo do texto emendado do card", () => {
+    const texto = `${NOME_COM_CRONOMETRO} R$ 33,99 R$ 31,99Em estoque: 18,8 milDemonstração solicitada: 0`;
+    expect(distribuido.inferNameFromProductText(texto, "R$ 31,99")).toBe(NOME_LIMPO_DO_CRONOMETRO);
+  });
+
+  it("joga fora a descrição que é resto de card raspado", () => {
+    expect(
+      distribuido.descriptionLines("R$ 33,99Em estoque: 18,8 milDemonstração solicitada: 0"),
+    ).toEqual([]);
+    expect(
+      distribuido.descriptionLines(
+        "Leve e portátil · Garantia de 12 meses · R$ 33,99 Em estoque: 5",
+      ),
+    ).toEqual(["Leve e portátil", "Garantia de 12 meses"]);
+  });
+
+  it("repara o produto já gravado com cronômetro, sem derrubar o ativo", () => {
+    const cfg = {
+      produtos: [
+        {
+          id: "p1",
+          name: NOME_COM_CRONOMETRO,
+          price: "R$ 31,99",
+          description: "R$ 33,99Em estoque: 18,8 milDemonstração solicitada: 0",
+          active: true,
+          fromVitrine: true,
+        },
+      ],
+    };
+    expect(distribuido.cleanupProducts(cfg)).toBe(true);
+    expect(cfg.produtos[0].name).toBe(NOME_LIMPO_DO_CRONOMETRO);
+    expect(cfg.produtos[0].description).toBe("");
+    expect(cfg.produtos[0].active).toBe(true);
+  });
+
+  it("dá o mesmo resultado que a versão de src/ — as duas não podem divergir", () => {
+    for (const texto of [NOME_COM_CRONOMETRO, "Kit Determina em Pó 500g", ...NOMES_LEGITIMOS]) {
+      expect(distribuido.stripProductMeta(texto), texto).toBe(stripProductMeta(texto));
+    }
   });
 });
 

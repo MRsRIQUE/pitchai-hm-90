@@ -464,6 +464,7 @@ export {
   normKey,
   isBadProductName,
   inferNameFromProductText,
+  stripProductMeta,
   isHandleName,
   productKey,
   namesMatch,

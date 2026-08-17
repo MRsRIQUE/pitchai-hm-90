@@ -148,15 +148,22 @@ export function ProdutosSection() {
                       title={produto.name}
                       // `.app-btn` é nowrap e sem teto de largura: um nome longo
                       // vira um botão gigante que estoura o cartão.
-                      style={{
-                        maxWidth: "min(280px, 100%)",
-                        overflow: "hidden",
-                        textOverflow: "ellipsis",
-                      }}
+                      style={{ maxWidth: "min(280px, 100%)" }}
                     >
                       {marcado ? <CheckCircle2 aria-hidden="true" /> : null}
-                      {produto.name}
-                      {formatarPreco(produto) ? ` · ${formatarPreco(produto)}` : ""}
+                      {/* text-overflow não pega em texto solto de flex container:
+                          sem o span o nome longo aparece cortado dos dois lados. */}
+                      <span
+                        style={{
+                          minWidth: 0,
+                          overflow: "hidden",
+                          textOverflow: "ellipsis",
+                          whiteSpace: "nowrap",
+                        }}
+                      >
+                        {produto.name}
+                        {formatarPreco(produto) ? ` · ${formatarPreco(produto)}` : ""}
+                      </span>
                     </button>
                   );
                 })}
