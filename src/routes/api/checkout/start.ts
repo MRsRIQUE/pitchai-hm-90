@@ -117,9 +117,10 @@ export const Route = createFileRoute("/api/checkout/start")({
           // O detalhe fica só no log: as mensagens de erro do Firestore e do
           // Stripe carregam caminho de documento, uid e id de preço, e chegavam
           // inteiras à tela do comprador.
-          console.error("[checkout/start]", getStripeErrorMessage(error));
+          const debugMsg = getStripeErrorMessage(error);
+          console.error("[checkout/start]", debugMsg);
           return Response.json(
-            { error: "Não foi possível iniciar o pagamento. Tente novamente em instantes." },
+            { error: "Não foi possível iniciar o pagamento. Tente novamente em instantes.", debug: debugMsg },
             { status: 500 },
           );
         }
