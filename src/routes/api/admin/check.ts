@@ -1,9 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import {
-  fsGet,
-  isAdmin,
-  verifyFirebaseIdToken,
-} from "@/lib/firebase.server";
+import { fsGet, isAdmin, verifyFirebaseIdToken } from "@/lib/firebase.server";
 
 type AdminContext = { uid: string; email: string | null; token: string };
 
