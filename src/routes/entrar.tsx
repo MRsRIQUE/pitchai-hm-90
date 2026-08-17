@@ -519,7 +519,7 @@ function EntrarPage() {
         >
           {mode === "login" && (
             <>
-              <button onClick={() => changeMode("signup")} className="underline hover:text-white">
+              <button onClick={() => changeMode("signup")} className="font-semibold text-[#a855f7] hover:text-[#c084fc] transition-colors">
                 Ainda não tenho conta
               </button>
               <div>
