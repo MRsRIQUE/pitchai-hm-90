@@ -5,7 +5,6 @@ import { onAuthStateChanged, signOut as firebaseSignOut } from "firebase/auth";
 import { getFirebaseAuth } from "@/lib/firebase";
 import { requireAuthBeforeLoad } from "@/lib/auth-guard";
 import {
-  checkIsAdmin,
   deleteAllRankedProducts,
   deleteRankedProduct,
   fetchCommissions,
@@ -48,8 +47,16 @@ function AdminPage() {
       return;
     }
     setEmail(user.email ?? "");
-    const admin = await checkIsAdmin(user.uid, user.email);
-    setStatus(admin ? "ok" : "not-admin");
+    try {
+      const token = await user.getIdToken();
+      const response = await fetch("/api/admin/check", {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const payload = (await response.json().catch(() => null)) as { admin?: boolean } | null;
+      setStatus(response.ok && payload?.admin === true ? "ok" : "not-admin");
+    } catch {
+      setStatus("not-admin");
+    }
   }
 
   useEffect(() => {

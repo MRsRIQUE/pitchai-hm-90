@@ -75,8 +75,7 @@ async function registerReferralCommission(args: {
   const rate = 0.6;
   // Gera um ID único mesmo se `periodEnd` vier null (caso de `customer.subscription.created`).
   // Antes usava `${subscriptionId}:${periodEnd ?? "current"}` que colidia em reenvios do webhook.
-  const invoiceId =
-    `${subscriptionId}:${periodEnd ?? "init_" + Date.now()}`;
+  const invoiceId = `${subscriptionId}:${periodEnd ?? "init_" + Date.now()}`;
 
   try {
     await fsSet(
@@ -130,7 +129,7 @@ async function revokePendingCommissions(userId: string): Promise<void> {
   }
 }
 
-async function handleWebhook(req: Request, env: StripeEnv) {
+export async function handleStripeWebhook(req: Request, env: StripeEnv): Promise<void> {
   const event = await verifyWebhook(req, env);
   switch (event.type) {
     case "customer.subscription.created":
@@ -167,11 +166,11 @@ export const Route = createFileRoute("/api/public/payments/webhook")({
     handlers: {
       POST: async ({ request }) => {
         const rawEnv = new URL(request.url).searchParams.get("env");
-        if (rawEnv !== "sandbox" && rawEnv !== "live") {
-          return Response.json({ error: "invalid_env" }, { status: 400 });
-        }
+        // Stripe não envia `env` no webhook. O endpoint público usa live por
+        // padrão; sandbox continua disponível explicitamente com ?env=sandbox.
+        const env: StripeEnv = rawEnv === "sandbox" ? "sandbox" : "live";
         try {
-          await handleWebhook(request, rawEnv);
+          await handleStripeWebhook(request, env);
           return Response.json({ received: true });
         } catch (e) {
           console.error("[stripe-webhook] error:", e);

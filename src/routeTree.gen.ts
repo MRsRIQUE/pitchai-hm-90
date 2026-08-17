@@ -25,9 +25,11 @@ import { Route as TermosRouteImport } from './routes/termos'
 import { Route as ApiPaymentsRouteImport } from './routes/api/payments'
 import { Route as CheckoutReturnRouteImport } from './routes/checkout.return'
 import { Route as ApiAccountEnsureRouteImport } from './routes/api/account/ensure'
+import { Route as ApiAdminCheckRouteImport } from './routes/api/admin/check'
 import { Route as ApiAdminCourtesyRouteImport } from './routes/api/admin/courtesy'
 import { Route as ApiCheckoutStartRouteImport } from './routes/api/checkout/start'
 import { Route as ApiScriptGenerateRouteImport } from './routes/api/script/generate'
+import { Route as ApiStripeWebhookRouteImport } from './routes/api/stripe/webhook'
 import { Route as ApiTtsPreviewRouteImport } from './routes/api/tts/preview'
 import { Route as ApiPublicChatReplyRouteImport } from './routes/api/public/chat/reply'
 import { Route as ApiPublicGeminiGenerateRouteImport } from './routes/api/public/gemini/generate'
@@ -121,6 +123,11 @@ const ApiAccountEnsureRoute = ApiAccountEnsureRouteImport.update({
   path: '/api/account/ensure',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiAdminCheckRoute = ApiAdminCheckRouteImport.update({
+  id: '/api/admin/check',
+  path: '/api/admin/check',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiAdminCourtesyRoute = ApiAdminCourtesyRouteImport.update({
   id: '/api/admin/courtesy',
   path: '/api/admin/courtesy',
@@ -134,6 +141,11 @@ const ApiCheckoutStartRoute = ApiCheckoutStartRouteImport.update({
 const ApiScriptGenerateRoute = ApiScriptGenerateRouteImport.update({
   id: '/api/script/generate',
   path: '/api/script/generate',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiStripeWebhookRoute = ApiStripeWebhookRouteImport.update({
+  id: '/api/stripe/webhook',
+  path: '/api/stripe/webhook',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ApiTtsPreviewRoute = ApiTtsPreviewRouteImport.update({
@@ -218,9 +230,11 @@ export interface FileRoutesByFullPath {
   '/api/payments': typeof ApiPaymentsRoute
   '/checkout/return': typeof CheckoutReturnRoute
   '/api/account/ensure': typeof ApiAccountEnsureRoute
+  '/api/admin/check': typeof ApiAdminCheckRoute
   '/api/admin/courtesy': typeof ApiAdminCourtesyRoute
   '/api/checkout/start': typeof ApiCheckoutStartRoute
   '/api/script/generate': typeof ApiScriptGenerateRoute
+  '/api/stripe/webhook': typeof ApiStripeWebhookRoute
   '/api/tts/preview': typeof ApiTtsPreviewRoute
   '/api/public/chat/reply': typeof ApiPublicChatReplyRoute
   '/api/public/gemini/generate': typeof ApiPublicGeminiGenerateRoute
@@ -251,9 +265,11 @@ export interface FileRoutesByTo {
   '/api/payments': typeof ApiPaymentsRoute
   '/checkout/return': typeof CheckoutReturnRoute
   '/api/account/ensure': typeof ApiAccountEnsureRoute
+  '/api/admin/check': typeof ApiAdminCheckRoute
   '/api/admin/courtesy': typeof ApiAdminCourtesyRoute
   '/api/checkout/start': typeof ApiCheckoutStartRoute
   '/api/script/generate': typeof ApiScriptGenerateRoute
+  '/api/stripe/webhook': typeof ApiStripeWebhookRoute
   '/api/tts/preview': typeof ApiTtsPreviewRoute
   '/api/public/chat/reply': typeof ApiPublicChatReplyRoute
   '/api/public/gemini/generate': typeof ApiPublicGeminiGenerateRoute
@@ -285,9 +301,11 @@ export interface FileRoutesById {
   '/api/payments': typeof ApiPaymentsRoute
   '/checkout/return': typeof CheckoutReturnRoute
   '/api/account/ensure': typeof ApiAccountEnsureRoute
+  '/api/admin/check': typeof ApiAdminCheckRoute
   '/api/admin/courtesy': typeof ApiAdminCourtesyRoute
   '/api/checkout/start': typeof ApiCheckoutStartRoute
   '/api/script/generate': typeof ApiScriptGenerateRoute
+  '/api/stripe/webhook': typeof ApiStripeWebhookRoute
   '/api/tts/preview': typeof ApiTtsPreviewRoute
   '/api/public/chat/reply': typeof ApiPublicChatReplyRoute
   '/api/public/gemini/generate': typeof ApiPublicGeminiGenerateRoute
@@ -320,9 +338,11 @@ export interface FileRouteTypes {
     | '/api/payments'
     | '/checkout/return'
     | '/api/account/ensure'
+    | '/api/admin/check'
     | '/api/admin/courtesy'
     | '/api/checkout/start'
     | '/api/script/generate'
+    | '/api/stripe/webhook'
     | '/api/tts/preview'
     | '/api/public/chat/reply'
     | '/api/public/gemini/generate'
@@ -353,9 +373,11 @@ export interface FileRouteTypes {
     | '/api/payments'
     | '/checkout/return'
     | '/api/account/ensure'
+    | '/api/admin/check'
     | '/api/admin/courtesy'
     | '/api/checkout/start'
     | '/api/script/generate'
+    | '/api/stripe/webhook'
     | '/api/tts/preview'
     | '/api/public/chat/reply'
     | '/api/public/gemini/generate'
@@ -386,9 +408,11 @@ export interface FileRouteTypes {
     | '/api/payments'
     | '/checkout/return'
     | '/api/account/ensure'
+    | '/api/admin/check'
     | '/api/admin/courtesy'
     | '/api/checkout/start'
     | '/api/script/generate'
+    | '/api/stripe/webhook'
     | '/api/tts/preview'
     | '/api/public/chat/reply'
     | '/api/public/gemini/generate'
@@ -420,9 +444,11 @@ export interface RootRouteChildren {
   ApiPaymentsRoute: typeof ApiPaymentsRoute
   CheckoutReturnRoute: typeof CheckoutReturnRoute
   ApiAccountEnsureRoute: typeof ApiAccountEnsureRoute
+  ApiAdminCheckRoute: typeof ApiAdminCheckRoute
   ApiAdminCourtesyRoute: typeof ApiAdminCourtesyRoute
   ApiCheckoutStartRoute: typeof ApiCheckoutStartRoute
   ApiScriptGenerateRoute: typeof ApiScriptGenerateRoute
+  ApiStripeWebhookRoute: typeof ApiStripeWebhookRoute
   ApiTtsPreviewRoute: typeof ApiTtsPreviewRoute
   ApiPublicChatReplyRoute: typeof ApiPublicChatReplyRoute
   ApiPublicGeminiGenerateRoute: typeof ApiPublicGeminiGenerateRoute
@@ -551,6 +577,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiAccountEnsureRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/admin/check': {
+      id: '/api/admin/check'
+      path: '/api/admin/check'
+      fullPath: '/api/admin/check'
+      preLoaderRoute: typeof ApiAdminCheckRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/admin/courtesy': {
       id: '/api/admin/courtesy'
       path: '/api/admin/courtesy'
@@ -570,6 +603,13 @@ declare module '@tanstack/react-router' {
       path: '/api/script/generate'
       fullPath: '/api/script/generate'
       preLoaderRoute: typeof ApiScriptGenerateRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/stripe/webhook': {
+      id: '/api/stripe/webhook'
+      path: '/api/stripe/webhook'
+      fullPath: '/api/stripe/webhook'
+      preLoaderRoute: typeof ApiStripeWebhookRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/tts/preview': {
@@ -676,9 +716,11 @@ const rootRouteChildren: RootRouteChildren = {
   ApiPaymentsRoute: ApiPaymentsRoute,
   CheckoutReturnRoute: CheckoutReturnRoute,
   ApiAccountEnsureRoute: ApiAccountEnsureRoute,
+  ApiAdminCheckRoute: ApiAdminCheckRoute,
   ApiAdminCourtesyRoute: ApiAdminCourtesyRoute,
   ApiCheckoutStartRoute: ApiCheckoutStartRoute,
   ApiScriptGenerateRoute: ApiScriptGenerateRoute,
+  ApiStripeWebhookRoute: ApiStripeWebhookRoute,
   ApiTtsPreviewRoute: ApiTtsPreviewRoute,
   ApiPublicChatReplyRoute: ApiPublicChatReplyRoute,
   ApiPublicGeminiGenerateRoute: ApiPublicGeminiGenerateRoute,
