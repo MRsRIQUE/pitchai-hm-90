@@ -251,7 +251,7 @@ function EntrarPage() {
   }
 
   return (
-    <main className="marketing-page relative flex min-h-dvh overflow-x-hidden px-4 py-12">
+    <main className="marketing-page relative flex min-h-dvh flex-col items-center justify-center overflow-x-hidden px-4 py-20">
       {/* Glow radial roxo, consistente com a identidade visual do restante do site. */}
       <div
         aria-hidden
@@ -268,7 +268,7 @@ function EntrarPage() {
       {/* Loader em tela cheia: líquido roxo subindo enquanto a autenticação roda. */}
       {busy && <FluidLoader label={busyMsg || "Carregando…"} />}
 
-      <div className="relative z-10 m-auto w-full max-w-sm space-y-6">
+      <div className="relative z-10 w-full max-w-sm space-y-6">
         <div className="animate-fade-up text-center">
           <Link to="/" aria-label="Pitch AI" className="inline-flex items-center justify-center">
             <PitchAiLogo size="lg" variant="white" />
@@ -288,7 +288,7 @@ function EntrarPage() {
         </div>
 
         <div
-          className="login-panel marketing-panel animate-fade-up rounded-2xl p-6 backdrop-blur-2xl"
+          className="login-panel marketing-panel animate-fade-up rounded-2xl p-6 backdrop-blur-2xl max-h-[calc(100dvh-120px)] overflow-y-auto"
           style={{ animationDelay: "90ms" }}
         >
           {/* Sessão salva no navegador: nada acontece sozinho, o usuário decide
