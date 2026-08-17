@@ -5,7 +5,7 @@ import { onAuthStateChanged } from "firebase/auth";
 import { Home, LayoutPanelLeft } from "lucide-react";
 import { getFirebaseAuth } from "@/lib/firebase";
 import { requireAuthBeforeLoad } from "@/lib/auth-guard";
-import { checkIsAdmin, fetchCommissions } from "@/lib/live/admin";
+import { fetchCommissions } from "@/lib/live/admin";
 import { AppShell, type AppSection } from "@/components/app/AppShell";
 import { LogoutButton } from "@/components/live/LogoutButton";
 import { ADMIN_SECTIONS, type AdminSectionId } from "@/components/admin/sections";
@@ -39,9 +39,20 @@ function AdminPage() {
     }
     setEmail(user.email ?? "");
     setErrorMsg("");
-    const res = await checkIsAdmin();
-    setStatus(res.ok ? "ok" : "not-admin");
-    if (!res.ok && res.error) setErrorMsg(res.error);
+    try {
+      const token = await user.getIdToken();
+      const res = await fetch("/api/admin/check", {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const data = await res.json();
+      setStatus(data.ok ? "ok" : "not-admin");
+      if (!data.ok && data.error) setErrorMsg(data.error);
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : String(error);
+      console.error("Falha ao validar acesso administrativo:", error);
+      setErrorMsg(msg);
+      setStatus("not-admin");
+    }
   }
 
   useEffect(() => {
