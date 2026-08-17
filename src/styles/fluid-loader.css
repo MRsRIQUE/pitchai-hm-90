@@ -1,0 +1,149 @@
+/* ============================================================
+   FLUID LOADER — líquido roxo subindo durante o carregamento
+   Camadas de "ondas" desfocadas sobem do rodapé com rotação e
+   respiro, simulando um fluido. Usado em login/cadastro.
+   ============================================================ */
+
+.fluid-loader {
+  position: fixed;
+  inset: 0;
+  z-index: 90;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background:
+    radial-gradient(120% 90% at 50% 118%, #2a0a52 0%, rgba(10, 5, 24, 0.98) 55%),
+    #0a0518;
+}
+
+.fluid-loader__wave {
+  position: absolute;
+  left: -30%;
+  width: 160%;
+  will-change: transform;
+  filter: blur(18px);
+  border-radius: 42% 44% 40% 46% / 40% 42% 46% 44%;
+}
+
+.fluid-loader__wave--1 {
+  bottom: -72%;
+  height: 110%;
+  background: linear-gradient(
+    180deg,
+    rgba(168, 85, 247, 0.85) 0%,
+    rgba(124, 58, 237, 0.55) 50%,
+    rgba(76, 29, 149, 0.25) 100%
+  );
+  animation: fluid-rise 2.6s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+}
+
+.fluid-loader__wave--2 {
+  bottom: -78%;
+  height: 120%;
+  background: linear-gradient(
+    180deg,
+    rgba(192, 132, 252, 0.75) 0%,
+    rgba(139, 92, 246, 0.5) 55%,
+    rgba(91, 33, 182, 0.2) 100%
+  );
+  animation: fluid-rise 3.4s cubic-bezier(0.4, 0, 0.2, 1) 0.4s infinite reverse;
+}
+
+.fluid-loader__wave--3 {
+  bottom: -84%;
+  height: 130%;
+  background: linear-gradient(
+    180deg,
+    rgba(233, 213, 255, 0.5) 0%,
+    rgba(168, 85, 247, 0.45) 60%,
+    rgba(109, 40, 217, 0.2) 100%
+  );
+  animation: fluid-rise 4.2s cubic-bezier(0.4, 0, 0.2, 1) 0.8s infinite;
+}
+
+.fluid-loader__wave--4 {
+  bottom: -88%;
+  height: 140%;
+  background: linear-gradient(
+    180deg,
+    rgba(88, 28, 135, 0.9) 0%,
+    rgba(49, 10, 101, 0.5) 100%
+  );
+  filter: blur(30px);
+  animation: fluid-rise 5s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+}
+
+@keyframes fluid-rise {
+  0% {
+    transform: translateY(0) rotate(-8deg) scaleX(1);
+  }
+  50% {
+    transform: translateY(-62vh) rotate(5deg) scaleX(1.18);
+  }
+  100% {
+    transform: translateY(0) rotate(-8deg) scaleX(1);
+  }
+}
+
+.fluid-loader__glow {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: radial-gradient(
+    60% 40% at 50% 0%,
+    rgba(192, 132, 252, 0.25) 0%,
+    transparent 60%
+  );
+  mix-blend-mode: screen;
+  animation: fluid-pulse 2.4s ease-in-out infinite;
+}
+
+@keyframes fluid-pulse {
+  0%,
+  100% {
+    opacity: 0.5;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+.fluid-loader__label {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+  padding: 0 24px;
+  text-align: center;
+  color: #f5f3ff;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+}
+
+.fluid-loader__spinner {
+  width: 30px;
+  height: 30px;
+  border-radius: 9999px;
+  border: 3px solid rgba(255, 255, 255, 0.18);
+  border-top-color: #c084fc;
+  animation: fluid-spin 0.9s linear infinite;
+}
+
+@keyframes fluid-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .fluid-loader__wave,
+  .fluid-loader__glow {
+    animation: none;
+  }
+  .fluid-loader__spinner {
+    animation-duration: 1.8s;
+  }
+}

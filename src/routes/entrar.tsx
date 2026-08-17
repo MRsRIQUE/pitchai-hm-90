@@ -13,6 +13,7 @@ import {
 import { getFirebaseAuth, googleProvider } from "@/lib/firebase";
 import { ensureAccountProfile } from "@/lib/account-profile";
 import { hasActiveAccess } from "@/lib/live/access-check";
+import { FluidLoader } from "@/components/live/FluidLoader";
 
 type Search = { next?: string; mode?: "login" | "signup" };
 
@@ -286,28 +287,8 @@ function EntrarPage() {
         </svg>
       </div>
 
-      {/* Loader em tela cheia enquanto uma ação de autenticação roda. */}
-      {busy && (
-        <div className="login-loader" role="status" aria-live="polite">
-          <div className="login-loader__backdrop" />
-          <div className="login-loader__inner">
-            <div className="login-loader__rings" aria-hidden>
-              <span />
-              <span />
-              <span />
-            </div>
-            <div className="login-loader__logo">
-              Pitch<span className="text-[#a855f7]">aí</span>
-            </div>
-            <p className="login-loader__msg">{busyMsg}</p>
-            <div className="login-loader__dots" aria-hidden>
-              <span />
-              <span />
-              <span />
-            </div>
-          </div>
-        </div>
-      )}
+      {/* Loader em tela cheia: líquido roxo subindo enquanto a autenticação roda. */}
+      {busy && <FluidLoader label={busyMsg || "Carregando…"} />}
 
       <div className="relative z-10 w-full max-w-sm space-y-6">
         <div className="animate-fade-up text-center">
