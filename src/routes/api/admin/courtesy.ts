@@ -67,6 +67,7 @@ export const Route = createFileRoute("/api/admin/courtesy")({
             .trim()
             .toLowerCase();
           const days = Number(body.days);
+          const plan = String(body.plan || "pitchai_trimestral");
           const note = String(body.note || "")
             .trim()
             .slice(0, 300);
@@ -78,6 +79,9 @@ export const Route = createFileRoute("/api/admin/courtesy")({
               { error: "O período deve ser de 1 a 3650 dias." },
               { status: 400 },
             );
+          }
+          if (!["pitchai_trimestral", "pitchai_anual"].includes(plan)) {
+            return Response.json({ error: "Plano inválido." }, { status: 400 });
           }
 
           const firestore = { mode: "server" as const, userToken: admin.token };
@@ -98,7 +102,7 @@ export const Route = createFileRoute("/api/admin/courtesy")({
             `comped_access/${user.id}`,
             {
               email,
-              plan: "pitchai_trimestral",
+              plan,
               status: "comped",
               grantedUntil,
               note: note || null,
@@ -108,7 +112,7 @@ export const Route = createFileRoute("/api/admin/courtesy")({
             },
             firestore,
           );
-          return Response.json({ ok: true, userId: user.id, grantedUntil });
+          return Response.json({ ok: true, userId: user.id, plan, grantedUntil });
         } catch (error) {
           return apiError(error);
         }
