@@ -84,9 +84,9 @@ void main(){
   float interior = fbm(flow);
   float caustic = fbm(vec2(p.x * 3.4 + t * 0.5, vUv.y * 3.0 - t * 0.3));
 
-  vec3 deep = vec3(0.11, 0.03, 0.24);
-  vec3 mid  = vec3(0.33, 0.14, 0.60);
-  vec3 top  = vec3(0.60, 0.38, 0.85);
+  vec3 deep = vec3(0.06, 0.02, 0.14);
+  vec3 mid  = vec3(0.18, 0.07, 0.34);
+  vec3 top  = vec3(0.34, 0.19, 0.55);
 
   vec3 col = mix(mid, deep, depth);
   col = mix(col, top, smoothstep(0.0, 0.18, 1.0 - depth));
@@ -95,7 +95,7 @@ void main(){
 
   // Linha de brilho na superfície.
   float surfLine = smoothstep(surfY, surfY - 0.014, vUv.y);
-  col += vec3(0.86, 0.70, 1.0) * surfLine * (0.30 + 0.3 * interior);
+  col += vec3(0.62, 0.46, 0.85) * surfLine * (0.22 + 0.3 * interior);
 
   // Bolhas subindo.
   float bub = 0.0;
@@ -108,7 +108,7 @@ void main(){
     float r = 0.005 + 0.003 * i;
     bub += smoothstep(r, 0.0, d);
   }
-  col += bub * 0.35 * vec3(0.92, 0.84, 1.0);
+  col += bub * 0.3 * vec3(0.70, 0.60, 0.90);
 
   outColor = vec4(col * body, body);
 }`;
