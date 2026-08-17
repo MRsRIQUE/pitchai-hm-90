@@ -15,6 +15,7 @@ import { ensureAccountProfile } from "@/lib/account-profile";
 import { hasActiveAccess } from "@/lib/live/access-check";
 import { FluidLoader } from "@/components/live/FluidLoader";
 import { LiquidBackground } from "@/components/live/LiquidBackground";
+import { PitchAiLogo } from "@/components/live/PitchAiLogo";
 
 type Search = { next?: string; mode?: "login" | "signup" };
 
@@ -250,7 +251,7 @@ function EntrarPage() {
   }
 
   return (
-    <main className="marketing-page relative grid min-h-dvh place-items-center overflow-hidden px-4 py-12">
+    <main className="marketing-page relative flex min-h-dvh overflow-x-hidden px-4 py-12">
       {/* Glow radial roxo, consistente com a identidade visual do restante do site. */}
       <div
         aria-hidden
@@ -267,10 +268,10 @@ function EntrarPage() {
       {/* Loader em tela cheia: líquido roxo subindo enquanto a autenticação roda. */}
       {busy && <FluidLoader label={busyMsg || "Carregando…"} />}
 
-      <div className="relative z-10 w-full max-w-sm space-y-6">
+      <div className="relative z-10 m-auto w-full max-w-sm space-y-6">
         <div className="animate-fade-up text-center">
-          <Link to="/" className="font-display text-2xl font-bold">
-            Pitch<span className="text-[#a855f7]">aí</span>
+          <Link to="/" aria-label="Pitch AI" className="inline-flex items-center justify-center">
+            <PitchAiLogo size="lg" variant="white" />
           </Link>
           <h1 className="marketing-title mt-4 text-3xl text-balance">
             {mode === "login"
