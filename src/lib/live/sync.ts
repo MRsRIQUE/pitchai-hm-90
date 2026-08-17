@@ -64,22 +64,25 @@ export async function ensureMyLiveConfig(): Promise<{
       };
     }
 
-    const newToken = crypto.randomUUID();
-    await setDoc(doc(db, "sync_tokens", newToken), {
-      uid,
-      createdAt: new Date().toISOString(),
+    // A criação direta pelo SDK cliente passou a falhar com as regras de
+    // Firestore mais restritivas. O servidor autentica o Firebase ID token,
+    // grava os três documentos e devolve o token de forma atômica para o
+    // usuário autenticado.
+    const idToken = await getFirebaseAuth().currentUser?.getIdToken();
+    if (!idToken) return null;
+    const response = await fetch("/api/account/sync-token", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${idToken}` },
     });
-    await setDoc(doc(db, "live_configs_by_token", newToken), {
-      uid,
-      config: {},
-      updatedAt: new Date().toISOString(),
-    });
-    await setDoc(
-      doc(db, "users", uid),
-      { syncToken: newToken, email: user.email ?? null, createdAt: new Date().toISOString() },
-      { merge: true },
-    );
-    return { sync_token: newToken, config: {} };
+    const data = (await response.json().catch(() => null)) as {
+      sync_token?: string;
+      config?: Partial<LiveConfig>;
+      error?: string;
+    } | null;
+    if (!response.ok || !data?.sync_token) {
+      throw new Error(data?.error || "Não foi possível gerar o Sync token.");
+    }
+    return { sync_token: data.sync_token, config: data.config ?? {} };
   } catch (err) {
     console.warn("[sync.ts] ensureMyLiveConfig falhou:", err);
     return null;
@@ -245,32 +248,28 @@ export async function pullVitrine(options?: { signal?: AbortSignal }): Promise<{
 }
 
 export async function regenerateSyncToken(): Promise<string | null> {
-  const uid = (await currentUser())?.uid ?? null;
-  if (!uid) return null;
-  const db = getFirebaseDb();
+  const user = await currentUser();
+  if (!user) return null;
 
   try {
-    const existing = await ensureMyLiveConfig();
-    const oldToken = existing?.sync_token;
-    const oldConfig = existing?.config ?? {};
-
-    const newToken = crypto.randomUUID();
-    await setDoc(doc(db, "sync_tokens", newToken), {
-      uid,
-      createdAt: new Date().toISOString(),
+    const idToken = await getFirebaseAuth().currentUser?.getIdToken();
+    if (!idToken) return null;
+    const response = await fetch("/api/account/sync-token", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${idToken}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ regenerate: true }),
     });
-    await setDoc(doc(db, "live_configs_by_token", newToken), {
-      uid,
-      config: oldConfig,
-      updatedAt: new Date().toISOString(),
-    });
-    await setDoc(doc(db, "users", uid), { syncToken: newToken }, { merge: true });
-
-    if (oldToken) {
-      await deleteDoc(doc(db, "sync_tokens", oldToken)).catch(() => {});
-      await deleteDoc(doc(db, "live_configs_by_token", oldToken)).catch(() => {});
+    const data = (await response.json().catch(() => null)) as {
+      sync_token?: string;
+      error?: string;
+    } | null;
+    if (!response.ok || !data?.sync_token) {
+      throw new Error(data?.error || "Não foi possível regenerar o Sync token.");
     }
-    return newToken;
+    return data.sync_token;
   } catch (err) {
     console.warn("[sync.ts] regenerateSyncToken falhou:", err);
     return null;

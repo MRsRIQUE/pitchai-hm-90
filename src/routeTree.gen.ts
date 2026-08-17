@@ -25,6 +25,7 @@ import { Route as TermosRouteImport } from './routes/termos'
 import { Route as ApiPaymentsRouteImport } from './routes/api/payments'
 import { Route as CheckoutReturnRouteImport } from './routes/checkout.return'
 import { Route as ApiAccountEnsureRouteImport } from './routes/api/account/ensure'
+import { Route as ApiAccountSyncTokenRouteImport } from './routes/api/account/sync-token'
 import { Route as ApiAdminCheckRouteImport } from './routes/api/admin/check'
 import { Route as ApiAdminCourtesyRouteImport } from './routes/api/admin/courtesy'
 import { Route as ApiCheckoutStartRouteImport } from './routes/api/checkout/start'
@@ -121,6 +122,11 @@ const CheckoutReturnRoute = CheckoutReturnRouteImport.update({
 const ApiAccountEnsureRoute = ApiAccountEnsureRouteImport.update({
   id: '/api/account/ensure',
   path: '/api/account/ensure',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiAccountSyncTokenRoute = ApiAccountSyncTokenRouteImport.update({
+  id: '/api/account/sync-token',
+  path: '/api/account/sync-token',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ApiAdminCheckRoute = ApiAdminCheckRouteImport.update({
@@ -230,6 +236,7 @@ export interface FileRoutesByFullPath {
   '/api/payments': typeof ApiPaymentsRoute
   '/checkout/return': typeof CheckoutReturnRoute
   '/api/account/ensure': typeof ApiAccountEnsureRoute
+  '/api/account/sync-token': typeof ApiAccountSyncTokenRoute
   '/api/admin/check': typeof ApiAdminCheckRoute
   '/api/admin/courtesy': typeof ApiAdminCourtesyRoute
   '/api/checkout/start': typeof ApiCheckoutStartRoute
@@ -265,6 +272,7 @@ export interface FileRoutesByTo {
   '/api/payments': typeof ApiPaymentsRoute
   '/checkout/return': typeof CheckoutReturnRoute
   '/api/account/ensure': typeof ApiAccountEnsureRoute
+  '/api/account/sync-token': typeof ApiAccountSyncTokenRoute
   '/api/admin/check': typeof ApiAdminCheckRoute
   '/api/admin/courtesy': typeof ApiAdminCourtesyRoute
   '/api/checkout/start': typeof ApiCheckoutStartRoute
@@ -301,6 +309,7 @@ export interface FileRoutesById {
   '/api/payments': typeof ApiPaymentsRoute
   '/checkout/return': typeof CheckoutReturnRoute
   '/api/account/ensure': typeof ApiAccountEnsureRoute
+  '/api/account/sync-token': typeof ApiAccountSyncTokenRoute
   '/api/admin/check': typeof ApiAdminCheckRoute
   '/api/admin/courtesy': typeof ApiAdminCourtesyRoute
   '/api/checkout/start': typeof ApiCheckoutStartRoute
@@ -338,6 +347,7 @@ export interface FileRouteTypes {
     | '/api/payments'
     | '/checkout/return'
     | '/api/account/ensure'
+    | '/api/account/sync-token'
     | '/api/admin/check'
     | '/api/admin/courtesy'
     | '/api/checkout/start'
@@ -373,6 +383,7 @@ export interface FileRouteTypes {
     | '/api/payments'
     | '/checkout/return'
     | '/api/account/ensure'
+    | '/api/account/sync-token'
     | '/api/admin/check'
     | '/api/admin/courtesy'
     | '/api/checkout/start'
@@ -408,6 +419,7 @@ export interface FileRouteTypes {
     | '/api/payments'
     | '/checkout/return'
     | '/api/account/ensure'
+    | '/api/account/sync-token'
     | '/api/admin/check'
     | '/api/admin/courtesy'
     | '/api/checkout/start'
@@ -444,6 +456,7 @@ export interface RootRouteChildren {
   ApiPaymentsRoute: typeof ApiPaymentsRoute
   CheckoutReturnRoute: typeof CheckoutReturnRoute
   ApiAccountEnsureRoute: typeof ApiAccountEnsureRoute
+  ApiAccountSyncTokenRoute: typeof ApiAccountSyncTokenRoute
   ApiAdminCheckRoute: typeof ApiAdminCheckRoute
   ApiAdminCourtesyRoute: typeof ApiAdminCourtesyRoute
   ApiCheckoutStartRoute: typeof ApiCheckoutStartRoute
@@ -575,6 +588,13 @@ declare module '@tanstack/react-router' {
       path: '/api/account/ensure'
       fullPath: '/api/account/ensure'
       preLoaderRoute: typeof ApiAccountEnsureRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/account/sync-token': {
+      id: '/api/account/sync-token'
+      path: '/api/account/sync-token'
+      fullPath: '/api/account/sync-token'
+      preLoaderRoute: typeof ApiAccountSyncTokenRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/admin/check': {
@@ -716,6 +736,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiPaymentsRoute: ApiPaymentsRoute,
   CheckoutReturnRoute: CheckoutReturnRoute,
   ApiAccountEnsureRoute: ApiAccountEnsureRoute,
+  ApiAccountSyncTokenRoute: ApiAccountSyncTokenRoute,
   ApiAdminCheckRoute: ApiAdminCheckRoute,
   ApiAdminCourtesyRoute: ApiAdminCourtesyRoute,
   ApiCheckoutStartRoute: ApiCheckoutStartRoute,
