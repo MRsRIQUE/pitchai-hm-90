@@ -5,4 +5,4 @@
  * extension/manifest.json. Não edite à mão: bumpe o manifest e rode
  * `npm run build:extension`.
  */
-export const APP_VERSION = "0.18.6";
+export const APP_VERSION = "0.18.7";
