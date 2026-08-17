@@ -251,7 +251,7 @@ function EntrarPage() {
   }
 
   return (
-    <main className="marketing-page relative flex min-h-dvh flex-col items-center justify-center overflow-x-hidden px-4 py-20">
+    <main className="marketing-page relative flex min-h-dvh flex-col items-center pt-28 pb-20 overflow-x-hidden px-4">
       {/* Glow radial roxo, consistente com a identidade visual do restante do site. */}
       <div
         aria-hidden
@@ -288,7 +288,7 @@ function EntrarPage() {
         </div>
 
         <div
-          className="login-panel marketing-panel animate-fade-up rounded-2xl p-6 backdrop-blur-2xl max-h-[calc(100dvh-120px)] overflow-y-auto"
+          className="login-panel marketing-panel animate-fade-up rounded-2xl p-8 backdrop-blur-2xl"
           style={{ animationDelay: "90ms" }}
         >
           {/* Sessão salva no navegador: nada acontece sozinho, o usuário decide
