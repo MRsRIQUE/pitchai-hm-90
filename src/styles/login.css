@@ -1,100 +1,15 @@
 /* ============================================================
-   LOGIN (/entrar) — ondas roxas, loader e animações de entrada
+   LOGIN (/entrar) — líquido roxo, loader e animações de entrada
    ============================================================ */
 
-/* ---------- Ondas animadas no fundo ---------- */
-.login-waves {
+/* ---------- Líquido roxo subindo (shader WebGL) ---------- */
+.login-liquid {
   position: absolute;
-  inset-inline: 0;
-  bottom: 0;
-  height: 44vh;
-  min-height: 240px;
-  pointer-events: none;
-  overflow: hidden;
-  z-index: 0;
-}
-
-.login-wave {
-  position: absolute;
-  left: 0;
-  bottom: 0;
-  width: 200%;
+  inset: 0;
+  width: 100%;
   height: 100%;
-  animation: login-wave-slide 16s linear infinite;
-  will-change: transform;
-}
-
-.login-wave path {
-  fill: rgba(139, 92, 246, 0.1);
-}
-
-.login-wave--back {
-  bottom: -10%;
-  animation-duration: 30s;
-}
-.login-wave--back path {
-  fill: rgba(124, 58, 237, 0.14);
-}
-
-.login-wave--mid {
-  bottom: -6%;
-  animation-duration: 22s;
-  animation-direction: reverse;
-}
-.login-wave--mid path {
-  fill: rgba(168, 85, 247, 0.18);
-}
-
-.login-wave--front {
-  bottom: -3%;
-  animation-duration: 13s;
-}
-.login-wave--front path {
-  fill: rgba(139, 92, 246, 0.32);
-}
-
-/* A onda desliza exatamente um ciclo do padrão (metade da largura do svg),
-   então o loop é contínuo, sem "salto" quando reinicia. */
-@keyframes login-wave-slide {
-  from {
-    transform: translateX(0);
-  }
-  to {
-    transform: translateX(-50%);
-  }
-}
-
-/* Orbes difusos flutuando junto às ondas */
-.login-orb {
-  position: absolute;
-  border-radius: 50%;
-  filter: blur(64px);
   pointer-events: none;
-  animation: login-orb-float 9s ease-in-out infinite;
-}
-.login-orb--a {
-  left: -8%;
-  bottom: 4%;
-  width: 34vw;
-  height: 34vw;
-  background: rgba(124, 58, 237, 0.3);
-}
-.login-orb--b {
-  right: -6%;
-  bottom: 10%;
-  width: 26vw;
-  height: 26vw;
-  background: rgba(168, 85, 247, 0.28);
-  animation-delay: -4.5s;
-}
-@keyframes login-orb-float {
-  0%,
-  100% {
-    transform: translateY(0) scale(1);
-  }
-  50% {
-    transform: translateY(-26px) scale(1.08);
-  }
+  z-index: 0;
 }
 
 /* ---------- Painel com borda em gradiente girando ---------- */
@@ -263,21 +178,13 @@
   }
 }
 
-/* ---------- Modo claro: ondas mais suaves, vidro do loader ---------- */
-html.light .login-wave path {
-  opacity: 0.4;
-}
-html.light .login-orb {
-  opacity: 0.55;
-}
+/* ---------- Modo claro: vidro do loader ---------- */
 html.light .login-loader__backdrop {
   background: rgba(245, 245, 247, 0.62);
 }
 
 /* ---------- Movimento reduzido: tudo parado ---------- */
 @media (prefers-reduced-motion: reduce) {
-  .login-wave,
-  .login-orb,
   .login-panel::before,
   .login-loader__rings span,
   .login-loader__rings::before,

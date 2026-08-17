@@ -14,6 +14,7 @@ import { getFirebaseAuth, googleProvider } from "@/lib/firebase";
 import { ensureAccountProfile } from "@/lib/account-profile";
 import { hasActiveAccess } from "@/lib/live/access-check";
 import { FluidLoader } from "@/components/live/FluidLoader";
+import { LiquidBackground } from "@/components/live/LiquidBackground";
 
 type Search = { next?: string; mode?: "login" | "signup" };
 
@@ -260,32 +261,8 @@ function EntrarPage() {
         }}
       />
 
-      {/* Ondas roxas animadas rolando na base da tela. */}
-      <div className="login-waves" aria-hidden>
-        <span className="login-orb login-orb--a" />
-        <span className="login-orb login-orb--b" />
-        <svg
-          className="login-wave login-wave--back"
-          viewBox="0 0 2880 320"
-          preserveAspectRatio="none"
-        >
-          <path d="M0,160 C240,96 480,224 720,160 C960,224 1200,96 1440,160 C1680,96 1920,224 2160,160 C2400,224 2640,96 2880,160 L2880,320 L0,320 Z" />
-        </svg>
-        <svg
-          className="login-wave login-wave--mid"
-          viewBox="0 0 2880 320"
-          preserveAspectRatio="none"
-        >
-          <path d="M0,220 C240,150 480,290 720,220 C960,290 1200,150 1440,220 C1680,150 1920,290 2160,220 C2400,290 2640,150 2880,220 L2880,320 L0,320 Z" />
-        </svg>
-        <svg
-          className="login-wave login-wave--front"
-          viewBox="0 0 2880 320"
-          preserveAspectRatio="none"
-        >
-          <path d="M0,272 C240,208 480,316 720,272 C960,316 1200,208 1440,272 C1680,208 1920,316 2160,272 C2400,316 2640,208 2880,272 L2880,320 L0,320 Z" />
-        </svg>
-      </div>
+      {/* Líquido roxo subindo no fundo (shader WebGL). */}
+      <LiquidBackground className="login-liquid" />
 
       {/* Loader em tela cheia: líquido roxo subindo enquanto a autenticação roda. */}
       {busy && <FluidLoader label={busyMsg || "Carregando…"} />}
