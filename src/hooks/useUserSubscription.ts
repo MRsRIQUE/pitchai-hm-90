@@ -89,6 +89,8 @@ export function useUserSubscription(): UseUserSubscriptionResult {
         setSubscription(null);
       }
       setCompedAccess(compedSnap.exists() ? (compedSnap.data() as CompedAccessRecord) : null);
+      // DEBUG
+      console.debug("[useUserSubscription] compedAccess raw:", compedSnap.exists() ? compedSnap.data() : "não existe");
     } catch (err: any) {
       console.error("[useUserSubscription] Exceção ao consultar Firestore:", err);
       setError(err instanceof Error ? err : new Error(String(err)));
@@ -179,6 +181,16 @@ export function useUserSubscription(): UseUserSubscriptionResult {
   const compedActive =
     hasActiveCompedAccess(compedAccess) || (legacyComped && hasPaidAccess(subscription));
   const isPaidActive = paidSubscriptionActive || compedActive;
+
+  // DEBUG
+  console.debug("[useUserSubscription] computed:", {
+    compedAccess,
+    hasActiveCompedAccess: hasActiveCompedAccess(compedAccess),
+    compedActive,
+    paidSubscriptionActive,
+    isPaidActive,
+    rawPlan: compedActive ? compedAccess?.plan : subscription?.plan,
+  });
 
   const isComped = compedActive && !paidSubscriptionActive;
 
