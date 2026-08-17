@@ -152,12 +152,25 @@ function isRevenueActive(subscription: SubscriptionData): boolean {
 /* ---------- Auth ---------- */
 const getAdminStatus = createServerFn({ method: "GET" })
   .middleware([requireFirebaseAuth])
-  .handler(async ({ context }): Promise<boolean> =>
-    isAdmin(context.userId, context.user?.email, adminFirestoreOptions(context)),
-  );
+  .handler(async ({ context }): Promise<{ ok: boolean; error?: string }> => {
+    try {
+      const admin = await isAdmin(
+        context.userId,
+        context.user?.email,
+        adminFirestoreOptions(context),
+      );
+      return { ok: admin };
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      console.error("[getAdminStatus] Erro:", msg);
+      return { ok: false, error: msg };
+    }
+  });
 
-export async function checkIsAdmin(): Promise<boolean> {
-  return getAdminStatus({});
+export async function checkIsAdmin(): Promise<{ ok: boolean; error?: string }> {
+  const res = await getAdminStatus({});
+  if (res.error) console.error("[checkIsAdmin] Server error:", res.error);
+  return res;
 }
 
 /* ---------- Ranking (server-only) ---------- */

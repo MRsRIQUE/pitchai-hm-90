@@ -39,15 +39,9 @@ function AdminPage() {
     }
     setEmail(user.email ?? "");
     setErrorMsg("");
-    try {
-      const admin = await checkIsAdmin();
-      setStatus(admin ? "ok" : "not-admin");
-    } catch (error) {
-      const msg = error instanceof Error ? error.message : String(error);
-      console.error("Falha ao validar acesso administrativo:", error);
-      setErrorMsg(msg);
-      setStatus(getFirebaseAuth().currentUser ? "not-admin" : "signed-out");
-    }
+    const res = await checkIsAdmin();
+    setStatus(res.ok ? "ok" : "not-admin");
+    if (!res.ok && res.error) setErrorMsg(res.error);
   }
 
   useEffect(() => {
