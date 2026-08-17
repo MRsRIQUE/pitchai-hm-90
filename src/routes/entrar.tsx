@@ -93,6 +93,7 @@ function EntrarPage() {
   const [passwordError, setPasswordError] = useState<string | null>(null);
   const [confirmError, setConfirmError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [busyMsg, setBusyMsg] = useState("");
   const dest = safeNext(next);
 
   function changeMode(nextMode: "login" | "signup" | "forgot") {
@@ -157,16 +158,19 @@ function EntrarPage() {
     const user = getFirebaseAuth().currentUser;
     if (!user) return;
     setBusy(true);
+    setBusyMsg("Verificando sua sessão...");
     try {
       await goAfterAuth(user.uid);
     } finally {
       setBusy(false);
+      setBusyMsg("");
     }
   }
 
   /** Encerra a sessão atual para permitir login com outra conta. */
   async function useAnotherAccount() {
     setBusy(true);
+    setBusyMsg("Encerrando sessão...");
     try {
       await signOut(getFirebaseAuth());
       setPassword("");
@@ -175,6 +179,7 @@ function EntrarPage() {
       toast.error("Não foi possível encerrar a sessão. Tente novamente.");
     } finally {
       setBusy(false);
+      setBusyMsg("");
     }
   }
 
@@ -185,6 +190,13 @@ function EntrarPage() {
     if (!validateForm()) return;
 
     setBusy(true);
+    setBusyMsg(
+      mode === "login"
+        ? "Entrando na sua conta..."
+        : mode === "signup"
+          ? "Criando sua conta..."
+          : "Enviando link de recuperação...",
+    );
     const fbAuth = getFirebaseAuth();
     try {
       if (mode === "login") {
@@ -210,11 +222,13 @@ function EntrarPage() {
       toast.error(translateAuthError(err));
     } finally {
       setBusy(false);
+      setBusyMsg("");
     }
   }
 
   async function google() {
     setBusy(true);
+    setBusyMsg("Conectando com o Google...");
     try {
       const fbAuth = getFirebaseAuth();
       const { user } = await signInWithPopup(fbAuth, googleProvider);
@@ -229,6 +243,7 @@ function EntrarPage() {
       toast.error(translateAuthError(err));
     } finally {
       setBusy(false);
+      setBusyMsg("");
     }
   }
 
@@ -244,8 +259,58 @@ function EntrarPage() {
         }}
       />
 
-      <div className="relative w-full max-w-sm space-y-6">
-        <div className="text-center">
+      {/* Ondas roxas animadas rolando na base da tela. */}
+      <div className="login-waves" aria-hidden>
+        <span className="login-orb login-orb--a" />
+        <span className="login-orb login-orb--b" />
+        <svg
+          className="login-wave login-wave--back"
+          viewBox="0 0 2880 320"
+          preserveAspectRatio="none"
+        >
+          <path d="M0,160 C240,96 480,224 720,160 C960,224 1200,96 1440,160 C1680,96 1920,224 2160,160 C2400,224 2640,96 2880,160 L2880,320 L0,320 Z" />
+        </svg>
+        <svg
+          className="login-wave login-wave--mid"
+          viewBox="0 0 2880 320"
+          preserveAspectRatio="none"
+        >
+          <path d="M0,220 C240,150 480,290 720,220 C960,290 1200,150 1440,220 C1680,150 1920,290 2160,220 C2400,290 2640,150 2880,220 L2880,320 L0,320 Z" />
+        </svg>
+        <svg
+          className="login-wave login-wave--front"
+          viewBox="0 0 2880 320"
+          preserveAspectRatio="none"
+        >
+          <path d="M0,272 C240,208 480,316 720,272 C960,316 1200,208 1440,272 C1680,208 1920,316 2160,272 C2400,316 2640,208 2880,272 L2880,320 L0,320 Z" />
+        </svg>
+      </div>
+
+      {/* Loader em tela cheia enquanto uma ação de autenticação roda. */}
+      {busy && (
+        <div className="login-loader" role="status" aria-live="polite">
+          <div className="login-loader__backdrop" />
+          <div className="login-loader__inner">
+            <div className="login-loader__rings" aria-hidden>
+              <span />
+              <span />
+              <span />
+            </div>
+            <div className="login-loader__logo">
+              Pitch<span className="text-[#a855f7]">aí</span>
+            </div>
+            <p className="login-loader__msg">{busyMsg}</p>
+            <div className="login-loader__dots" aria-hidden>
+              <span />
+              <span />
+              <span />
+            </div>
+          </div>
+        </div>
+      )}
+
+      <div className="relative z-10 w-full max-w-sm space-y-6">
+        <div className="animate-fade-up text-center">
           <Link to="/" className="font-display text-2xl font-bold">
             Pitch<span className="text-[#a855f7]">aí</span>
           </Link>
@@ -263,7 +328,10 @@ function EntrarPage() {
           </p>
         </div>
 
-        <div className="marketing-panel rounded-2xl p-6 backdrop-blur-2xl">
+        <div
+          className="login-panel marketing-panel animate-fade-up rounded-2xl p-6 backdrop-blur-2xl"
+          style={{ animationDelay: "90ms" }}
+        >
           {/* Sessão salva no navegador: nada acontece sozinho, o usuário decide
               se continua com ela ou entra com outra conta. */}
           {sessionEmail && (
@@ -299,7 +367,7 @@ function EntrarPage() {
                 onClick={google}
                 type="button"
                 disabled={busy}
-                className="flex w-full items-center justify-center gap-2 rounded-lg bg-white px-4 py-2.5 text-sm font-semibold text-black transition hover:opacity-90 disabled:opacity-50"
+                className={`btn-press flex w-full items-center justify-center gap-2 rounded-lg bg-white px-4 py-2.5 text-sm font-semibold text-black transition hover:opacity-90 disabled:opacity-50 ${busy ? "btn-loading" : ""}`}
               >
                 <svg viewBox="0 0 48 48" className="h-4 w-4" aria-hidden>
                   <path
@@ -466,7 +534,7 @@ function EntrarPage() {
             <button
               type="submit"
               disabled={busy}
-              className="flex w-full items-center justify-center gap-2 rounded-lg bg-gradient-to-br from-[#8b5cf6] to-[#a855f7] px-4 py-2.5 text-sm font-semibold text-white shadow-[0_8px_24px_rgba(139,92,246,0.35)] transition hover:opacity-90 disabled:opacity-50"
+              className={`btn-press flex w-full items-center justify-center gap-2 rounded-lg bg-gradient-to-br from-[#8b5cf6] to-[#a855f7] px-4 py-2.5 text-sm font-semibold text-white shadow-[0_8px_24px_rgba(139,92,246,0.35)] transition hover:opacity-90 disabled:opacity-50 ${busy ? "btn-loading" : ""}`}
             >
               {busy && <Loader2 className="h-4 w-4 animate-spin" />}
               {mode === "login" ? "Entrar" : mode === "signup" ? "Criar conta" : "Enviar link"}
@@ -474,7 +542,10 @@ function EntrarPage() {
           </form>
         </div>
 
-        <div className="flex items-center justify-center gap-3 text-center text-xs text-white/45">
+        <div
+          className="animate-fade-up flex items-center justify-center gap-3 text-center text-xs text-white/45"
+          style={{ animationDelay: "180ms" }}
+        >
           <span className="rounded-full border border-white/10 bg-white/[0.03] px-3 py-1.5">
             Seus dados protegidos
           </span>
@@ -483,7 +554,10 @@ function EntrarPage() {
           </span>
         </div>
 
-        <div className="space-y-2 text-center text-sm text-white/50">
+        <div
+          className="animate-fade-up space-y-2 text-center text-sm text-white/50"
+          style={{ animationDelay: "240ms" }}
+        >
           {mode === "login" && (
             <>
               <button onClick={() => changeMode("signup")} className="underline hover:text-white">

@@ -2,6 +2,7 @@
 @import "tw-animate-css";
 @import "./styles/tokens-surface.css";
 @import "./styles/marketing-theme.css";
+@import "./styles/login.css";
 @source "../src";
 
 /* Webfonts (Inter, Plus Jakarta Sans, JetBrains Mono, Sora) carregados via Google Fonts CDN 
