@@ -34,10 +34,23 @@ export const requireFirebaseAuth = createMiddleware({ type: "function" }).server
         "[requireFirebaseAuth] Token não encontrado. Headers:",
         Object.fromEntries(request.headers.entries()),
       );
-      throw new Error("Unauthorized: No authorization header provided");
+      const err = new Error("Unauthorized: No authorization header provided") as Error & {
+        statusCode: number;
+      };
+      err.statusCode = 401;
+      throw err;
     }
 
-    const user = await verifyFirebaseIdToken(token);
+    let user: Awaited<ReturnType<typeof verifyFirebaseIdToken>>;
+    try {
+      user = await verifyFirebaseIdToken(token);
+    } catch (e) {
+      const err = new Error("Unauthorized: Invalid or expired token") as Error & {
+        statusCode: number;
+      };
+      err.statusCode = 401;
+      throw err;
+    }
     return next({
       context: {
         userId: user.uid,
