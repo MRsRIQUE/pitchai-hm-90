@@ -28,6 +28,7 @@ export const Route = createFileRoute("/admin")({
 function AdminPage() {
   const [status, setStatus] = useState<"loading" | "signed-out" | "not-admin" | "ok">("loading");
   const [email, setEmail] = useState<string>("");
+  const [errorMsg, setErrorMsg] = useState<string>("");
 
   async function evaluate() {
     const fbAuth = getFirebaseAuth();
@@ -37,11 +38,14 @@ function AdminPage() {
       return;
     }
     setEmail(user.email ?? "");
+    setErrorMsg("");
     try {
       const admin = await checkIsAdmin();
       setStatus(admin ? "ok" : "not-admin");
     } catch (error) {
+      const msg = error instanceof Error ? error.message : String(error);
       console.error("Falha ao validar acesso administrativo:", error);
+      setErrorMsg(msg);
       setStatus(getFirebaseAuth().currentUser ? "not-admin" : "signed-out");
     }
   }
@@ -59,7 +63,7 @@ function AdminPage() {
     );
   }
   if (status === "signed-out") return <SessionExpired />;
-  if (status === "not-admin") return <NotAdmin email={email} />;
+  if (status === "not-admin") return <NotAdmin email={email} errorMsg={errorMsg} />;
   return <Dashboard email={email} />;
 }
 
@@ -82,7 +86,7 @@ function SessionExpired() {
   );
 }
 
-function NotAdmin({ email }: { email: string }) {
+function NotAdmin({ email, errorMsg }: { email: string; errorMsg?: string }) {
   return (
     <div className="marketing-page min-h-dvh grid place-items-center px-4">
       <div className="max-w-sm text-center space-y-4">
@@ -90,6 +94,12 @@ function NotAdmin({ email }: { email: string }) {
         <p className="text-white/60 text-sm">
           A conta <b>{email}</b> não tem o papel <code>admin</code>.
         </p>
+        {errorMsg && (
+          <details className="text-left text-xs text-white/40 bg-white/5 p-3 rounded border border-white/10">
+            <summary className="cursor-pointer select-none">Detalhes do erro</summary>
+            <pre className="mt-2 whitespace-pre-wrap break-all">{errorMsg}</pre>
+          </details>
+        )}
         <div className="flex justify-center">
           <LogoutButton alwaysShowLabel />
         </div>
