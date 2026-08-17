@@ -168,9 +168,20 @@ const getAdminStatus = createServerFn({ method: "GET" })
   });
 
 export async function checkIsAdmin(): Promise<{ ok: boolean; error?: string }> {
-  const res = await getAdminStatus({});
-  if (res.error) console.error("[checkIsAdmin] Server error:", res.error);
-  return res;
+  try {
+    const res = await getAdminStatus({});
+    if (res.error) console.error("[checkIsAdmin] Server error:", res.error);
+    return res;
+  } catch (e) {
+    const msg =
+      e instanceof Response
+        ? `HTTP ${e.status}: ${await e.text().catch(() => "")}`
+        : e instanceof Error
+          ? e.message
+          : String(e);
+    console.error("[checkIsAdmin] Network/HTTP error:", msg);
+    return { ok: false, error: msg };
+  }
 }
 
 /* ---------- Ranking (server-only) ---------- */
