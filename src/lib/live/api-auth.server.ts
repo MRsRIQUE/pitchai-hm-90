@@ -474,6 +474,28 @@ export async function getSyncTokenStatus(token: string) {
   }
 
   const access = await authorizeSyncToken(token);
+
+  // Falha NOSSA (503) nunca pode sair com cara de "sem plano": o token e o
+  // acesso podem estar perfeitos e mesmo assim nao conseguimos verificar. Sair
+  // como "invalid_token"/"Sem plano" era exatamente a mentira que este trabalho
+  // veio remover — o 503 tem que chegar rotulado ate a ponta.
+  if (access.status === 503) {
+    return {
+      ok: false,
+      valid: false,
+      locked: true,
+      reason: "server_misconfigured",
+      userId: access.userId,
+      plan: null,
+      planName: null,
+      remainingChat: null,
+      remainingTts: null,
+      chatLimit: null,
+      ttsLimit: null,
+      message: access.message,
+    };
+  }
+
   if (!access.ok || !access.userId) {
     const paymentRequired = access.status === 403;
     return {
