@@ -3,6 +3,13 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { fetchCosts, fetchPlans, updateCosts, type Costs } from "@/lib/live/admin";
 import { AdminCard, AdminLoading, AdminStat, ErrorState, NumField } from "./admin-ui";
 import { brl } from "./format";
+import {
+  calculateTotalCostBrl,
+  calculateChatCostUsd,
+  calculateTtsCostUsd,
+  calculateMarginPct,
+  convertUsdToBrl,
+} from "./metrics";
 
 export function CustosSection() {
   const qc = useQueryClient();
@@ -23,21 +30,12 @@ export function CustosSection() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ["admin", "costs"] }),
   });
 
-  const custoChatUsd = useMemo(() => {
-    if (!c) return 0;
-    return (
-      (Number(c.tokens_in_mes) / 1000) * Number(c.chat_per_1k_in) +
-      (Number(c.tokens_out_mes) / 1000) * Number(c.chat_per_1k_out)
-    );
-  }, [c]);
-  const custoTtsUsd = useMemo(
-    () => (c ? Number(c.minutos_tts_mes) * Number(c.tts_per_min) : 0),
-    [c],
-  );
+  const custoChatUsd = calculateChatCostUsd(c);
+  const custoTtsUsd = calculateTtsCostUsd(c);
   const totalUsd = custoChatUsd + custoTtsUsd;
-  const totalBrl = totalUsd * (c ? Number(c.usd_brl) : 0);
+  const totalBrl = calculateTotalCostBrl(c);
   const mrr = plans.reduce((s, p) => s + Number(p.preco_mensal) * p.assinantes, 0);
-  const margem = mrr > 0 ? ((mrr - totalBrl) / mrr) * 100 : 0;
+  const margem = calculateMarginPct(mrr, totalBrl);
 
   if (error) return <ErrorState error={error} />;
   if (isLoading || !c) return <AdminLoading />;

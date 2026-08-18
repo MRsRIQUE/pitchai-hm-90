@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useInfiniteQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { fetchCommissionsPage, setCommissionStatus, type AdminCommission } from "@/lib/live/admin";
-import { AdminCard, AdminEmpty, AdminLoading, AdminStat, ErrorState } from "./admin-ui";
+import { AdminAlert, AdminCard, AdminEmpty, AdminLoading, AdminStat, ErrorState } from "./admin-ui";
 import { brl } from "./format";
 
 const FILTERS = ["todos", "pendente", "pago", "cancelado"] as const;
@@ -14,6 +14,7 @@ const STATUS_TONE: Record<string, "ok" | "warn" | undefined> = {
 
 export function IndicacoesSection() {
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("todos");
+  const [toast, setToast] = useState<{ message: string; tone: "info" | "warn" } | null>(null);
   const qc = useQueryClient();
   const query = useInfiniteQuery({
     queryKey: ["admin", "commissions", "pages"],
@@ -26,7 +27,16 @@ export function IndicacoesSection() {
   const statusM = useMutation({
     mutationFn: ({ id, status }: { id: string; status: "pendente" | "pago" | "cancelado" }) =>
       setCommissionStatus(id, status),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["admin", "commissions"] }),
+    onSuccess: (_data, variables) => {
+      const action = variables.status === "pago" ? "paga" : "cancelada";
+      setToast({ message: `Comissão marcada como ${action}.`, tone: "info" });
+      qc.invalidateQueries({ queryKey: ["admin", "commissions"] });
+      setTimeout(() => setToast(null), 2500);
+    },
+    onError: (err) => {
+      setToast({ message: `Falha ao atualizar: ${(err as Error).message}`, tone: "warn" });
+      setTimeout(() => setToast(null), 4000);
+    },
   });
 
   const visibleItems = items.filter((c) => statusFilter === "todos" || c.status === statusFilter);
@@ -36,6 +46,11 @@ export function IndicacoesSection() {
 
   return (
     <>
+      {toast && (
+        <div className="app-section">
+          <AdminAlert tone={toast.tone}>{toast.message}</AdminAlert>
+        </div>
+      )}
       <section className="app-section">
         <div className="app-grid app-grid--4">
           <AdminStat label="Comissões" value={items.length.toString()} />
@@ -144,24 +159,18 @@ export function IndicacoesSection() {
               {visibleItems.length === 0 && <AdminEmpty title="Nenhuma comissão neste filtro." />}
             </>
           )}
-
-          {query.hasNextPage && (
-            <button
-              type="button"
-              className="app-btn mt-4"
-              onClick={() => query.fetchNextPage()}
-              disabled={query.isFetchingNextPage}
-            >
-              {query.isFetchingNextPage ? "Carregando…" : "Carregar mais comissões"}
-            </button>
-          )}
         </AdminCard>
       </section>
 
-      {statusM.error && (
-        <div className="app-section">
-          <ErrorState error={statusM.error} />
-        </div>
+      {query.hasNextPage && (
+        <button
+          type="button"
+          className="app-btn mt-4"
+          onClick={() => query.fetchNextPage()}
+          disabled={query.isFetchingNextPage}
+        >
+          {query.isFetchingNextPage ? "Carregando…" : "Carregar mais comissões"}
+        </button>
       )}
     </>
   );

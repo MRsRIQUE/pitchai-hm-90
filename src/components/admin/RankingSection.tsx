@@ -10,7 +10,14 @@ import {
   updateRankedProduct,
   type RankedProduct,
 } from "@/lib/live/admin";
-import { AdminCard, AdminEmpty, AdminLoading, AdminStat, ErrorState } from "./admin-ui";
+import {
+  AdminCard,
+  AdminConfirm,
+  AdminEmpty,
+  AdminLoading,
+  AdminStat,
+  ErrorState,
+} from "./admin-ui";
 import { brl } from "./format";
 
 export function RankingSection() {
@@ -24,6 +31,8 @@ export function RankingSection() {
     queryFn: fetchRanking,
   });
   const [raw, setRaw] = useState("");
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+  const [confirmDeleteAll, setConfirmDeleteAll] = useState(false);
 
   const invalidate = () => qc.invalidateQueries({ queryKey: ["admin", "ranking"] });
 
@@ -44,11 +53,17 @@ export function RankingSection() {
   });
   const delM = useMutation({
     mutationFn: (id: string) => deleteRankedProduct(id),
-    onSuccess: invalidate,
+    onSuccess: () => {
+      invalidate();
+      setConfirmDeleteId(null);
+    },
   });
   const resetM = useMutation({
     mutationFn: () => deleteAllRankedProducts(),
-    onSuccess: invalidate,
+    onSuccess: () => {
+      invalidate();
+      setConfirmDeleteAll(false);
+    },
   });
 
   const totalVendas = items.reduce((s, p) => s + p.vendas, 0);
@@ -89,10 +104,8 @@ export function RankingSection() {
             </button>
             <button
               type="button"
-              className="app-btn"
-              onClick={() => {
-                if (confirm("Apagar todo o ranking?")) resetM.mutate();
-              }}
+              className="app-btn app-btn--ghost"
+              onClick={() => setConfirmDeleteAll(true)}
             >
               Limpar tudo
             </button>
@@ -164,7 +177,7 @@ export function RankingSection() {
                           <button
                             type="button"
                             className="app-btn app-btn--ghost app-btn--sm"
-                            onClick={() => delM.mutate(p.id)}
+                            onClick={() => setConfirmDeleteId(p.id)}
                             title="Remover do ranking"
                           >
                             <Trash2 aria-hidden="true" />
@@ -179,6 +192,22 @@ export function RankingSection() {
           )}
         </AdminCard>
       </section>
+      <AdminConfirm
+        open={confirmDeleteId !== null}
+        onClose={() => setConfirmDeleteId(null)}
+        onConfirm={() => confirmDeleteId && delM.mutate(confirmDeleteId)}
+        title="Remover produto do ranking"
+        message="Esta ação não pode ser desfeita. O produto será removido permanentemente."
+        confirmLabel="Remover"
+      />
+      <AdminConfirm
+        open={confirmDeleteAll}
+        onClose={() => setConfirmDeleteAll(false)}
+        onConfirm={() => resetM.mutate()}
+        title="Apagar todo o ranking"
+        message="Todos os produtos serão removidos permanentemente. Esta ação é irreversível."
+        confirmLabel="Apagar tudo"
+      />
     </>
   );
 }
