@@ -13,12 +13,14 @@ async function requireAdmin(request: Request): Promise<AdminContext> {
   return { uid: user.uid, email: user.email, token };
 }
 
-function apiError(error: unknown) {
+async function apiError(error: unknown) {
   if (error instanceof Response) {
-    return Response.json(
-      { ok: false, error: error.statusText || "Falha na solicitação" },
-      { status: error.status },
-    );
+    // O motivo vai no *corpo* da Response lançada por `requireAdmin`; `statusText`
+    // fica vazio quando só `status` é informado, então ler dali devolvia sempre o
+    // texto genérico e escondia a diferença entre 401 (sessão) e 403 (permissão).
+    const detail =
+      (await error.text().catch(() => "")) || error.statusText || "Falha na solicitação";
+    return Response.json({ ok: false, error: detail }, { status: error.status });
   }
   const detail = error instanceof Error ? error.message : "Erro desconhecido";
   console.error("[admin/check]", detail);

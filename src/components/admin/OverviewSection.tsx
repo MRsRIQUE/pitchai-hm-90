@@ -8,7 +8,7 @@ import {
   fetchStripeAdminSnapshot,
 } from "@/lib/live/admin";
 import { AdminAlert, AdminCard, AdminLoading, AdminStat } from "./admin-ui";
-import { brl } from "./format";
+import { adminErrorDetail, brl } from "./format";
 import type { AdminSectionId } from "./sections";
 
 /**
@@ -27,13 +27,17 @@ export function OverviewSection({ onNavigate }: { onNavigate: (id: AdminSectionI
   const stripe = useQuery({ queryKey: ["admin", "stripe"], queryFn: fetchStripeAdminSnapshot });
 
   const loading = plans.isLoading || costs.isLoading || commissions.isLoading || ranking.isLoading;
-  const failedSources = [
-    plans.error ? "planos e assinaturas" : null,
-    costs.error ? "custos" : null,
-    commissions.error ? "comissões" : null,
-    ranking.error ? "ranking" : null,
-    stripe.error ? "Stripe" : null,
-  ].filter((source): source is string => Boolean(source));
+  // Cada fonte carrega o próprio erro junto do nome. Só o nome não distingue
+  // sessão expirada (401) de falta de papel (Forbidden) nem de recusa do
+  // Firestore, e as três caem no mesmo aviso — sem o texto, todo diagnóstico
+  // deste painel vira investigação em log de servidor.
+  const failures = [
+    { label: "planos e assinaturas", error: plans.error },
+    { label: "custos", error: costs.error },
+    { label: "comissões", error: commissions.error },
+    { label: "ranking", error: ranking.error },
+    { label: "Stripe", error: stripe.error },
+  ].filter((source) => Boolean(source.error));
 
   const planRows = plans.data ?? [];
   const activePlans = planRows.filter((plan) => plan.assinantes > 0);
@@ -79,7 +83,7 @@ export function OverviewSection({ onNavigate }: { onNavigate: (id: AdminSectionI
 
   return (
     <>
-      {failedSources.length > 0 && (
+      {failures.length > 0 && (
         <div className="app-section">
           <AdminAlert
             action={
@@ -88,9 +92,26 @@ export function OverviewSection({ onNavigate }: { onNavigate: (id: AdminSectionI
               </button>
             }
           >
-            Não foi possível atualizar: {failedSources.join(", ")}. Os demais indicadores continuam
-            disponíveis.
+            Não foi possível atualizar: {failures.map((source) => source.label).join(", ")}. Os
+            demais indicadores continuam disponíveis.
           </AdminAlert>
+          {/* Fora do AdminAlert de propósito: o alerta põe os filhos num
+              <span>, que não aceita <details> como conteúdo válido. */}
+          <details className="app-card app-card--flat mt-2 text-[13px]">
+            <summary className="cursor-pointer select-none app-card-desc">
+              Detalhes do erro ({failures.length})
+            </summary>
+            <ul className="mt-3 space-y-2">
+              {failures.map((source) => (
+                <li key={source.label}>
+                  <span className="app-card-title">{source.label}</span>
+                  <pre className="app-card-desc mt-1 whitespace-pre-wrap break-all">
+                    {adminErrorDetail(source.error)}
+                  </pre>
+                </li>
+              ))}
+            </ul>
+          </details>
         </div>
       )}
 

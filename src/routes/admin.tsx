@@ -44,9 +44,15 @@ function AdminPage() {
       const res = await fetch("/api/admin/check", {
         headers: { Authorization: `Bearer ${token}` },
       });
-      const data = await res.json();
-      setStatus(data.ok ? "ok" : "not-admin");
-      if (!data.ok && data.error) setErrorMsg(data.error);
+      const data = await res.json().catch(() => ({}) as { ok?: boolean; error?: string });
+      if (data.ok) {
+        setStatus("ok");
+        return;
+      }
+      // 401 é sessão (token ausente/inválido), não falta de permissão: mandar
+      // para "Sem permissão" fazia o admin de verdade ler que não era admin.
+      if (data.error) setErrorMsg(data.error);
+      setStatus(res.status === 401 ? "signed-out" : "not-admin");
     } catch (error) {
       const msg = error instanceof Error ? error.message : String(error);
       console.error("Falha ao validar acesso administrativo:", error);
