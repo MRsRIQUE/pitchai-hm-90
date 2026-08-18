@@ -4307,6 +4307,13 @@
   async function locateProductCard(name, expectedPid = "") {
     const sector = await regionNode("products");
     let list = (await mapNode("products")) || sector;
+    console.debug("[PITCHAI-PIN] locateProductCard:", {
+      name,
+      expectedPid,
+      sectorFound: !!sector,
+      listFound: !!list,
+      mapVia: DM()?.status?.()?.products?.via || null,
+    });
     if (sector && list) {
       try {
         if (!sector.contains(list)) list = sector;
@@ -4317,15 +4324,18 @@
     const atCurrentPosition = () => {
       const cards = new Set();
       if (list) collectProductCards(list, cards);
-      return matchCard(
-        Array.from(cards).filter((card) => card.isConnected),
-        name,
-        expectedPid,
-      );
+      const live = Array.from(cards).filter((card) => card.isConnected);
+      console.debug("[PITCHAI-PIN] cards na posição atual:", live.length, {
+        primeiro: live[0] ? parseProductCard(live[0]) : null,
+      });
+      return matchCard(live, name, expectedPid);
     };
     let found = atCurrentPosition();
     if (found) return found;
     const scroller = list && scrollableProductAncestor(list);
+    console.debug("[PITCHAI-PIN] posição inicial sem match:", {
+      scrollerFound: !!scroller,
+    });
     if (scroller) {
       const start = scroller.scrollTop;
       const step = Math.max(140, Math.floor(scroller.clientHeight * 0.65));
@@ -4339,7 +4349,9 @@
       scroller.scrollTop = start;
       await sleep(80);
     }
-    return matchCard(await productCards(), name, expectedPid);
+    const fallbackCards = await productCards();
+    console.debug("[PITCHAI-PIN] fallback productCards:", fallbackCards.length);
+    return matchCard(fallbackCards, name, expectedPid);
   }
 
   /** Acha o card do produto pelo nome normalizado (tolerante a truncamento). */
@@ -4363,15 +4375,20 @@
     let best = null;
     let bestScore = 0;
     let tie = false;
+    const skippedPid = [];
     for (const c of cards) {
       const parsed = parseProductCard(c);
-      if (expectedPid && parsed?.pid && String(parsed.pid) !== String(expectedPid)) continue;
+      if (expectedPid && parsed?.pid && String(parsed.pid) !== String(expectedPid)) {
+        skippedPid.push({ pid: parsed.pid, name: parsed.name });
+        continue;
+      }
       const t = normKey(`${parsed?.name || ""} ${c.textContent || ""}`);
       if (!t) continue;
       // substring completa do nome vale o máximo; senão conta palavras em comum
       const exact = t.includes(key) ? words.length + 1 : 0;
       const hits = words.filter((w) => t.includes(w)).length;
       const score = Math.max(exact, hits);
+      console.debug("[PITCHAI-PIN] match:", { parsed, score, hits, exact, key });
       if (score > bestScore) {
         bestScore = score;
         best = c;
@@ -4380,6 +4397,17 @@
         tie = true;
       }
     }
+    if (skippedPid.length) {
+      console.debug("[PITCHAI-PIN] cards ignorados por pid diferente:", skippedPid);
+    }
+    console.debug("[PITCHAI-PIN] resultado matchCard:", {
+      key,
+      expectedPid,
+      bestScore,
+      min: Math.max(1, Math.ceil(words.length / 2)),
+      tie,
+      bestName: best ? parseProductCard(best)?.name : null,
+    });
     // Empate de pontuação = ambiguidade: melhor não clicar do que fixar errado.
     if (tie) return null;
     return bestScore >= Math.max(1, Math.ceil(words.length / 2)) ? best : null;
