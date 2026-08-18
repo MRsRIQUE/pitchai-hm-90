@@ -79,8 +79,6 @@ export default defineConfig(({ command }) => ({
   resolve: {
     alias: {
       "@": path.resolve(__dirname, "./src"),
-      "node:async_hooks": path.resolve(__dirname, "./src/lib/async-hooks-stub.ts"),
-      async_hooks: path.resolve(__dirname, "./src/lib/async-hooks-stub.ts"),
     },
   },
   optimizeDeps: {
