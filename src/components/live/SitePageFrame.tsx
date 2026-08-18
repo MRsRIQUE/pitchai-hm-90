@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 import { GridField } from "@/components/live/GridField";
 import { SiteFrame } from "@/components/live/SiteFrame";
 import { SiteNavLP } from "@/components/live/SiteNavLP";
+import { ForceDarkTheme } from "@/components/live/ForceDarkTheme";
 import "@/styles/landing.css";
 import "@/styles/site-page.css";
 
@@ -26,6 +27,7 @@ export function SitePageFrame({
     /* `no-grid` também apaga o quadriculado estático do `.landing::before`;
        sem ele a prop só tirava o canvas animado e a malha continuava. */
     <div className={`landing has-frame${grid ? "" : " no-grid"}`}>
+      <ForceDarkTheme />
       {grid ? <GridField /> : null}
       <SiteFrame />
       <SiteNavLP />

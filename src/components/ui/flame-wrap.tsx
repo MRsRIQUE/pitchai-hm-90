@@ -777,11 +777,18 @@ export function FlameWrap({ children, className, style, ...options }: FlameWrapP
         style={{
           position: "absolute",
           top: -reach,
-          right: -glow,
-          bottom: -glow,
           left: -glow,
           width: `calc(100% + ${glow * 2}px)`,
           height: `calc(100% + ${reach + glow}px)`,
+          /* `styles.css` tem `img, svg, video, canvas, iframe { max-width: 100% }`
+             no reset. Sem anular aqui, o canvas — que precisa ser MAIOR que o
+             conteúdo para caber o fogo em volta — era cortado de volta à largura
+             do pai enquanto continuava ancorado em `left: -glow`: o desenho
+             inteiro saía deslocado `glow` px para a esquerda e faltava a mesma
+             medida na direita, onde a chama simplesmente não chegava. Quanto
+             maior o `spread`, maior o deslocamento. */
+          maxWidth: "none",
+          maxHeight: "none",
           pointerEvents: "none",
         }}
       />

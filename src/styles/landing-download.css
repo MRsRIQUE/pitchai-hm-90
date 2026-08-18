@@ -1,0 +1,253 @@
+/* ============================================================
+   /DOWNLOAD — grade de instalação
+
+   O arranjo é o da grade de recursos da referência: duas colunas altas com
+   widget e texto empilhados, uma terceira coluna mais larga partida em duas
+   faixas onde o widget fica ao lado do texto, e linhas finas de 1px separando
+   tudo. O que muda é o conteúdo — aqui cada bloco é um passo da instalação,
+   não um recurso do produto.
+
+   As medidas da referência vêm em `rem` com `1rem = 1vw`; aqui o rem é fixo em
+   16px, então elas viajam como `vw` (com teto, porque o `.wrap` para de
+   crescer em 1120px).
+
+   Complementa `site-page.css`, que continua dono do resto da página (banner,
+   card de download, ajuda do .zip, próximo passo).
+   ============================================================ */
+
+.landing .dlg-list {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  grid-template-columns: 1fr 1px 1fr 1px 1.45fr;
+  grid-template-rows: 1fr 1fr;
+  margin-top: 26px;
+}
+
+.landing .dlg-item {
+  position: relative;
+  display: flex;
+  flex-flow: column;
+  justify-content: center;
+  align-items: center;
+  gap: clamp(22px, 3.4vw, 46px);
+  padding: clamp(26px, 3.4vw, 46px) clamp(12px, 1.8vw, 24px);
+  text-align: center;
+}
+
+.landing .dlg-item.s1 {
+  grid-column: 1;
+  grid-row: 1 / span 2;
+}
+
+.landing .dlg-item.s2 {
+  grid-column: 3;
+  grid-row: 1 / span 2;
+}
+
+/* A terceira coluna é a larga: os dois passos ali deitam, com o widget à
+   esquerda do par título/descrição. */
+.landing .dlg-item.s3,
+.landing .dlg-item.s4 {
+  grid-column: 5;
+  flex-flow: row;
+  justify-content: flex-start;
+  align-items: center;
+  gap: clamp(14px, 1.8vw, 26px);
+  padding-left: clamp(18px, 2.6vw, 36px);
+  text-align: left;
+}
+
+.landing .dlg-item.s3 {
+  grid-row: 1;
+}
+
+.landing .dlg-item.s4 {
+  grid-row: 2;
+}
+
+/* ------------------------------------------------------------
+   AS LINHAS
+   As duas verticais são células do próprio grid — é o `1px` das colunas 2 e 4.
+   A horizontal mora dentro do bloco 3 e para antes da margem, como lá.
+   ------------------------------------------------------------ */
+.landing .dlg-rule-v {
+  grid-row: 1 / span 2;
+  background: var(--line);
+}
+
+.landing .dlg-rule-v.v1 {
+  grid-column: 2;
+}
+
+.landing .dlg-rule-v.v2 {
+  grid-column: 4;
+}
+
+.landing .dlg-rule-h {
+  position: absolute;
+  inset: auto 0 0 auto;
+  width: 92%;
+  height: 1px;
+  background: var(--line);
+}
+
+/* ------------------------------------------------------------
+   WIDGETS
+   ------------------------------------------------------------ */
+.landing .dlg-widget {
+  position: relative;
+  flex: none;
+}
+
+.landing .dlg-widget.s1 {
+  width: 58%;
+  max-width: 190px;
+}
+
+.landing .dlg-widget.s2 {
+  width: 74%;
+  max-width: 240px;
+}
+
+.landing .dlg-widget.s3 {
+  width: 40%;
+  max-width: 190px;
+}
+
+.landing .dlg-widget.s4 {
+  width: 32%;
+  max-width: 150px;
+}
+
+.landing .dlg-widget-art {
+  position: relative;
+  z-index: 1;
+  display: block;
+  color: var(--accent-ink);
+}
+
+.landing .dlg-widget-art svg {
+  display: block;
+  width: 100%;
+  height: auto;
+  overflow: visible;
+}
+
+/* mancha de luz atrás do desenho, como o `.what-is-blur` da referência */
+.landing .dlg-glow {
+  position: absolute;
+  inset: 6% auto auto 8%;
+  aspect-ratio: 1;
+  width: 86%;
+  border-radius: 50%;
+  background: var(--accent);
+  opacity: 0.16;
+  filter: blur(46px);
+  pointer-events: none;
+}
+
+/* ------------------------------------------------------------
+   TEXTO
+   ------------------------------------------------------------ */
+.landing .dlg-text {
+  display: flex;
+  flex-flow: column;
+  align-items: center;
+  gap: 8px;
+  max-width: 300px;
+}
+
+.landing .dlg-text.s3,
+.landing .dlg-text.s4 {
+  align-items: flex-start;
+  max-width: 260px;
+}
+
+.landing .dlg-step {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--accent-ink);
+  opacity: 0.9;
+}
+
+.landing .dlg-title {
+  margin: 0;
+  font-size: clamp(16px, 1.5vw, 19px);
+  font-weight: 600;
+  line-height: 1.25;
+  letter-spacing: -0.02em;
+  color: var(--ink);
+}
+
+.landing .dlg-desc {
+  margin: 0;
+  font-size: clamp(13px, 1.1vw, 14.5px);
+  line-height: 1.55;
+  color: var(--ink-3);
+}
+
+.landing .dlg-copy {
+  margin-top: 6px;
+  font-size: 13px;
+  padding: 8px 12px;
+}
+
+.landing .dlg-copy svg {
+  width: 14px;
+  height: 14px;
+}
+
+/* ------------------------------------------------------------
+   ABAIXO DE 900px a grade vira pilha e as linhas verticais dão lugar a
+   separadores horizontais — o mesmo caminho que a referência faz no mobile.
+   ------------------------------------------------------------ */
+@media screen and (max-width: 900px) {
+  .landing .dlg-list {
+    display: flex;
+    flex-flow: column;
+  }
+
+  .landing .dlg-item {
+    padding: 34px 0;
+    border-bottom: 1px solid var(--line);
+  }
+
+  .landing .dlg-item.s3,
+  .landing .dlg-item.s4 {
+    flex-flow: column;
+    justify-content: center;
+    align-items: center;
+    padding-left: 0;
+    text-align: center;
+  }
+
+  .landing .dlg-item.s4 {
+    border-bottom: 0;
+  }
+
+  .landing .dlg-text.s3,
+  .landing .dlg-text.s4 {
+    align-items: center;
+  }
+
+  .landing .dlg-widget.s1,
+  .landing .dlg-widget.s2,
+  .landing .dlg-widget.s3,
+  .landing .dlg-widget.s4 {
+    width: 62%;
+    max-width: 220px;
+  }
+
+  /* a régua horizontal do bloco 3 sai: quem separa agora é a borda da pilha */
+  .landing .dlg-rule-h,
+  .landing .dlg-rule-v {
+    display: none;
+  }
+
+  .landing .dlg-glow {
+    filter: blur(60px);
+  }
+}

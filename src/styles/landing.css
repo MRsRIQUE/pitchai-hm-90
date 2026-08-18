@@ -439,10 +439,13 @@
    GRID FIELD — quadriculado deformável pelo mouse (canvas)
    ============================================================ */
 .landing .grid-field {
-  position: absolute;
+  /* fixed, não absolute: em absolute o canvas assumia a altura da PÁGINA
+     (medido 1440x14457 = ~21 milhões de pixels) para desenhar uma malha que
+     só é vista dentro da viewport. */
+  position: fixed;
   inset: 0;
   z-index: 0;
-  min-height: 100%;
+  height: 100vh;
   pointer-events: none;
   opacity: 0.9;
 }
@@ -708,7 +711,6 @@
 }
 .landing .viewers {
   background: rgba(255, 255, 255, 0.14);
-  backdrop-filter: blur(8px);
   color: #fff;
   font-size: 10px;
   font-weight: 550;
@@ -794,7 +796,6 @@
 }
 .landing .chat {
   background: rgba(20, 20, 24, 0.62);
-  backdrop-filter: blur(10px);
   border: 1px solid rgba(255, 255, 255, 0.09);
   border-radius: 12px;
   padding: 9px 10px;
@@ -1107,8 +1108,6 @@
   padding: 7px;
   border: 1px solid var(--line);
   background-image: linear-gradient(160deg, rgba(255, 255, 255, 0.92), rgba(255, 255, 255, 0.66));
-  backdrop-filter: blur(18px) saturate(180%);
-  -webkit-backdrop-filter: blur(18px) saturate(180%);
   box-shadow:
     inset 0 1px 0 0 rgba(255, 255, 255, 0.95),
     0 -10px 34px -14px rgba(12, 12, 13, 0.34);
@@ -2321,12 +2320,10 @@ html {
 .landing .chip {
   background: rgba(255, 255, 255, 0.7);
   border-color: rgba(255, 255, 255, 0.8);
-  backdrop-filter: blur(10px) saturate(160%);
 }
 
 .landing .stats {
-  background: rgba(255, 255, 255, 0.52);
-  backdrop-filter: blur(16px) saturate(160%);
+  background: rgba(255, 255, 255, 0.9);
   border: 1px solid rgba(255, 255, 255, 0.75);
   border-radius: 18px;
   padding: 0 30px;
@@ -2336,16 +2333,15 @@ html {
 .landing .step,
 .landing .card,
 .landing .plan {
-  background: rgba(255, 255, 255, 0.58);
+  background: rgba(255, 255, 255, 0.92);
   border-color: rgba(255, 255, 255, 0.72);
-  backdrop-filter: blur(12px) saturate(160%);
 }
 .landing .card.hi {
-  background: rgba(245, 241, 254, 0.62);
+  background: rgba(245, 241, 254, 0.94);
   border-color: rgba(109, 40, 217, 0.18);
 }
 .landing .plan.pop {
-  background: rgba(255, 255, 255, 0.66);
+  background: rgba(255, 255, 255, 0.95);
 }
 
 .landing .step:hover,
@@ -2356,14 +2352,12 @@ html {
 
 .landing .safe-card {
   background: rgba(12, 12, 13, 0.86);
-  backdrop-filter: blur(14px) saturate(140%);
   border: 1px solid rgba(255, 255, 255, 0.12);
   box-shadow: var(--shadow-lg);
 }
 
 .landing .cta-band {
-  background: rgba(255, 255, 255, 0.55);
-  backdrop-filter: blur(16px) saturate(160%);
+  background: rgba(255, 255, 255, 0.9);
   border-color: rgba(255, 255, 255, 0.75);
 }
 
@@ -2593,9 +2587,7 @@ html.dark .landing .badge {
 html.dark .landing .chip {
   border-color: rgba(255, 255, 255, 0.16);
   background-image: linear-gradient(160deg, rgba(255, 255, 255, 0.13), rgba(255, 255, 255, 0.06));
-  background-color: rgba(20, 18, 32, 0.72);
-  backdrop-filter: blur(20px) saturate(180%);
-  -webkit-backdrop-filter: blur(20px) saturate(180%);
+  background-color: rgba(20, 18, 32, 0.93);
   box-shadow:
     inset 0 1px 0 0 rgba(255, 255, 255, 0.2),
     0 18px 40px -18px rgba(0, 0, 0, 0.8);

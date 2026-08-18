@@ -3,7 +3,6 @@ import { Link } from "@tanstack/react-router";
 import { ChevronDown, Loader2 } from "lucide-react";
 import { onAuthStateChanged } from "firebase/auth";
 import { PitchAiLogo } from "@/components/live/PitchAiLogo";
-import { ThemeModeSelector } from "@/components/live/ThemeModeSelector";
 import { getFirebaseAuth } from "@/lib/firebase";
 import { useLogout } from "@/lib/use-logout";
 
@@ -142,8 +141,6 @@ export function SiteNavLP() {
         </nav>
 
         <div className="lp-nav-actions">
-          <ThemeModeSelector tone="dark" />
-
           {authed ? (
             <button
               type="button"

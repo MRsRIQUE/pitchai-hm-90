@@ -669,7 +669,6 @@
   background: rgba(12, 12, 13, 0.72);
   color: #fff;
   font-variant-numeric: tabular-nums;
-  backdrop-filter: blur(4px);
 }
 .landing .hot-flag {
   right: 10px;

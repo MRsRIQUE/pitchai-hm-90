@@ -1,0 +1,558 @@
+/* ============================================================
+   LANDING — RECURSOS
+   Folha própria da seção de recursos: a colagem de cards sobre a
+   headline colossal, traduzida do `HowItWorks` da réplica.
+
+   Duas decisões estruturais valem o comentário:
+
+   1. A réplica posiciona os blocos com `inset` em porcentagem sobre um
+      palco de altura fixa. Aqui o palco é uma grade de 12 colunas — o
+      conteúdo é texto real em português, de altura imprevisível, e
+      `inset` em % faria os cards colidirem na primeira quebra de linha
+      diferente. A grade dá o mesmo espalhamento em diagonal sem o risco.
+   2. A landing é só escura. As superfícies desta seção trazem as cores
+      escuras escritas na mão em vez de saírem dos tokens: os cards
+      flutuam sobre a headline gigante e um fundo translúcido demais
+      deixaria o texto do card ilegível sobre as letras de trás.
+
+   A pilha de z-index da landing é baixa (nav 90, moldura 92); aqui nada
+   passa de 2.
+   ============================================================ */
+
+.landing .lpf {
+  position: relative;
+}
+
+/* ------------------------------------------------------------
+   CABEÇALHO — a headline saiu daqui e virou o fundo do palco, então
+   sobram o eyebrow e a linha de apoio, centralizados: a seção deixou
+   de ser uma lista e virou um pôster.
+   ------------------------------------------------------------ */
+.landing .lpf .lpf-head {
+  max-width: 620px;
+  margin: 0 auto 26px;
+  text-align: center;
+}
+
+/* ------------------------------------------------------------
+   PALCO
+
+   O respiro de cima não é folga: é a faixa em que a primeira linha da
+   headline colossal aparece inteira, antes de a colagem começar. O de
+   baixo é para o parallax sair sem encostar na seção seguinte.
+   ------------------------------------------------------------ */
+.landing .lpf-stage {
+  position: relative;
+  z-index: 1;
+  /* Os 9vw a mais em cima são a EXCURSÃO do parallax, não respiro: a
+     headline começa em `y: -9vw` e, ancorada em `top: 8px`, subia 9vw
+     acima do palco — direto por cima do eyebrow e da linha de apoio, que
+     ficam logo antes. O palco inteiro (headline junto, porque ela é
+     absoluta em relação a ele) desce o mesmo tanto, e a distância entre
+     headline e cards continua sendo os mesmos 142px de antes.
+
+     A folga de baixo é curta de propósito: na faixa em que o fim da
+     colagem aparece, o parallax já subiu os últimos cards uns 50px, e
+     uma folga "correta" no CSS viraria um buraco preto antes da próxima
+     seção. */
+  padding: calc(150px + 9vw) 0 32px;
+}
+
+/* ------------------------------------------------------------
+   HEADLINE COLOSSAL — o fundo da seção
+
+   Fica em absoluto para não empurrar a grade: os cards ocupam a mesma
+   faixa e passam por cima dela. Ancorada no topo do palco, a primeira
+   linha cai na faixa livre e se lê inteira; as de baixo entram atrás da
+   colagem. O degradê no texto acompanha isso — quase branca em cima,
+   dissolvida embaixo —, então o que fica ilegível é justamente o que os
+   cards cobrem, e a seção não parece ter um título quebrado.
+
+   `left/right: 0` + largura + `margin: 0 auto` centralizam a caixa sem
+   `translateX`, que brigaria com o `y` que o Motion escreve aqui.
+   ------------------------------------------------------------ */
+.landing .lpf-headline {
+  position: absolute;
+  /* os 9vw casam com a excursão para cima do parallax (`y: -9vw` em p=0):
+     somados aqui, o ponto mais alto da headline é o topo do palco e não
+     9vw acima dele. Ver a nota em `.lpf-stage`. */
+  top: calc(8px + 9vw);
+  left: 0;
+  right: 0;
+  z-index: 0;
+  width: min(1280px, 100% - 48px);
+  margin: 0 auto;
+  text-align: center;
+  font-size: clamp(38px, 7.6vw, 108px);
+  font-weight: 600;
+  line-height: 1.02;
+  letter-spacing: -0.045em;
+  pointer-events: none;
+  background-image: linear-gradient(
+    180deg,
+    rgba(242, 242, 245, 0.92) 6%,
+    rgba(242, 242, 245, 0.08) 88%
+  );
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+.landing .lpf-headline-line {
+  display: block;
+}
+
+.landing .lpf-headline-serif {
+  font-family: "Instrument Serif", Georgia, serif;
+  font-size: 1.06em;
+  font-style: italic;
+  font-weight: 400;
+  letter-spacing: -0.02em;
+  background-image: linear-gradient(
+    180deg,
+    rgba(167, 139, 250, 0.48),
+    rgba(167, 139, 250, 0.12) 92%
+  );
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+/* ------------------------------------------------------------
+   GRADE DA COLAGEM
+
+   12 colunas e nove faixas. O caminho desce em diagonal — chat à
+   esquerda, voz à direita, os quatro menores alternando — e deixa um
+   canal livre no meio, por onde a headline aparece.
+   ------------------------------------------------------------ */
+.landing .lpf-front {
+  position: relative;
+  z-index: 2;
+  width: min(1280px, 100% - 48px);
+  margin: 0 auto;
+  display: grid;
+  grid-template-columns: repeat(12, minmax(0, 1fr));
+  grid-auto-rows: minmax(84px, auto);
+  gap: 20px;
+}
+
+/* `.lpf-cell` carrega só o parallax; `.lpf-view`, por dentro, só a
+   entrada from-center. Separar importa: com o scale da entrada no mesmo
+   nó, a caixa da célula encolheria junto e a grade se mexeria. */
+.landing .lpf-cell {
+  display: flex;
+  min-width: 0;
+}
+
+.landing .lpf-view {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+}
+
+/* o `:not` é o que preserva a largura própria dos widgets — um deles é um
+   círculo de 96px e viraria elipse se herdasse `width: 100%` daqui */
+.landing .lpf-cell:not(.lpf-cell--widget) .lpf-view > * {
+  width: 100%;
+}
+
+/* os widgets não esticam: ficam soltos no centro do vão que ocupam */
+.landing .lpf-cell--widget {
+  align-self: center;
+  justify-self: center;
+}
+
+.landing .lpf-cell--widget .lpf-view {
+  flex: 0 0 auto;
+}
+
+.landing .lpf-cell--chat {
+  grid-column: 1 / span 5;
+  grid-row: 1 / span 3;
+}
+.landing .lpf-cell--w1 {
+  grid-column: 7 / span 3;
+  grid-row: 1;
+}
+/* a voz é mais baixa que o chat; sem o `align-self` ela esticaria até o
+   fim da faixa e a demo ficaria boiando no meio de um vão vazio */
+.landing .lpf-cell--voice {
+  grid-column: 8 / span 5;
+  grid-row: 2 / span 3;
+  align-self: start;
+}
+.landing .lpf-cell--shield {
+  grid-column: 1 / span 4;
+  grid-row: 4 / span 2;
+}
+.landing .lpf-cell--w2 {
+  grid-column: 6 / span 2;
+  grid-row: 4;
+}
+.landing .lpf-cell--pin {
+  grid-column: 9 / span 4;
+  grid-row: 5 / span 2;
+}
+.landing .lpf-cell--w3 {
+  grid-column: 6 / span 2;
+  grid-row: 6;
+}
+.landing .lpf-cell--clock {
+  grid-column: 2 / span 4;
+  grid-row: 7 / span 2;
+}
+.landing .lpf-cell--w4 {
+  grid-column: 6 / span 2;
+  grid-row: 8;
+}
+.landing .lpf-cell--sound {
+  grid-column: 8 / span 4;
+  grid-row: 8 / span 2;
+}
+
+/* ------------------------------------------------------------
+   CARDS
+
+   Continuam sendo `.card` do design system — o shine no hover, o ícone
+   que gira e a tipografia vêm de lá. O que muda é a superfície: vidro
+   escuro de verdade, porque atrás dele passa a headline gigante.
+
+   A especificidade precisa de quatro classes para vencer o
+   `html.dark .landing .card` da folha global, que é (0,3,1).
+   ------------------------------------------------------------ */
+.landing .lpf .card.lpf-card {
+  height: 100%;
+  padding: 24px 22px 26px;
+  border-radius: 20px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background-color: rgba(16, 15, 22, 0.95);
+  background-image: linear-gradient(
+    158deg,
+    rgba(255, 255, 255, 0.09),
+    rgba(255, 255, 255, 0.02) 58%
+  );
+  box-shadow:
+    inset 0 1px 0 0 rgba(255, 255, 255, 0.08),
+    0 30px 70px -34px rgba(0, 0, 0, 0.9);
+}
+
+.landing .lpf .card.hi.lpf-card {
+  border-color: rgba(139, 92, 246, 0.34);
+  background-color: rgba(38, 26, 64, 0.95);
+  background-image: linear-gradient(158deg, rgba(139, 92, 246, 0.26), rgba(139, 92, 246, 0.04) 62%);
+}
+
+.landing .lpf .card.lpf-card:hover {
+  border-color: rgba(255, 255, 255, 0.26);
+}
+
+/* o conteúdo sobe acima do brilho interno; sem os dois z-index o blob,
+   por ser posicionado, pintaria em cima do texto que é estático */
+.landing .lpf-card > .card-ic,
+.landing .lpf-card > .card-tag,
+.landing .lpf-card > h3,
+.landing .lpf-card > p,
+.landing .lpf-card > .demo {
+  position: relative;
+  z-index: 1;
+}
+
+.landing .lpf-glow {
+  position: absolute;
+  z-index: 0;
+  inset: -20% auto auto -16%;
+  width: 190px;
+  aspect-ratio: 1;
+  border-radius: 50%;
+  background-color: rgba(139, 92, 246, 0.5);
+  filter: blur(66px);
+  pointer-events: none;
+}
+
+.landing .lpf .card.hi .lpf-glow {
+  background-color: rgba(167, 139, 250, 0.62);
+}
+
+.landing .lpf-card .card-ic {
+  background: rgba(255, 255, 255, 0.07);
+  border-color: rgba(255, 255, 255, 0.14);
+}
+
+/* as duas células grandes carregam a demo viva: título um pouco maior
+   para não empatar com os cards de ícone */
+.landing .lpf-cell--chat h3,
+.landing .lpf-cell--voice h3 {
+  font-size: 19px;
+  letter-spacing: -0.024em;
+}
+
+/* as demos são vidro dentro do vidro; aqui o fundo precisa ser opaco o
+   bastante para a headline de trás não vazar dentro da bolha do chat */
+.landing .lpf .demo-msg,
+.landing .lpf .demo-wave {
+  background: rgba(255, 255, 255, 0.07);
+  border-color: rgba(255, 255, 255, 0.12);
+}
+
+.landing .lpf .demo-voice-chip {
+  background: rgba(255, 255, 255, 0.07);
+  border-color: rgba(255, 255, 255, 0.14);
+}
+
+/* ------------------------------------------------------------
+   WIDGETS FLUTUANTES
+
+   O papel deles é o dos Lottie da referência: dar profundidade ao
+   parallax e mostrar o que a IA lê, ouve e vigia. São decoração —
+   `aria-hidden` no componente — e somem no mobile.
+   ------------------------------------------------------------ */
+.landing .lpf-widget {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 14px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 16px;
+  background-color: rgba(20, 18, 32, 0.93);
+  background-image: linear-gradient(160deg, rgba(255, 255, 255, 0.13), rgba(255, 255, 255, 0.045));
+  box-shadow:
+    inset 0 1px 0 0 rgba(255, 255, 255, 0.18),
+    0 20px 44px -24px rgba(0, 0, 0, 0.85);
+  color: var(--ink);
+  font-size: 12.5px;
+  line-height: 1.2;
+}
+
+/* os assuntos que o chat resolve sozinho */
+.landing .lpf-widget--topics {
+  flex-wrap: wrap;
+  gap: 7px;
+  max-width: 216px;
+  padding: 13px;
+}
+
+.landing .lpf-widget--topics span {
+  padding: 5px 11px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.07);
+  font-size: 12px;
+  color: rgba(242, 242, 245, 0.86);
+}
+
+/* a voz narrando */
+.landing .lpf-widget--wave {
+  border-radius: 999px;
+  padding: 10px 16px 10px 10px;
+}
+
+.landing .lpf-widget-ic {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  background: var(--accent);
+  color: #fff;
+}
+
+.landing .lpf-widget-ic svg {
+  width: 15px;
+  height: 15px;
+}
+
+.landing .lpf-wave {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+}
+
+.landing .lpf-wave .lp-bar {
+  width: 3px;
+  border-radius: 999px;
+  background: rgba(196, 181, 253, 0.9);
+}
+
+/* o anel que gira — a estrela do `a-18` da referência, presa ao scroll */
+.landing .lpf-widget--ring {
+  justify-content: center;
+  width: 120px;
+  height: 120px;
+  padding: 0;
+  border-radius: 50%;
+}
+
+.landing .lpf-ring {
+  position: absolute;
+  inset: 7px;
+  border-radius: 50%;
+  background-image: conic-gradient(
+    from 0deg,
+    rgba(167, 139, 250, 0),
+    rgba(167, 139, 250, 0.9) 110deg,
+    rgba(167, 139, 250, 0) 215deg
+  );
+  -webkit-mask-image: radial-gradient(circle, transparent 60%, #000 62%);
+  mask-image: radial-gradient(circle, transparent 60%, #000 62%);
+}
+
+.landing .lpf-widget--ring > svg {
+  position: relative;
+  z-index: 1;
+  width: 26px;
+  height: 26px;
+  color: rgba(196, 181, 253, 0.95);
+}
+
+/* o estado da live */
+.landing .lpf-widget--live {
+  gap: 9px;
+  border-radius: 999px;
+  padding: 10px 16px;
+}
+
+.landing .lpf-dot {
+  flex: none;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #34d399;
+  box-shadow: 0 0 0 4px rgba(52, 211, 153, 0.16);
+  animation: lpf-pulse 1.9s ease-in-out infinite;
+}
+
+@keyframes lpf-pulse {
+  50% {
+    box-shadow: 0 0 0 8px rgba(52, 211, 153, 0.04);
+  }
+}
+
+.landing .lpf-live-k {
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: rgba(242, 242, 245, 0.66);
+}
+
+.landing .lpf-live-v {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 12px;
+  font-weight: 560;
+  white-space: nowrap;
+}
+
+.landing .lpf-live-v svg {
+  width: 13px;
+  height: 13px;
+  color: #a78bfa;
+}
+
+/* ------------------------------------------------------------
+   TABLET — mesma colagem, menos densa: os cards ficam mais largos e
+   dois widgets saem para o texto não espremer.
+   ------------------------------------------------------------ */
+@media (min-width: 900px) and (max-width: 1199px) {
+  .landing .lpf-front {
+    width: min(100% - 48px, 980px);
+    gap: 16px;
+  }
+
+  .landing .lpf-cell--chat {
+    grid-column: 1 / span 6;
+    grid-row: 1 / span 3;
+  }
+  .landing .lpf-cell--w1 {
+    grid-column: 8 / span 4;
+    grid-row: 1;
+  }
+  .landing .lpf-cell--voice {
+    grid-column: 7 / span 6;
+    grid-row: 2 / span 3;
+  }
+  .landing .lpf-cell--shield {
+    grid-column: 1 / span 5;
+    grid-row: 4 / span 2;
+  }
+  .landing .lpf-cell--pin {
+    grid-column: 8 / span 5;
+    grid-row: 5 / span 2;
+  }
+  .landing .lpf-cell--w3 {
+    grid-column: 6 / span 2;
+    grid-row: 6;
+  }
+  .landing .lpf-cell--clock {
+    grid-column: 1 / span 5;
+    grid-row: 7 / span 2;
+  }
+  .landing .lpf-cell--sound {
+    grid-column: 7 / span 6;
+    grid-row: 8 / span 2;
+  }
+  .landing .lpf-cell--w2,
+  .landing .lpf-cell--w4 {
+    display: none;
+  }
+}
+
+/* ------------------------------------------------------------
+   MOBILE — a colagem desmonta em coluna, como a referência faz em
+   <= 479px. A headline sai do fundo e volta a ser o título da seção,
+   agora legível; os widgets, que só serviam ao parallax, saem.
+   O parallax também é desligado aqui pelo componente.
+   ------------------------------------------------------------ */
+@media (max-width: 899px) {
+  .landing .lpf .lpf-head {
+    margin-bottom: 30px;
+    text-align: left;
+  }
+
+  .landing .lpf-stage {
+    padding: 0 0 8px;
+  }
+
+  .landing .lpf-headline {
+    position: relative;
+    top: auto;
+    width: min(100% - 48px, 620px);
+    margin: 0 auto 32px;
+    text-align: left;
+    font-size: clamp(30px, 8.4vw, 46px);
+    line-height: 1.06;
+    letter-spacing: -0.035em;
+    background-image: linear-gradient(180deg, rgba(242, 242, 245, 0.98), rgba(242, 242, 245, 0.74));
+  }
+
+  .landing .lpf-headline-serif {
+    background-image: linear-gradient(180deg, rgba(196, 181, 253, 0.96), rgba(167, 139, 250, 0.78));
+  }
+
+  .landing .lpf-front {
+    width: min(100% - 48px, 620px);
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+  }
+
+  .landing .lpf-cell--w1,
+  .landing .lpf-cell--w2,
+  .landing .lpf-cell--w3,
+  .landing .lpf-cell--w4 {
+    display: none;
+  }
+
+  .landing .lpf .card.lpf-card {
+    padding: 22px 20px 24px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .landing .lpf-dot {
+    animation: none;
+  }
+}

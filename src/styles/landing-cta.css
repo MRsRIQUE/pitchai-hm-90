@@ -1,0 +1,137 @@
+/* ============================================================
+   LANDING — CTA FINAL
+   Fatiado de landing-motion.css para que cada seção tenha folha
+   própria — o time trabalha em paralelo e ninguém edita o mesmo arquivo.
+   ============================================================ */
+
+/* ------------------------------------------------------------
+   CTA FINAL — shader da landing atual, layout e entradas da referência
+   ------------------------------------------------------------ */
+.landing .cta-final {
+  position: relative;
+  z-index: 5;
+  padding: 96px 0 72px;
+}
+
+.landing .cta-final-card {
+  overflow: hidden;
+  border-radius: 28px;
+  transform-origin: 50% 50%;
+}
+
+.landing .cta-final-shader {
+  display: block;
+  width: 100%;
+}
+
+.landing .cta-final-inner {
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 0.56fr);
+  align-items: end;
+  gap: 24px;
+  min-height: 420px;
+  padding: 64px 56px 0;
+}
+
+.landing .cta-final-text {
+  padding-bottom: 64px;
+}
+
+.landing .cta-final-title {
+  margin: 0;
+  color: #fff;
+  font-size: clamp(1.7rem, 3.2vw, 2.9rem);
+  font-weight: 600;
+  line-height: 1.12;
+  letter-spacing: -0.032em;
+}
+
+.landing .cta-final-desc {
+  max-width: 44ch;
+  margin: 16px 0 0;
+  color: rgba(255, 255, 255, 0.78);
+  font-size: clamp(0.95rem, 1.2vw, 1.1rem);
+  line-height: 1.6;
+}
+
+.landing .cta-final-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 28px;
+}
+
+.landing .cta-final .btn-outline {
+  border-color: rgba(255, 255, 255, 0.3);
+  background: rgba(255, 255, 255, 0.05);
+  color: #fff;
+}
+
+.landing .cta-final .btn-outline:hover {
+  border-color: rgba(255, 255, 255, 0.52);
+  background: rgba(255, 255, 255, 0.12);
+}
+
+/* O aparelho sobe do canto e é cortado pela borda do card. Aqui dentro mora o
+   `PhoneShowcase` — a moldura real com os vídeos da demo tocando. Ele se
+   posiciona sozinho (absolute, 102.45% do pai), então esta caixa precisa ter
+   proporção própria, senão nasceria com altura zero. */
+.landing .cta-final-phone {
+  position: relative;
+  width: 100%;
+  /* as quatro medidas passam por custom property para o painel de tweaks
+     (aba "Celular no CTA final"); o valor depois da vírgula é o que vale
+     sem o painel. A rotação usa a propriedade `rotate`, e não `transform`:
+     o Motion escreve transform aqui na entrada do aparelho, e as duas
+     coisas precisam poder coexistir. */
+  max-width: var(--ctaph-w, 300px);
+  aspect-ratio: 967 / 1626;
+  justify-self: end;
+  margin-right: var(--ctaph-right, 4%);
+  margin-bottom: var(--ctaph-bottom, -6%);
+  rotate: var(--ctaph-rot, 0deg);
+  transform-origin: 50% 100%;
+}
+
+/* o showcase vira `relative; width: 74vw` abaixo de 860px por causa do hero —
+   aqui ele continua encaixado na caixa do CTA */
+.landing .cta-final-phone .phone-video-showcase {
+  position: absolute;
+  top: var(--pv-top, 0.1%);
+  left: var(--pv-left, -0.25%);
+  width: var(--pv-scale, 102.45%);
+  margin: 0;
+}
+
+@media screen and (max-width: 860px) {
+  .landing .cta-final {
+    padding: 56px 0 40px;
+  }
+
+  .landing .cta-final-inner {
+    grid-template-columns: minmax(0, 1fr);
+    min-height: 0;
+    padding: 36px 24px 0;
+    text-align: center;
+  }
+
+  .landing .cta-final-text {
+    padding-bottom: 8px;
+  }
+
+  .landing .cta-final-desc {
+    margin-inline: auto;
+  }
+
+  .landing .cta-final-actions {
+    justify-content: center;
+  }
+
+  .landing .cta-final-phone {
+    max-width: 230px;
+    justify-self: center;
+    margin-right: 0;
+    margin-bottom: -14%;
+  }
+}

@@ -2,7 +2,6 @@ import { useEffect, useRef, useState } from "react";
 import { Link } from "@tanstack/react-router";
 import { ChevronDown } from "lucide-react";
 import { PitchAiLogo } from "@/components/live/PitchAiLogo";
-import { ThemeModeSelector } from "@/components/live/ThemeModeSelector";
 
 /**
  * Nav da landing no formato do template Circular: barra fixa encaixada dentro
@@ -10,7 +9,8 @@ import { ThemeModeSelector } from "@/components/live/ThemeModeSelector";
  * arredondados, dropdown de produto e CTA de pastilha + seta.
  *
  * O que muda em relação ao original: as cores saem dos tokens da Pitch AI
- * (roxo no lugar do verde-limão) e o seletor de tema continua na barra.
+ * (roxo no lugar do verde-limão) e não há seletor de tema — a landing é escura
+ * e ponto, porque todos os efeitos dela foram calibrados sobre preto.
  */
 
 type NavItem = {
@@ -148,8 +148,6 @@ export function LandingNav() {
         </nav>
 
         <div className="lp-nav-actions">
-          <ThemeModeSelector tone="dark" />
-
           <Link to="/entrar" className="lp-nav-link lp-nav-signin">
             Entrar
           </Link>

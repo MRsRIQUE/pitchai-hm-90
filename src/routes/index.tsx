@@ -1,33 +1,31 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useEffect, useRef, useState } from "react";
-import {
-  ArrowRight,
-  Check,
-  Clock,
-  Coffee,
-  Download,
-  MessageSquare,
-  Mic,
-  MousePointerClick,
-  Pin,
-  Plus,
-  Shield,
-  Timer,
-  Volume2,
-  X,
-  Zap,
-} from "lucide-react";
+import { useEffect, useState } from "react";
+import { Check, Plus, X } from "lucide-react";
 import { LandingNav } from "@/components/live/LandingNav";
 import { SiteFrame } from "@/components/live/SiteFrame";
 import { GridField } from "@/components/live/GridField";
 import { PitchAiLogo } from "@/components/live/PitchAiLogo";
-import { StepPhone, type StepPhoneState } from "@/components/live/StepPhone";
-import { ChatDemo, VoiceDemo } from "@/components/live/FeatureDemos";
 import { TextLoop } from "@/components/live/TextLoop";
-import { FlameWrap } from "@/components/ui/flame-wrap";
-import { Velaris } from "@/components/ui/velaris";
+import { Preloader } from "@/components/live/Preloader";
+import { ForceDarkTheme } from "@/components/live/ForceDarkTheme";
+import { HeroMotion } from "@/components/live/HeroMotion";
+import { LogoReveal } from "@/components/live/LogoReveal";
+import { Manifesto } from "@/components/live/Manifesto";
+import { HowSteps } from "@/components/live/HowSteps";
+import { StackCards } from "@/components/live/StackCards";
+import { NameSection } from "@/components/live/NameSection";
+import { CtaFinal } from "@/components/live/CtaFinal";
+import { FeaturesSection } from "@/components/live/FeaturesSection";
+import { PlanFlame } from "@/components/live/PlanFlame";
+import { Tweaks } from "@/components/live/Tweaks";
 import { PITCHAI_PLANS } from "@/lib/live/plans";
 import "@/styles/landing.css";
+import "@/styles/landing-motion.css";
+import "@/styles/landing-manifesto.css";
+import "@/styles/landing-stack.css";
+import "@/styles/landing-cta.css";
+import "@/styles/landing-features.css";
+import "@/styles/landing-how.css";
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -54,108 +52,6 @@ export const Route = createFileRoute("/")({
   component: Landing,
 });
 
-/**
- * Recursos em bento: as duas células grandes trazem demonstração viva, porque
- * chat e voz são o motivo da compra. As quatro menores são cards de ícone.
- */
-const FEATURES: Array<{
-  icon: typeof Shield;
-  title: string;
-  desc: string;
-  badge: string;
-  hi?: boolean;
-  size?: "wide" | "tall";
-  demo?: "chat" | "voice";
-}> = [
-  {
-    icon: MessageSquare,
-    title: "Responde o chat em menos de 2 segundos",
-    desc: "Frete, tamanho, prazo e garantia com base na ficha técnica que você cadastrou. Quando a pergunta sai do escopo, ela chama você em vez de arriscar.",
-    badge: "Atendimento",
-    size: "wide",
-    demo: "chat",
-  },
-  {
-    icon: Mic,
-    title: "Oito vozes neurais em português",
-    desc: "Pitch, saudação e chamada de oferta narrados em tempo real na transmissão.",
-    badge: "Voz",
-    size: "tall",
-    demo: "voice",
-  },
-  {
-    icon: Shield,
-    title: "Proteção da sua conta",
-    desc: "Monitora a live e encerra sozinha ao detectar risco de punição, antes que o TikTok derrube.",
-    badge: "Antiviolação",
-    hi: true,
-  },
-  {
-    icon: Pin,
-    title: "Auto-fixar produto",
-    desc: "Refixa a oferta ativa no intervalo que você definir, para ela nunca sumir do topo da tela.",
-    badge: "Conversão",
-  },
-  {
-    icon: Clock,
-    title: "Encerrar por tempo",
-    desc: "Agende o fim da live com precisão de segundos. Ideal para quem reveza apresentadores.",
-    badge: "Automação",
-  },
-  {
-    icon: Volume2,
-    title: "Alerta de venda",
-    desc: "Efeito sonoro a cada compra confirmada. Sobe a energia da live e cria prova social.",
-    badge: "Engajamento",
-  },
-];
-
-const PHONE_VIDEOS = Array.from(
-  { length: 10 },
-  (_, index) => `/videos/demo-${String(index + 1).padStart(2, "0")}.mp4`,
-);
-
-const METRICS = [
-  { value: "<2s", label: "Resposta no chat", sub: "Ninguém desiste da compra esperando" },
-  { value: "24/7", label: "Live sem pausa", sub: "A IA não cansa nem perde o ritmo" },
-  { value: "8", label: "Vozes neurais", sub: "Escolha o tom que combina com a loja" },
-  { value: "0", label: "Violações", sub: "Encerramento automático ao menor risco" },
-];
-
-const STEPS: Array<{
-  n: number;
-  title: string;
-  desc: string;
-  meta: string;
-  icon: typeof Timer;
-  state: StepPhoneState;
-}> = [
-  {
-    n: 1,
-    title: "Instale o app",
-    desc: "Baixe, entre com seu e-mail e cadastre os produtos da vitrine com preço, ficha técnica e prazo de entrega.",
-    meta: "Leva cerca de 3 minutos",
-    icon: Timer,
-    state: "setup",
-  },
-  {
-    n: 2,
-    title: "Abra sua live",
-    desc: "Comece a transmissão no TikTok Shop normalmente. A Pitch AI reconhece a live e assume o chat e a vitrine.",
-    meta: "2 cliques",
-    icon: MousePointerClick,
-    state: "live",
-  },
-  {
-    n: 3,
-    title: "Deixe a IA trabalhar",
-    desc: "Ela responde dúvidas, refixa o produto ativo, narra as ofertas e avisa você quando alguém compra.",
-    meta: "O resto da live",
-    icon: Coffee,
-    state: "selling",
-  },
-];
-
 /* a faixa de recursos virou texto correndo numa curva (TextLoop): sem ícones,
    os rótulos entram como uma frase única separada por ponto médio */
 const LOOP_ITEMS = [
@@ -166,12 +62,6 @@ const LOOP_ITEMS = [
   "Chat atendido 24/7",
   "Alerta de venda",
 ];
-
-/* roxo da marca (#8b5cf6) no formato [r, g, b] 0-1 que o shader do FlameWrap espera */
-const FLAME_COLOR: [number, number, number] = [0.545, 0.361, 0.965];
-
-/* paleta do shader do CTA final: roxo da marca desmaiando para o quase-preto */
-const CTA_COLORS = ["#6d28d9", "#8b5cf6", "#4c1d95", "#12081f"];
 
 const FAQ = [
   {
@@ -220,7 +110,7 @@ function useLoopScale() {
 /** corpo de letra desejado na tela, em px */
 const LOOP_TARGET_PX = 20;
 
-function FeatureLoop({ rev = false }: { rev?: boolean }) {
+function FeatureLoop() {
   const k = useLoopScale();
   const fontSize = LOOP_TARGET_PX * k;
   // as demais medidas acompanham o corpo de letra escolhido
@@ -232,7 +122,7 @@ function FeatureLoop({ rev = false }: { rev?: boolean }) {
         shape="wave"
         autoBand
         speed={70 * k}
-        direction={rev ? "reverse" : "forward"}
+        direction="forward"
         separator="✦"
         curviness={16 * r}
         fontSize={fontSize}
@@ -247,44 +137,6 @@ function FeatureLoop({ rev = false }: { rev?: boolean }) {
 }
 
 function Landing() {
-  const [phoneVideoIndex, setPhoneVideoIndex] = useState(0);
-  const [phoneVideoFailed, setPhoneVideoFailed] = useState(false);
-  const [reduceMotion, setReduceMotion] = useState(false);
-  const phoneVideoRef = useRef<HTMLVideoElement>(null);
-  const phoneVideoFailuresRef = useRef(0);
-
-  useEffect(() => {
-    const media = window.matchMedia("(prefers-reduced-motion: reduce)");
-    const syncMotionPreference = () => setReduceMotion(media.matches);
-    syncMotionPreference();
-    media.addEventListener("change", syncMotionPreference);
-    return () => media.removeEventListener("change", syncMotionPreference);
-  }, []);
-
-  useEffect(() => {
-    const video = phoneVideoRef.current;
-    if (!video || reduceMotion || phoneVideoFailed) return;
-    void video.play().catch(() => undefined);
-  }, [phoneVideoIndex, reduceMotion, phoneVideoFailed]);
-
-  /* `ended` e `error` são props do React no próprio <video>: como a key muda a
-     cada clipe, o elemento é remontado e um listener imperativo ficaria preso
-     ao elemento anterior — era o que travava a playlist no fim do 2º vídeo. */
-  const handlePhoneVideoEnded = () => {
-    phoneVideoFailuresRef.current = 0;
-    setPhoneVideoIndex((index) => (index + 1) % PHONE_VIDEOS.length);
-  };
-
-  const handlePhoneVideoError = () => {
-    phoneVideoFailuresRef.current += 1;
-    // um clipe faltando não pode derrubar a playlist inteira
-    if (phoneVideoFailuresRef.current >= PHONE_VIDEOS.length) {
-      setPhoneVideoFailed(true);
-      return;
-    }
-    setPhoneVideoIndex((index) => (index + 1) % PHONE_VIDEOS.length);
-  };
-
   useEffect(() => {
     const els = document.querySelectorAll(".landing .rv");
     const io = new IntersectionObserver(
@@ -318,262 +170,33 @@ function Landing() {
     return () => window.removeEventListener("scroll", onScroll);
   }, []);
 
-  useEffect(() => {
-    const box = document.querySelector<HTMLElement>(".mock .chat-a");
-    const el = document.querySelector<HTMLElement>(".mock .chat-a-text");
-    if (!box || !el) return;
-    const mq = window.matchMedia("(prefers-reduced-motion: reduce)");
-    if (mq.matches) return;
-    const full = "Sim! Envio expresso pra SP em até 24h.";
-    let alive = true;
-    const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
-    (async () => {
-      el.textContent = "";
-      box.classList.add("typing");
-      for (let i = 1; i <= full.length && alive; i++) {
-        el.textContent = full.slice(0, i);
-        await sleep(24 + Math.random() * 30);
-      }
-      if (alive) box.classList.remove("typing");
-    })();
-    return () => {
-      alive = false;
-      box.classList.remove("typing");
-    };
-  }, []);
-
-  useEffect(() => {
-    const num = document.querySelector<HTMLElement>(".mock .viewers");
-    if (!num) return;
-    const mq = window.matchMedia("(prefers-reduced-motion: reduce)");
-    if (mq.matches) return;
-    let n = 1284;
-    let alive = true;
-    let timer = 0;
-    const tick = () => {
-      if (!alive) return;
-      n += 1 + Math.floor(Math.random() * 3);
-      num.textContent = `${n.toLocaleString("pt-BR")} assistindo`;
-      num.classList.add("bump");
-      window.setTimeout(() => num.classList.remove("bump"), 300);
-      timer = window.setTimeout(tick, 2600 + Math.random() * 3400);
-    };
-    timer = window.setTimeout(tick, 3200);
-    return () => {
-      alive = false;
-      window.clearTimeout(timer);
-    };
-  }, []);
-
   return (
     <div className="landing has-frame">
+      <ForceDarkTheme />
+      {/* ferramenta de edição: só monta em dev ou com `?tweaks` na URL */}
+      <Tweaks />
+      <Preloader />
       <GridField />
       <SiteFrame />
       <div className="landing-progress" aria-hidden="true" />
       <LandingNav />
 
       {/* ============ HERO ============ */}
-      <header className="hero">
-        <div className="aurora aurora-a" aria-hidden="true" />
-        <div className="aurora aurora-b" aria-hidden="true" />
-        <div className="wrap hero-grid">
-          <div>
-            <div className="badge">
-              <b>Novo</b>
-              <span>Vozes neurais em português brasileiro</span>
-            </div>
+      <HeroMotion />
 
-            <h1>
-              <span className="title-line title-line-1">Sua live do TikTok Shop</span>
-              <span className="title-line title-line-2">
-                vendendo <em className="h1-serif">sozinha</em>.
-              </span>
-            </h1>
+      <LogoReveal />
 
-            <p className="lede">
-              A Pitch AI fica ao lado da sua transmissão: responde o chat na hora, refixa o produto
-              ativo antes que ele suma e narra as ofertas em voz alta enquanto você cuida da câmera.
-            </p>
-
-            <div className="hero-actions">
-              <Link to="/planos" className="btn btn-primary btn-lg btn-glow">
-                Ver planos e começar <ArrowRight style={{ width: 15, height: 15 }} />
-              </Link>
-              <Link to="/download" className="btn btn-outline btn-lg">
-                <Download style={{ width: 15, height: 15 }} /> Baixar o app
-              </Link>
-            </div>
-          </div>
-
-          {/* product mock */}
-          <div className="mock">
-            <div className="chip chip-a">
-              <span
-                className="chip-ic"
-                style={{ background: "var(--accent-bg)", color: "var(--accent-ink)" }}
-              >
-                <Pin />
-              </span>
-              <span>
-                <span className="chip-k">Vitrine</span>
-                <span className="chip-v">Produto refixado</span>
-              </span>
-            </div>
-            <div className="chip chip-b">
-              <span className="chip-ic" style={{ background: "#EAF7F0", color: "var(--ok)" }}>
-                <Zap />
-              </span>
-              <span>
-                <span className="chip-k">Chat</span>
-                <span className="chip-v">Resposta em 1,4s</span>
-              </span>
-            </div>
-
-            <div className="phone">
-              <div className="screen">
-                <div className="screen-top">
-                  <span className="live-pill">AO VIVO</span>
-                  <span className="viewers">1.284 assistindo</span>
-                </div>
-                <div className="stage">
-                  {!phoneVideoFailed && !reduceMotion ? (
-                    <video
-                      ref={phoneVideoRef}
-                      className="stage-video"
-                      key={PHONE_VIDEOS[phoneVideoIndex]}
-                      src={PHONE_VIDEOS[phoneVideoIndex]}
-                      poster="/logo-nav.png"
-                      autoPlay
-                      muted
-                      playsInline
-                      loop={false}
-                      preload="metadata"
-                      onEnded={handlePhoneVideoEnded}
-                      onError={handlePhoneVideoError}
-                      aria-label={`Demonstração ${phoneVideoIndex + 1} da live no TikTok Shop`}
-                    />
-                  ) : null}
-                  <div
-                    className={`stage-fallback${phoneVideoFailed || reduceMotion ? " is-visible" : ""}`}
-                    aria-hidden="true"
-                  >
-                    <img src="/logo-nav.png" alt="" />
-                    <span>
-                      {phoneVideoFailed ? "Demonstração disponível em breve" : "Pitch AI ao vivo"}
-                    </span>
-                  </div>
-                </div>
-                <div className="screen-bottom">
-                  <div className="chat">
-                    <div className="chat-q">
-                      <b>@gabriel_vendas</b> vocês entregam pra SP?
-                    </div>
-                    <div className="chat-a">
-                      <span className="ai-tag">IA</span>
-                      <span className="chat-a-text">Sim! Envio expresso pra SP em até 24h.</span>
-                      <span className="chat-caret" />
-                    </div>
-                  </div>
-                  <div className="pcard">
-                    <span className="pthumb">🛍️</span>
-                    <span className="pinfo">
-                      <span className="pname">Kit Promoção TikTok</span>
-                      <span className="pprice">R$ 29,90</span>
-                    </span>
-                    <span className="ppin">Fixado</span>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* stats */}
-        <div className="wrap stats">
-          <div className="stats-grid">
-            {METRICS.map((m) => (
-              <div className="stat rv" key={m.label}>
-                <div className="stat-n">{m.value}</div>
-                <div className="stat-l">{m.label}</div>
-                <div className="stat-d">{m.sub}</div>
-              </div>
-            ))}
-          </div>
-        </div>
-      </header>
+      <Manifesto />
 
       <FeatureLoop />
 
       {/* ============ COMO FUNCIONA ============ */}
-      <section id="como" className="bordered">
-        <div className="aurora sec-aurora aurora-c" aria-hidden="true" />
-        <div className="wrap">
-          <div className="sec-head rv">
-            <div className="eyebrow">Como funciona</div>
-            <h2>
-              Do download à primeira venda em{" "}
-              <span className="h1-serif nowrap" style={{ fontStyle: "italic" }}>
-                5 minutos.
-              </span>
-            </h2>
-            <p>
-              Sem integração, sem API, sem configurar servidor. A Pitch AI roda junto com a sua live
-              e você continua no controle o tempo todo.
-            </p>
-          </div>
-
-          <div className="steps rv">
-            {STEPS.map((s) => (
-              <div className="step" key={s.n} tabIndex={0}>
-                <div className="step-body">
-                  <div className="step-n">{s.n}</div>
-                  <h3>{s.title}</h3>
-                  <p>{s.desc}</p>
-                  <div className="step-meta">
-                    <s.icon /> {s.meta}
-                  </div>
-                </div>
-                <div className="step-stage">
-                  <StepPhone state={s.state} />
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
+      <HowSteps />
 
       {/* ============ RECURSOS ============ */}
-      <section id="recursos" className="bordered">
-        <div className="aurora sec-aurora aurora-d" aria-hidden="true" />
-        <div className="wrap">
-          <div className="sec-head rv">
-            <div className="eyebrow">Recursos</div>
-            <h2>Feito para as regras do TikTok Shop, não contra elas.</h2>
-            <p>
-              Cada função nasceu de um problema real de quem faz live: o chat que ninguém dá conta,
-              o produto que despina, a voz que cansa.
-            </p>
-          </div>
+      <FeaturesSection />
 
-          <div className="feat rv">
-            {FEATURES.map((f) => (
-              <article
-                className={`card${f.hi ? " hi" : ""}${f.size ? ` card-${f.size}` : ""}`}
-                key={f.title}
-              >
-                <div className="card-ic">
-                  <f.icon />
-                </div>
-                <div className="card-tag">{f.badge}</div>
-                <h3>{f.title}</h3>
-                <p>{f.desc}</p>
-                {f.demo === "chat" ? <ChatDemo /> : null}
-                {f.demo === "voice" ? <VoiceDemo /> : null}
-              </article>
-            ))}
-          </div>
-        </div>
-      </section>
+      <StackCards />
 
       {/* ============ PLANOS ============ */}
       <section id="planos" className="bordered">
@@ -659,34 +282,10 @@ function Landing() {
               );
 
               /* só o plano em destaque queima: a borda em chamas é o que separa
-                 ele dos outros dois na fileira */
+                 ele dos outros dois na fileira. Os números do shader moram no
+                 esquema de tweaks — ver components/live/PlanFlame */
               if (!p.highlight) return <div key={p.priceId}>{card}</div>;
-              return (
-                <FlameWrap
-                  key={p.priceId}
-                  className="plan-flame"
-                  /* o card precisa continuar sendo DOM: capturado para dentro
-                     do canvas ele sai do fluxo do grid, ganha barra de rolagem
-                     própria e o preço passa a tremer no shimmer do shader */
-                  capture={false}
-                  color={FLAME_COLOR}
-                  radius={16}
-                  height={150}
-                  spread={12}
-                  intensity={0.7}
-                  speed={0.3}
-                  scale={0.8}
-                  sparks={1.4}
-                  sparkSize={0.3}
-                  rim={2.2}
-                  melt={3}
-                  distortion={7}
-                  smoke={1}
-                  ember={1.6}
-                >
-                  {card}
-                </FlameWrap>
-              );
+              return <PlanFlame key={p.priceId}>{card}</PlanFlame>;
             })}
           </div>
         </div>
@@ -737,45 +336,14 @@ function Landing() {
         </div>
       </section>
 
-      <FeatureLoop rev />
+      {/* fecho de marca: wordmark colossal sobre o gradiente, vindo da
+          landing de referência. A segunda passagem da fita de recursos ficava
+          aqui e saiu: repetida logo antes do wordmark, ela empurrava o fecho
+          para baixo e roubava dele a entrada limpa */}
+      <NameSection />
 
       {/* ============ CTA FINAL ============ */}
-      <section className="bordered">
-        <div className="wrap">
-          <div className="cta-band rv">
-            {/* o shader substitui o glow estático: o bloco final vira uma peça
-                escura, com o gradiente vivo por trás do texto */}
-            <Velaris
-              className="cta-shader"
-              bg="#12081f"
-              colors={CTA_COLORS}
-              speed={1.2}
-              grain={0.25}
-              height="auto"
-            >
-              <div className="cta-inner">
-                <h2>
-                  A próxima live pode ser a primeira
-                  <br />
-                  em que você só apresenta.
-                </h2>
-                <p>
-                  Instale, cadastre seus produtos e deixe a Pitch AI cuidar do chat, da vitrine e da
-                  narração.
-                </p>
-                <div className="cta-actions">
-                  <Link to="/app" className="btn btn-primary btn-lg btn-glow">
-                    Escolher meu plano
-                  </Link>
-                  <Link to="/planos" className="btn btn-outline btn-lg">
-                    Ver planos
-                  </Link>
-                </div>
-              </div>
-            </Velaris>
-          </div>
-        </div>
-      </section>
+      <CtaFinal />
 
       {/* ============ FOOTER ============ */}
       <footer className="foot-dark">
