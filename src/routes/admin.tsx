@@ -53,7 +53,7 @@ function AdminPage() {
           headers: { Authorization: `Bearer ${token}` },
           signal: controller.signal,
         });
-        const json = await res.json().catch(() => ({} as { ok?: boolean; error?: string }));
+        const json = await res.json().catch(() => ({}) as { ok?: boolean; error?: string });
 
         if (json.ok) return { status: "ok", email, errorMsg: "" };
 
