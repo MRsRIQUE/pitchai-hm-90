@@ -24,6 +24,7 @@ import { Route as TermosRouteImport } from './routes/termos'
 import { Route as CheckoutReturnRouteImport } from './routes/checkout.return'
 import { Route as ApiAccountEnsureRouteImport } from './routes/api/account/ensure'
 import { Route as ApiAccountSyncTokenRouteImport } from './routes/api/account/sync-token'
+import { Route as ApiAdminCheckRouteImport } from './routes/api/admin/check'
 import { Route as ApiAdminCourtesyRouteImport } from './routes/api/admin/courtesy'
 import { Route as ApiCheckoutStartRouteImport } from './routes/api/checkout/start'
 import { Route as ApiScriptGenerateRouteImport } from './routes/api/script/generate'
@@ -112,6 +113,11 @@ const ApiAccountEnsureRoute = ApiAccountEnsureRouteImport.update({
 const ApiAccountSyncTokenRoute = ApiAccountSyncTokenRouteImport.update({
   id: '/api/account/sync-token',
   path: '/api/account/sync-token',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiAdminCheckRoute = ApiAdminCheckRouteImport.update({
+  id: '/api/admin/check',
+  path: '/api/admin/check',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ApiAdminCourtesyRoute = ApiAdminCourtesyRouteImport.update({
@@ -203,6 +209,7 @@ export interface FileRoutesByFullPath {
   '/checkout/return': typeof CheckoutReturnRoute
   '/api/account/ensure': typeof ApiAccountEnsureRoute
   '/api/account/sync-token': typeof ApiAccountSyncTokenRoute
+  '/api/admin/check': typeof ApiAdminCheckRoute
   '/api/admin/courtesy': typeof ApiAdminCourtesyRoute
   '/api/checkout/start': typeof ApiCheckoutStartRoute
   '/api/script/generate': typeof ApiScriptGenerateRoute
@@ -234,6 +241,7 @@ export interface FileRoutesByTo {
   '/checkout/return': typeof CheckoutReturnRoute
   '/api/account/ensure': typeof ApiAccountEnsureRoute
   '/api/account/sync-token': typeof ApiAccountSyncTokenRoute
+  '/api/admin/check': typeof ApiAdminCheckRoute
   '/api/admin/courtesy': typeof ApiAdminCourtesyRoute
   '/api/checkout/start': typeof ApiCheckoutStartRoute
   '/api/script/generate': typeof ApiScriptGenerateRoute
@@ -266,6 +274,7 @@ export interface FileRoutesById {
   '/checkout/return': typeof CheckoutReturnRoute
   '/api/account/ensure': typeof ApiAccountEnsureRoute
   '/api/account/sync-token': typeof ApiAccountSyncTokenRoute
+  '/api/admin/check': typeof ApiAdminCheckRoute
   '/api/admin/courtesy': typeof ApiAdminCourtesyRoute
   '/api/checkout/start': typeof ApiCheckoutStartRoute
   '/api/script/generate': typeof ApiScriptGenerateRoute
@@ -299,6 +308,7 @@ export interface FileRouteTypes {
     | '/checkout/return'
     | '/api/account/ensure'
     | '/api/account/sync-token'
+    | '/api/admin/check'
     | '/api/admin/courtesy'
     | '/api/checkout/start'
     | '/api/script/generate'
@@ -330,6 +340,7 @@ export interface FileRouteTypes {
     | '/checkout/return'
     | '/api/account/ensure'
     | '/api/account/sync-token'
+    | '/api/admin/check'
     | '/api/admin/courtesy'
     | '/api/checkout/start'
     | '/api/script/generate'
@@ -361,6 +372,7 @@ export interface FileRouteTypes {
     | '/checkout/return'
     | '/api/account/ensure'
     | '/api/account/sync-token'
+    | '/api/admin/check'
     | '/api/admin/courtesy'
     | '/api/checkout/start'
     | '/api/script/generate'
@@ -393,6 +405,7 @@ export interface RootRouteChildren {
   CheckoutReturnRoute: typeof CheckoutReturnRoute
   ApiAccountEnsureRoute: typeof ApiAccountEnsureRoute
   ApiAccountSyncTokenRoute: typeof ApiAccountSyncTokenRoute
+  ApiAdminCheckRoute: typeof ApiAdminCheckRoute
   ApiAdminCourtesyRoute: typeof ApiAdminCourtesyRoute
   ApiCheckoutStartRoute: typeof ApiCheckoutStartRoute
   ApiScriptGenerateRoute: typeof ApiScriptGenerateRoute
@@ -516,6 +529,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiAccountSyncTokenRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/admin/check': {
+      id: '/api/admin/check'
+      path: '/api/admin/check'
+      fullPath: '/api/admin/check'
+      preLoaderRoute: typeof ApiAdminCheckRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/admin/courtesy': {
       id: '/api/admin/courtesy'
       path: '/api/admin/courtesy'
@@ -633,6 +653,7 @@ const rootRouteChildren: RootRouteChildren = {
   CheckoutReturnRoute: CheckoutReturnRoute,
   ApiAccountEnsureRoute: ApiAccountEnsureRoute,
   ApiAccountSyncTokenRoute: ApiAccountSyncTokenRoute,
+  ApiAdminCheckRoute: ApiAdminCheckRoute,
   ApiAdminCourtesyRoute: ApiAdminCourtesyRoute,
   ApiCheckoutStartRoute: ApiCheckoutStartRoute,
   ApiScriptGenerateRoute: ApiScriptGenerateRoute,
