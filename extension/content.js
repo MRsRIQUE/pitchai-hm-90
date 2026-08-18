@@ -858,10 +858,15 @@
     protecaoGeral: false,
     violacao: true,
     autoMod: true,
-    autoFixar: { enabled: false, query: "", minSec: 20, maxSec: 60, ids: [], names: [] },
-    encerrarTempo: { enabled: false, minutes: 120 },
+    // Interruptor mestre da IA (botão 👁️ da barra): liga/desliga a leitura do
+    // chat sem mexer nos canais (voz/texto) escolhidos no painel.
+    iaLigada: true,
     respostasIA: true,
     responderNoChat: false,
+    // Intervalo mínimo (segundos) entre respostas da IA no chat — anti-spam.
+    respostasIntervaloSec: 15,
+    autoFixar: { enabled: false, query: "", minSec: 20, maxSec: 60, ids: [], names: [] },
+    encerrarTempo: { enabled: false, minutes: 120 },
     notificacoesVenda: true,
     voz: {
       id: "nova",
@@ -919,7 +924,14 @@
   }
 
   function replyAutomationEnabled(cfg) {
-    return !!(cfg?.respostasIA || cfg?.responderNoChat);
+    // O botão 👁️ é o interruptor mestre; voz e texto são canais independentes.
+    return cfg?.iaLigada !== false && !!(cfg?.respostasIA || cfg?.responderNoChat);
+  }
+
+  /** Intervalo mínimo entre respostas no chat, configurável no painel (anti-spam). */
+  function replyIntervalMs(cfg) {
+    const sec = Math.max(4, Math.min(300, Number(cfg?.respostasIntervaloSec) || 15));
+    return sec * 1000;
   }
 
   async function loadConfig() {
@@ -2191,16 +2203,21 @@
     return { author, text };
   }
 
-  function buildSystemPrompt(cfg) {
+  function buildSystemPrompt(cfg, featured) {
     const ctx = cfg.aiContext || {};
     const produtos = cfg.produtos || [];
-    const ativo = produtos.find((p) => p.active);
-    const catalog = produtos
-      .map(
-        (p, i) =>
-          `${i + 1}. ${p.name}${p.price ? " — " + p.price : ""}${p.active ? " [ATIVO]" : ""}${p.description ? " · " + p.description : ""}`,
-      )
-      .join("\n");
+    // O destaque vem do produto FIXADO na vitrine quando existe; senão o ativo.
+    const destaque = featured || produtos.find((p) => p.active);
+    // Com produto em destaque a IA vende SÓ ele — catálogo completo só entra
+    // quando não sabemos o que está fixado.
+    const catalog = destaque
+      ? `${destaque.name}${destaque.price ? " — " + destaque.price : ""}${destaque.description ? " · " + destaque.description : ""}`
+      : produtos
+          .map(
+            (p, i) =>
+              `${i + 1}. ${p.name}${p.price ? " — " + p.price : ""}${p.active ? " [ATIVO]" : ""}${p.description ? " · " + p.description : ""}`,
+          )
+          .join("\n");
     return [
       "Você é a IA vendedora da live no TikTok Shop.",
       ctx.brandName && `Marca: ${ctx.brandName}.`,
@@ -2210,7 +2227,9 @@
       ctx.extraContext && `Contexto: ${ctx.extraContext}`,
       `Regras: ${ctx.rules || "Nunca invente preços ou promoções."}`,
       catalog ? `Catálogo:\n${catalog}` : "",
-      ativo ? `Produto ATIVO: "${ativo.name}". Priorize quando fizer sentido.` : "",
+      destaque
+        ? `Produto FIXADO em destaque: "${destaque.name}". Fale APENAS deste produto — não divulgue outros.`
+        : "",
       "Responda em 1 frase curta, natural. Nunca escreva emojis nem asteriscos.",
     ]
       .filter(Boolean)
@@ -2633,7 +2652,6 @@
     sentReplies: new Map(),
     lastChatSendAt: 0,
   };
-  const MIN_INTERVAL_MS = 4000;
   const CHAT_SEND_INTERVAL_MS = 6000;
   const PITCH_IDLE_MS = 8000;
   const NO_MSG_WARN_MS = 60000;
@@ -2774,7 +2792,10 @@
 
   async function getActivePitchLines(cfg, signal) {
     const settings = pitchBankSettings(cfg);
-    const product = (cfg.produtos || []).find((p) => p.active) || cfg.produtos?.[0];
+    // O pitch é SEMPRE do produto fixado no destaque; o "ativo" do painel é só
+    // o fallback quando nada está fixado (ex.: começo da live).
+    const pinned = await getPinnedProduct(cfg);
+    const product = pinned || (cfg.produtos || []).find((p) => p.active) || cfg.produtos?.[0];
     const fallback = getFallbackPitchLines(cfg);
     if (!product || !settings.enabled) return fallback;
 
@@ -2797,7 +2818,7 @@
             price: product.price,
             description: product.description,
           },
-          systemPrompt: buildSystemPrompt(cfg),
+          systemPrompt: buildSystemPrompt(cfg, product),
         }),
         signal,
       });
@@ -3026,12 +3047,22 @@
   function isRecentlySentReply(value) {
     const normalized = normalizedReplyText(value);
     if (!normalized) return false;
-    const sentAt = chatState.sentReplies.get(normalized) || 0;
-    if (!sentAt || Date.now() - sentAt > SENT_REPLY_TTL_MS) {
-      if (sentAt) chatState.sentReplies.delete(normalized);
-      return false;
+    const now = Date.now();
+    for (const [sent, at] of chatState.sentReplies) {
+      if (now - at > SENT_REPLY_TTL_MS) {
+        chatState.sentReplies.delete(sent);
+        continue;
+      }
+      if (sent === normalized) return true;
+      // Eco truncado: o feed pode exibir a resposta cortada ou com o nome da
+      // conta colado na frente — compara pelos prefixos para não responder a
+      // si mesma em loop.
+      const minLen = Math.min(sent.length, normalized.length);
+      if (minLen >= 30 && (sent.startsWith(normalized) || normalized.startsWith(sent))) {
+        return true;
+      }
     }
-    return true;
+    return false;
   }
 
   let chatSendChain = Promise.resolve();
@@ -3053,10 +3084,16 @@
   async function sendChatReplyUnlocked(reply) {
     let editor = await mapNode("chatReply", true);
     if (!editor || !DM()?.util?.isVisible?.(editor)) return false;
-    const value = String(reply || "")
+    // Limite de 100 chars do TikTok: corta na última palavra completa para a
+    // resposta nunca sair no meio de um termo ("...colocando no carri").
+    let value = String(reply || "")
       .replace(/\s+/g, " ")
-      .trim()
-      .slice(0, 100);
+      .trim();
+    if (value.length > 100) {
+      const cut = value.slice(0, 100);
+      const lastSpace = cut.lastIndexOf(" ");
+      value = ((lastSpace >= 50 ? cut.slice(0, lastSpace) : cut).trim() + "…").slice(0, 100);
+    }
     if (!value) return false;
     // Nunca apaga uma mensagem que o apresentador esteja digitando manualmente.
     if (chatEditorValue(editor).trim()) return false;
@@ -3220,10 +3257,12 @@
         }
         sessionEvent({ kind: "cache_hit" });
         chatState.busy = false;
-        setTimeout(processQueue, MIN_INTERVAL_MS);
+        setTimeout(processQueue, replyIntervalMs(cfg));
         return;
       }
-      const systemPrompt = buildSystemPrompt(cfg);
+      // O prompt foca no produto fixado na vitrine — a IA de texto só vende ele.
+      const pinned = await getPinnedProduct(cfg);
+      const systemPrompt = buildSystemPrompt(cfg, pinned);
       const authHeaders = await signRequest(cfg.syncToken, "chat_reply");
       const r = await fetch(`${API_BASE}/api/public/chat/reply`, {
         method: "POST",
@@ -3337,8 +3376,9 @@
     }
 
     chatState.busy = false;
-    if (Date.now() - chatState.lastReplyAt < MIN_INTERVAL_MS) {
-      setTimeout(processQueue, MIN_INTERVAL_MS);
+    const intervalMs = replyIntervalMs(cfg);
+    if (Date.now() - chatState.lastReplyAt < intervalMs) {
+      setTimeout(processQueue, intervalMs);
     } else {
       setTimeout(processQueue, 200);
     }
@@ -3348,6 +3388,12 @@
     // A mensagem enviada pela própria extensão reaparece no feed. Não a trate
     // como uma nova pergunta, evitando um ciclo de respostas automáticas.
     if (isRecentlySentReply(msg.text)) return;
+    // Mensagens da PRÓPRIA conta (host) também nunca geram resposta — o eco no
+    // chat sai com o apelido do apresentador, não só com o texto.
+    if (msg.author) {
+      refreshAccountNames();
+      if (accountNames.has(normKey(msg.author))) return;
+    }
     const key = `${msg.author}|${msg.text}`.toLowerCase();
     const now = Date.now();
     const last = chatState.seen.get(key) || 0;
@@ -4411,6 +4457,31 @@
     // Empate de pontuação = ambiguidade: melhor não clicar do que fixar errado.
     if (tie) return null;
     return bestScore >= Math.max(1, Math.ceil(words.length / 2)) ? best : null;
+  }
+
+  /**
+   * Produto atualmente FIXADO no destaque da vitrine — é ele que a IA de voz
+   * e a de texto devem apresentar. Retorna a entrada rica do catálogo quando
+   * existe, senão o card parseado; null se nada estiver fixado.
+   */
+  async function getPinnedProduct(cfg) {
+    try {
+      const cards = await productCards();
+      const pinned = cards.find((card) => isPinnedCard(card));
+      if (!pinned) return null;
+      const parsed = parseProductCard(pinned);
+      if (!parsed) return null;
+      const produtos = cfg?.produtos || [];
+      const byPid = parsed.pid
+        ? produtos.find((p) => String(p.pid || "") === String(parsed.pid))
+        : null;
+      if (byPid) return byPid;
+      const key = normKey(parsed.name || "");
+      const byName = key ? produtos.find((p) => normKey(p?.name || "") === key) : null;
+      return byName || parsed;
+    } catch {
+      return null;
+    }
   }
 
   async function pinProduct(alvo) {
@@ -5955,16 +6026,12 @@
     listenBtn.addEventListener("click", async () => {
       const on = !listenBtn.classList.contains("primary");
       applyListenUi(on); // feedback imediato
-      // O botão é o interruptor mestre da IA: liga/desliga a leitura do chat.
-      // Ao LIGAR não força a voz — se o vendedor deixou só "responder no chat",
-      // mantém texto puro; sem nenhum canal ativo, assume a voz (padrão).
+      // O botão é o interruptor mestre da IA: liga/desliga a leitura do chat
+      // SEM mexer nos canais. Voz e texto continuam sendo escolhidos no painel.
+      // Se nada estiver ativo ao ligar, assume o canal de TEXTO (nunca força voz).
       await updateConfig((fresh) => {
-        if (on) {
-          if (!fresh.respostasIA && !fresh.responderNoChat) fresh.respostasIA = true;
-        } else {
-          fresh.respostasIA = false;
-          fresh.responderNoChat = false;
-        }
+        fresh.iaLigada = on;
+        if (on && !fresh.respostasIA && !fresh.responderNoChat) fresh.responderNoChat = true;
         return fresh;
       }).catch(() => null);
       if (on) {

@@ -174,8 +174,10 @@ export const PitchBankConfigSchema = z.object({
 export const ConfigSchema = z.object({
   // Configurações principais
   syncToken: z.string().optional(),
+  iaLigada: z.boolean().default(true),
   respostasIA: z.boolean().default(true),
   responderNoChat: z.boolean().default(false),
+  respostasIntervaloSec: z.number().min(4).max(300).default(15),
   pitchBank: PitchBankConfigSchema.default({}),
   revisarAntesDeEnviar: z.boolean().default(false),
   protecaoGeral: z.boolean().default(false),
@@ -213,8 +215,10 @@ export type Config = z.infer<typeof ConfigSchema>;
 /** Configuração padrão */
 export const DEFAULT_CONFIG: Config = {
   syncToken: "",
+  iaLigada: true,
   respostasIA: true,
   responderNoChat: false,
+  respostasIntervaloSec: 15,
   pitchBank: {
     enabled: true,
     variants: 12,

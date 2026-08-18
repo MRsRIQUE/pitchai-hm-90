@@ -24,11 +24,17 @@ describe("painel distribuído", () => {
     expect(panelSource).toMatch(/responderNoChat:\s*false/);
   });
 
-  it("mantém voz e chat como canais independentes", () => {
-    expect(contentSource).toMatch(/return !!\(cfg\?\.respostasIA \|\| cfg\?\.responderNoChat\)/);
+  it("mantém voz e chat como canais independentes atrás do mestre 👁️", () => {
+    expect(contentSource).toMatch(
+      /cfg\?\.iaLigada !== false && !!\(cfg\?\.respostasIA \|\| cfg\?\.responderNoChat\)/,
+    );
     expect(contentSource).toContain("if (cfg.responderNoChat) {");
     expect(contentSource).toContain("if (cfg.respostasIA) {");
     expect(contentSource).toContain("await deliverReply(item, reply, cfg)");
+    // o olho liga/desliga só o mestre; nunca força a voz
+    expect(contentSource).toContain("fresh.iaLigada = on;");
+    expect(contentSource).toContain("fresh.responderNoChat = true;");
+    expect(contentSource).not.toContain("fresh.respostasIA = true;");
   });
 
   it("protege o chat contra spam, auto-loop e sobrescrita de rascunho", () => {
@@ -42,6 +48,17 @@ describe("painel distribuído", () => {
     expect(contentSource).toContain("let chatSendChain = Promise.resolve()");
     expect(contentSource).toContain("if (!current.responderNoChat || extSecurity.isLocked)");
     expect(contentSource).not.toContain("chatState.sentReplies.delete(normalizedReplyText(value))");
+    // intervalo anti-spam configurável no painel
+    expect(contentSource).toContain("replyIntervalMs(cfg)");
+    expect(contentSource).toContain("respostasIntervaloSec");
+    expect(panelHtml).toContain('data-key="respostasIntervaloSec"');
+    // truncamento nunca corta palavra no meio
+    expect(contentSource).toContain('cut.lastIndexOf(" ")');
+    // nunca responde à própria conta
+    expect(contentSource).toContain("accountNames.has(normKey(msg.author))");
+    // pitch foca o produto fixado
+    expect(contentSource).toContain("getPinnedProduct(cfg)");
+    expect(contentSource).toContain("Produto FIXADO em destaque");
   });
 
   it("evita corrida e seleção aproximada no autofixar", () => {

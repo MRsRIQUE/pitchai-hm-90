@@ -173,8 +173,10 @@
     ["sage", "Sage · Neutra tranquila"],
   ];
   const DEFAULTS = {
+    iaLigada: true,
     respostasIA: true,
     responderNoChat: false,
+    respostasIntervaloSec: 15,
     revisarAntesDeEnviar: false,
     pitchBank: {
       enabled: true,
