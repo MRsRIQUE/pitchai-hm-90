@@ -1,6 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { z } from "zod";
 import { corsHeaders } from "@/lib/live/cors.server";
+import { FirebaseServerCredentialsError } from "@/lib/firebase.server";
 import { getSyncTokenStatus } from "@/lib/live/api-auth.server";
 import { throttle } from "@/lib/live/rate-limit.server";
 
@@ -50,8 +51,25 @@ export const Route = createFileRoute("/api/public/live/verify")({
           return j(429, { ok: false, error: "rate_limited", retryAfter: gate.retryAfter });
         }
 
-        const status = await getSyncTokenStatus(token);
-        return j(200, status);
+        try {
+          const status = await getSyncTokenStatus(token);
+          return j(200, status);
+        } catch (error) {
+          // Configuração de servidor quebrada não pode responder 200 com
+          // "Sem plano": isso mente para quem tem acesso e some do radar.
+          if (error instanceof FirebaseServerCredentialsError) {
+            console.error("[live/verify] credenciais de servidor ausentes:", error.message);
+            return j(503, {
+              ok: false,
+              valid: false,
+              locked: true,
+              reason: "server_misconfigured",
+              message:
+                "Não foi possível verificar seu acesso agora. Isso é uma falha nossa, não do seu plano.",
+            });
+          }
+          throw error;
+        }
       },
     },
   },

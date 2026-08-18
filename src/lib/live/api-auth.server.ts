@@ -1,5 +1,6 @@
 import crypto from "node:crypto";
 import {
+  FirebaseServerCredentialsError,
   fsCreateIfAbsent,
   fsGet,
   getAiTokenUsage,
@@ -10,7 +11,7 @@ import {
   isAdmin,
 } from "@/lib/firebase.server";
 import { verifyFirebaseIdToken } from "@/lib/firebase.server";
-import { COMPED_LABEL, PRICE_TO_PLAN, planDisplayName, type PlanTier } from "@/lib/live/plans";
+import { PRICE_TO_PLAN, planDisplayName, type PlanTier } from "@/lib/live/plans";
 import { resolveUserAccess } from "@/lib/live/access.server";
 import {
   getUpgradeOffer,
@@ -243,10 +244,31 @@ async function resolveByUserToken(token: string): Promise<string | null> {
 }
 
 async function authorizeUser(userId: string): Promise<GuardResult> {
-  const [access, adminUsage] = await Promise.all([
-    resolveUserAccess(userId, { mode: "server" }),
-    fsGet(`ai_usage_stats/${userId}`, { mode: "server" }).catch(() => null),
-  ]);
+  let access: Awaited<ReturnType<typeof resolveUserAccess>>;
+  let adminUsage: Awaited<ReturnType<typeof fsGet>>;
+  try {
+    [access, adminUsage] = await Promise.all([
+      resolveUserAccess(userId, { mode: "server" }),
+      fsGet(`ai_usage_stats/${userId}`, { mode: "server" }).catch(() => null),
+    ]);
+  } catch (error) {
+    // Credencial de servidor ausente e falha NOSSA, e precisa sair pelo mesmo
+    // canal de erro das rotas (JSON + CORS). Deixar o throw escapar viraria 500
+    // sem CORS, que na extensao aparece como erro de rede em vez de mensagem.
+    // Mesmo assim NAO devolvemos "sem plano": 503 diz que o acesso nao pode ser
+    // verificado, e nao que a pessoa nao tem direito a ele.
+    if (error instanceof FirebaseServerCredentialsError) {
+      console.error("[api-auth] credenciais de servidor ausentes:", error.message);
+      return {
+        ok: false,
+        status: 503,
+        message:
+          "Não foi possível verificar seu acesso agora. Isso é uma falha nossa, não do seu plano.",
+        userId,
+      };
+    }
+    throw error;
+  }
   if (adminUsage?.data?.status === "blocked") {
     return {
       ok: false,
@@ -273,7 +295,8 @@ async function authorizeUser(userId: string): Promise<GuardResult> {
     ok: true,
     userId,
     plan,
-    planName: access.source === "comped" ? COMPED_LABEL : planDisplayName(plan),
+    // Cortesia exibe o nome do plano concedido — é ele que define a franquia.
+    planName: planDisplayName(plan),
     source: access.source,
     tier: PRICE_TO_PLAN[plan] || "pro",
   };
@@ -471,7 +494,7 @@ export async function getSyncTokenStatus(token: string) {
 
   const userId = access.userId;
   const plan = access.plan || "free";
-  const planName = access.source === "comped" ? COMPED_LABEL : planDisplayName(plan);
+  const planName = planDisplayName(plan);
 
   const { chat: chatLimit, tts: ttsLimit, allowAudio } = planLimits(plan);
   const day = new Date().toISOString().split("T")[0];

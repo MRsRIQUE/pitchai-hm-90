@@ -148,10 +148,23 @@ let serverTokenCache: { token: string; expiresAt: number } | undefined;
 // Promise em-flight para evitar duas trocas de token concorrentes.
 let inflightServerToken: Promise<string> | null = null;
 
+/**
+ * Falha de CONFIGURAÇÃO do servidor, não de dados. Precisa de um tipo próprio
+ * porque quem lê acesso (`resolveUserAccess`) engolia qualquer erro e devolvia
+ * "sem acesso" — o que fazia uma variável de ambiente ausente ser exibida ao
+ * cliente como "Sem plano", inclusive para quem tinha cortesia ativa.
+ */
+export class FirebaseServerCredentialsError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "FirebaseServerCredentialsError";
+  }
+}
+
 async function acquireServerToken(): Promise<string> {
   const account = loadServiceAccount();
   if (!account) {
-    throw new Error(
+    throw new FirebaseServerCredentialsError(
       "Credenciais de servidor Firebase nao configuradas (FIREBASE_SERVICE_ACCOUNT ou FIREBASE_CLIENT_EMAIL/FIREBASE_PRIVATE_KEY)",
     );
   }

@@ -1,4 +1,9 @@
-import { fsGet, getSubscription, type FirestoreAuthMode } from "@/lib/firebase.server";
+import {
+  FirebaseServerCredentialsError,
+  fsGet,
+  getSubscription,
+  type FirestoreAuthMode,
+} from "@/lib/firebase.server";
 import {
   hasActiveCompedAccess,
   hasPaidAccess,
@@ -34,9 +39,18 @@ export async function resolveUserAccess(
   userId: string,
   options: AccessFirestoreOptions = {},
 ): Promise<EffectiveAccess> {
+  // Um erro aqui NÃO é "usuário sem acesso". Engolir a falha em silêncio fazia
+  // credencial de servidor ausente virar "Sem plano" e cota 0/0 na tela de quem
+  // tinha cortesia ativa — indistinguível, para quem olha, de não ter plano.
+  const onReadFailure = (origem: string) => (error: unknown) => {
+    if (error instanceof FirebaseServerCredentialsError) throw error;
+    console.error(`[access] falha ao ler ${origem} de ${userId}:`, error);
+    return null;
+  };
+
   const [subscription, comped] = await Promise.all([
-    getSubscription(userId, options).catch(() => null),
-    getCompedAccess(userId, options).catch(() => null),
+    getSubscription(userId, options).catch(onReadFailure("subscription")),
+    getCompedAccess(userId, options).catch(onReadFailure("comped_access")),
   ]);
 
   // 1) Cortesia atual: doc dedicado em comped_access/{uid}.

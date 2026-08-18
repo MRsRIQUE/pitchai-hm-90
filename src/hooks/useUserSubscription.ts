@@ -3,7 +3,6 @@ import { onAuthStateChanged } from "firebase/auth";
 import { doc, getDoc, onSnapshot } from "firebase/firestore";
 import { getFirebaseAuth, getFirebaseDb } from "@/lib/firebase";
 import {
-  COMPED_LABEL,
   compedGrantedUntil as compedUntil,
   hasActiveCompedAccess,
   hasPaidAccess,
@@ -33,7 +32,11 @@ export interface UseUserSubscriptionResult {
   planTier: PlanTier;
   /** Origem do acesso: assinatura paga, cortesia ou nenhum */
   source: "paid" | "comped" | "none";
-  /** Nome legível do plano/categoria atual (ex.: "Cortesia", "Trimestral", "Sem plano") */
+  /**
+   * Nome legível do plano concedido (ex.: "Trimestral", "Anual", "Sem plano").
+   * Na cortesia é o nome do plano, não "Cortesia" — use `isComped`/`source` para
+   * saber a origem do acesso.
+   */
   planName: string;
   /** Data de validade da cortesia (camelCase do comped_access ou snake_case do legado) */
   compedGrantedUntil: string | null;
@@ -207,7 +210,11 @@ export function useUserSubscription(): UseUserSubscriptionResult {
     : compedActive
       ? "comped"
       : "none";
-  const planName = source === "comped" ? COMPED_LABEL : planDisplayName(rawPlan);
+  // A cortesia mostra o NOME DO PLANO concedido (Trimestral/Anual), não o rótulo
+  // "Cortesia": é o plano que define a franquia de tokens e as cotas do usuário,
+  // então exibir "Cortesia" escondia justamente a informação que importa.
+  // Quem precisa saber a origem do acesso usa `source`/`isComped`.
+  const planName = planDisplayName(rawPlan);
   const compedGrantedUntil = isComped
     ? (compedUntil(compedAccess) ?? subscription?.granted_until ?? null)
     : null;
