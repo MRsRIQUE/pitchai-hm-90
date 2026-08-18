@@ -6,9 +6,19 @@
  * sincronização da vitrine) e a navegação. Cada seção da sidebar mora em
  * `./sections` e recebe apenas o que não consegue ler sozinha da store.
  */
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
-import { Check, Download, HelpCircle, Home, Loader2, Sparkles, Wallet, Zap } from "lucide-react";
+import {
+  Check,
+  Download,
+  HelpCircle,
+  Home,
+  Loader2,
+  ShieldCheck,
+  Sparkles,
+  Wallet,
+  Zap,
+} from "lucide-react";
 
 import { AppShell, type AppSection, type AppShortcut } from "@/components/app/AppShell";
 import { loadConfig, saveConfig } from "@/lib/live/config";
@@ -19,6 +29,7 @@ import { APP_VERSION } from "@/lib/live/version";
 import { QuickStartModal } from "../QuickStartModal";
 import { SetupWizard } from "../SetupWizard";
 import { useUserSubscription } from "@/hooks/useUserSubscription";
+import { useIsAdmin } from "@/hooks/useIsAdmin";
 import { PaymentGuardOverlay } from "../PaymentGuardModal";
 import { LogoutButton } from "../LogoutButton";
 import { useLiveStore } from "@/stores/useLiveStore";
@@ -100,6 +111,18 @@ export function LiveDashboard() {
 }
 
 function LiveDashboardContent() {
+  // Atalho para o painel administrativo, só para quem é admin. Não é controle
+  // de acesso — o `/admin` é barrado no servidor; aqui é só não mostrar a porta
+  // para quem não pode abri-la.
+  const isAdmin = useIsAdmin();
+  const shortcuts = useMemo<AppShortcut[]>(
+    () =>
+      isAdmin
+        ? [{ to: "/admin", label: "Painel admin", icon: ShieldCheck }, ...SHORTCUTS]
+        : SHORTCUTS,
+    [isAdmin],
+  );
+
   const { config, loadingState, updateConfigRaw, setLoading, setError } = useLiveStore(
     useShallow((state) => ({
       config: state.config,
@@ -312,7 +335,7 @@ function LiveDashboardContent() {
         sections={sections}
         active={active}
         onSelect={(id) => setActive(id as SectionId)}
-        shortcuts={SHORTCUTS}
+        shortcuts={shortcuts}
         actions={
           <>
             {/* Não existe botão de salvar: a store grava a cada alteração. O
