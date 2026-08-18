@@ -6,6 +6,15 @@ import {
   isAdmin,
   verifyFirebaseIdToken,
 } from "@/lib/firebase.server";
+import {
+  COURTESY_DEFAULT_PLAN,
+  COURTESY_MAX_DAYS,
+  COURTESY_MIN_DAYS,
+  COURTESY_NOTE_MAX,
+  COURTESY_NOTE_MIN,
+  COURTESY_PLAN_IDS,
+  isCourtesyPlanId,
+} from "@/lib/live/plans";
 
 type AdminContext = { uid: string; email: string | null; token: string };
 
@@ -19,12 +28,13 @@ async function requireAdmin(request: Request): Promise<AdminContext> {
   return { uid: user.uid, email: user.email, token };
 }
 
-function apiError(error: unknown) {
+async function apiError(error: unknown) {
   if (error instanceof Response) {
-    return Response.json(
-      { error: error.statusText || "Falha na solicitação" },
-      { status: error.status },
-    );
+    // Mesmo motivo de `api/admin/check`: o texto real está no corpo, não em
+    // `statusText` — que fica vazio quando a Response é criada só com `status`.
+    const detail =
+      (await error.text().catch(() => "")) || error.statusText || "Falha na solicitação";
+    return Response.json({ error: detail }, { status: error.status });
   }
   const detail = error instanceof Error ? error.message : "Erro desconhecido";
   console.error("[admin/courtesy]", detail);
@@ -46,7 +56,7 @@ export const Route = createFileRoute("/api/admin/courtesy")({
             .map((doc) => ({
               userId: doc.id,
               email: String(doc.data.email || "(conta removida)"),
-              plan: String(doc.data.plan || "pitchai_trimestral"),
+              plan: String(doc.data.plan || COURTESY_DEFAULT_PLAN),
               status: String(doc.data.status || "comped"),
               grantedUntil: (doc.data.grantedUntil as string | null) || null,
               note: (doc.data.note as string | null) || null,
@@ -67,21 +77,30 @@ export const Route = createFileRoute("/api/admin/courtesy")({
             .trim()
             .toLowerCase();
           const days = Number(body.days);
-          const plan = String(body.plan || "pitchai_trimestral");
+          const plan = String(body.plan || COURTESY_DEFAULT_PLAN);
           const note = String(body.note || "")
             .trim()
-            .slice(0, 300);
+            .slice(0, COURTESY_NOTE_MAX);
           if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) {
             return Response.json({ error: "Digite um e-mail válido." }, { status: 400 });
           }
-          if (!Number.isInteger(days) || days < 1 || days > 3650) {
+          if (!Number.isInteger(days) || days < COURTESY_MIN_DAYS || days > COURTESY_MAX_DAYS) {
             return Response.json(
-              { error: "O período deve ser de 1 a 3650 dias." },
+              { error: `O período deve ser de ${COURTESY_MIN_DAYS} a ${COURTESY_MAX_DAYS} dias.` },
               { status: 400 },
             );
           }
-          if (!["pitchai_trimestral", "pitchai_anual"].includes(plan)) {
-            return Response.json({ error: "Plano inválido." }, { status: 400 });
+          if (!isCourtesyPlanId(plan)) {
+            return Response.json(
+              { error: `Plano inválido. Use ${COURTESY_PLAN_IDS.join(" ou ")}.` },
+              { status: 400 },
+            );
+          }
+          if (note.length < COURTESY_NOTE_MIN) {
+            return Response.json(
+              { error: "Descreva o motivo da cortesia (mínimo 3 caracteres)." },
+              { status: 400 },
+            );
           }
 
           const firestore = { mode: "server" as const, userToken: admin.token };

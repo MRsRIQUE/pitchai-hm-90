@@ -178,6 +178,34 @@ export function planDisplayName(plan?: string | null): string {
 /** Nome exibido quando o acesso é cortesia — categoria própria, não um "plano". */
 export const COMPED_LABEL = "Cortesia";
 
+// ---------------------------------------------------------------------------
+// Regras da cortesia
+//
+// Ficam aqui, num módulo que serve cliente e servidor, para o painel e a rota
+// `/api/admin/courtesy` não divergirem: antes o teto de dias existia só no
+// servidor e o plano só era aceito lá, sem o painel nunca enviar o campo.
+// ---------------------------------------------------------------------------
+
+/** Planos concedíveis por cortesia — só os que liberam voz/áudio da IA. */
+export const COURTESY_PLAN_IDS = ["pitchai_trimestral", "pitchai_anual"] as const;
+export type CourtesyPlanId = (typeof COURTESY_PLAN_IDS)[number];
+export const COURTESY_DEFAULT_PLAN: CourtesyPlanId = "pitchai_trimestral";
+
+/** Janela permitida por concessão. O teto antigo era 3650 (dez anos). */
+export const COURTESY_MIN_DAYS = 1;
+export const COURTESY_MAX_DAYS = 365;
+export const COURTESY_DEFAULT_DAYS = 90;
+/** Atalhos oferecidos no painel, para evitar digitar prazos longos por engano. */
+export const COURTESY_DAY_PRESETS = [7, 30, 90, 180, 365] as const;
+
+/** A justificativa deixou de ser opcional: toda cortesia precisa de motivo. */
+export const COURTESY_NOTE_MIN = 3;
+export const COURTESY_NOTE_MAX = 300;
+
+export function isCourtesyPlanId(value: unknown): value is CourtesyPlanId {
+  return COURTESY_PLAN_IDS.includes(value as CourtesyPlanId);
+}
+
 /** Valor de validade da cortesia, aceitando camelCase (atual) e snake_case (legado). */
 export function compedGrantedUntil(comped?: CompedAccessRecord | null): string | null {
   return comped?.grantedUntil ?? comped?.granted_until ?? null;
