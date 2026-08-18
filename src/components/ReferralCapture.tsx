@@ -36,7 +36,16 @@ export function ReferralCapture() {
       claimingRef.current = true;
       try {
         const res = await claimReferral({ data: { code } });
-        if (res.ok || res.reason === "already" || res.reason === "notfound") {
+        // `notfound` NÃO descarta o código: ele também é a resposta para um
+        // indicador que ainda não concluiu a adesão ao programa. Apagar aqui
+        // perdia o vínculo em definitivo, sem chance de recuperação. Só some
+        // quando o vínculo foi feito, já existia, ou o código é malformado.
+        if (
+          res.ok ||
+          res.reason === "already" ||
+          res.reason === "invalid" ||
+          res.reason === "self"
+        ) {
           localStorage.removeItem(REFERRAL_STORAGE_KEY);
         }
       } catch {

@@ -64,7 +64,10 @@ export const getMyReferralSummary = createServerFn({ method: "GET" })
 
     return {
       code,
-      active: referralDoc?.data?.active === true || referralDoc?.data?.active === undefined,
+      // Só `true` conta. Tratar o campo ausente como ativo escondia o botão de
+      // adesão de todo mundo que nunca ativou, e o link exibido nunca funcionava
+      // porque referral_codes/{code} continuava inativo.
+      active: referralDoc?.data?.active === true,
       activatedAt: (referralDoc?.data?.activatedAt as string) ?? null,
       totalIndicados: claims.length,
       // Um indicado só vira assinante quando há uma comissão registrada para ele.
@@ -86,14 +89,31 @@ export const activateReferralProgram = createServerFn({ method: "POST" })
     const firestore = { mode: "server" as const, userToken: context.firebaseToken };
     const code = await ensureReferralCode(context.userId, context.firebaseToken);
     const activatedAt = new Date().toISOString();
-    await fsSet(
-      `users/${context.userId}/referral/main`,
-      { code, active: true, activatedAt },
-      firestore,
-    );
+
+    // Confere a posse do código antes de ativá-lo com a service account, que
+    // passa por cima das regras do Firestore. `ensureReferralCode` já garante
+    // isso, mas a checagem é barata e a escrita é privilegiada.
+    const codeDoc = await fsGet(`referral_codes/${code}`, { mode: "public" });
+    if (codeDoc && codeDoc.data?.uid !== context.userId) {
+      throw new Error("Código de indicação pertence a outra conta.");
+    }
+
+    // `referral_codes/{code}` primeiro: é ele que faz o link funcionar. Se esta
+    // escrita falhar, o resumo continua dizendo "inativo" e o usuário pode
+    // tentar de novo — em vez de ficar com a conta marcada como ativa e um link
+    // que não vincula ninguém.
+    //
+    // Sem `userToken` de propósito: a regra de update de referral_codes exige
+    // isServer(), condição que o token do usuário não satisfaz (isServer() é a
+    // conta técnica legada). Quem ativa é o servidor, com a service account.
     await fsSet(
       `referral_codes/${code}`,
       { uid: context.userId, active: true, activatedAt },
+      { mode: "server" },
+    );
+    await fsSet(
+      `users/${context.userId}/referral/main`,
+      { code, active: true, activatedAt },
       firestore,
     );
     return { ok: true, activatedAt };
@@ -118,7 +138,11 @@ export const claimReferral = createServerFn({ method: "POST" })
     if (existing) return { ok: false, reason: "already" };
 
     const ownerUid = await resolveReferralCode(code);
-    if (!ownerUid || ownerUid === userId) return { ok: false, reason: "notfound" };
+    // "self" é definitivo (abriu o próprio link) e "notfound" é retentável (o
+    // indicador ainda pode concluir a adesão). Separados para que o cliente
+    // saiba qual dos dois pode descartar.
+    if (ownerUid && ownerUid === userId) return { ok: false, reason: "self" };
+    if (!ownerUid) return { ok: false, reason: "notfound" };
 
     await createReferralLink(ownerUid, userId, code, context.firebaseToken);
     return { ok: true };

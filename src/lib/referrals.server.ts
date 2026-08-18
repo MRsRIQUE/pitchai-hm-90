@@ -57,14 +57,25 @@ export async function ensureReferralCode(userId: string, userToken: string): Pro
   if (!codeAlreadyOwned) {
     await fsSet(`referral_codes/${code}`, { uid: userId, active: false }, auth);
   }
-  await fsSet(`users/${userId}/referral/main`, { code, createdAt: new Date().toISOString() }, auth);
+  // `active: false` explícito. Sem ele o campo ficava ausente e quem lê o resumo
+  // era obrigado a adivinhar o que "ausente" significa — foi assim que a página
+  // passou a exibir o programa como ativo para quem nunca ativou.
+  await fsSet(
+    `users/${userId}/referral/main`,
+    { code, active: false, createdAt: new Date().toISOString() },
+    auth,
+  );
   return code;
 }
 
-/** Resolve um código de indicação para o dono. */
+/**
+ * Resolve um código de indicação para o dono. Só códigos ativados valem:
+ * o código nasce inativo e só o aceite do programa (activateReferralProgram)
+ * o libera.
+ */
 export async function resolveReferralCode(code: string): Promise<string | null> {
   const doc = await fsGet(`referral_codes/${code}`, { mode: "public" });
-  if (doc?.data?.active === false) return null;
+  if (doc?.data?.active !== true) return null;
   return (doc?.data?.uid as string) ?? null;
 }
 
