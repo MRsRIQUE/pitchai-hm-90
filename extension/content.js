@@ -450,6 +450,10 @@
     } catch {}
   }
 
+  // Cache do verify positivo: sem isto cada resposta no chat esperava uma
+  // viagem ao servidor só para reconfirmar o que já foi confirmado há pouco.
+  const _lockOkCache = { at: 0, ttlMs: 20000 };
+
   async function checkExtensionLock(syncToken) {
     extSecurity.syncToken = String(syncToken || "");
     if (!syncToken) {
@@ -459,6 +463,14 @@
       extSecurity.message = "Sync token ausente. Insira seu token no painel da extensão.";
       updateLockUI();
       return false;
+    }
+    if (
+      !extSecurity.isLocked &&
+      !extSecurity.aiLocked &&
+      extSecurity.syncToken === syncToken &&
+      Date.now() - _lockOkCache.at < _lockOkCache.ttlMs
+    ) {
+      return true;
     }
     try {
       const authHeaders = await signRequest(syncToken, "verify");
@@ -479,6 +491,7 @@
         extSecurity.tokenRemaining = data.tokenRemaining ?? 0;
         extSecurity.tokenLimit = data.tokenLimit ?? 0;
         extSecurity.upgrade = data.upgrade || null;
+        _lockOkCache.at = Date.now();
         updateLockUI();
         publishTokenUsage();
         return true;
@@ -928,7 +941,7 @@
     respostasIA: true,
     responderNoChat: false,
     // Intervalo mínimo (segundos) entre respostas da IA no chat — anti-spam.
-    respostasIntervaloSec: 15,
+    respostasIntervaloSec: 8,
     autoFixar: { enabled: false, query: "", minSec: 20, maxSec: 60, ids: [], names: [] },
     encerrarTempo: { enabled: false, minutes: 120 },
     notificacoesVenda: true,
@@ -994,7 +1007,7 @@
 
   /** Intervalo mínimo entre respostas no chat, configurável no painel (anti-spam). */
   function replyIntervalMs(cfg) {
-    const sec = Math.max(4, Math.min(300, Number(cfg?.respostasIntervaloSec) || 15));
+    const sec = Math.max(4, Math.min(300, Number(cfg?.respostasIntervaloSec) || 8));
     return sec * 1000;
   }
 
@@ -2671,6 +2684,11 @@
       if (options.signal?.aborted || options.isCancelled?.()) spoken = false;
     } catch (error) {
       if (error?.name !== "AbortError") {
+        console.warn("[PITCHAI-TTS] falha:", String(error?.message || error).slice(0, 200), {
+          text: String(text || "").slice(0, 60),
+          voice: voice?.id,
+          fromCache,
+        });
         activity.log({
           type: "error",
           text: `Falha ao falar resposta: ${String(error?.message || error).slice(0, 140)}`,

@@ -198,7 +198,7 @@
     iaLigada: true,
     respostasIA: true,
     responderNoChat: false,
-    respostasIntervaloSec: 15,
+    respostasIntervaloSec: 8,
     revisarAntesDeEnviar: false,
     pitchBank: {
       enabled: true,
@@ -1285,7 +1285,15 @@
         clearInterval(tick);
         tick = setInterval(() => {
           elapsed++;
-          timeEl.textContent = fmt(elapsed);
+          // O cronômetro mostra o tempo da LIVE do TikTok (detectado pela
+          // barra no gerenciador), não o tempo do vídeo — o vídeo pode ser
+          // trocado/reiniciado no meio da transmissão.
+          const st = lastLiveState;
+          if (st?.active && st.startedAt) {
+            timeEl.textContent = fmt(Math.max(0, Math.floor((Date.now() - st.startedAt) / 1000)));
+          } else {
+            timeEl.textContent = fmt(elapsed);
+          }
         }, 1000);
         info.textContent = status.message || "Fonte virtual ativa no TikTok";
         renderDiag(status);
@@ -1488,7 +1496,12 @@
     setInterval(pollMap, 4000);
 
     const liveDetectionEl = document.getElementById("pnl-live-detection");
+    // Último estado da LIVE publicado pela barra (pitchai.live.state); o
+    // cronômetro do painel usa o startedAt dele para mostrar o tempo real da
+    // transmissão do TikTok em vez do tempo do vídeo carregado.
+    let lastLiveState = null;
     function renderLiveState(state) {
+      if (state) lastLiveState = state;
       if (!liveDetectionEl) return;
       if (!state?.known) {
         liveDetectionEl.textContent =
