@@ -4398,9 +4398,13 @@
     if (list) {
       collectProductCards(list, set);
     }
-    if (!list && set.size < 2) {
+    if (set.size < 2) {
+      // Fallback incondicional: mesmo com `list` resolvido, ele pode apontar
+      // para o painel errado (ex.: vitrine lateral em vez do dashboard de
+      // produtos). O scan document-wide pelos seletores estáveis cobre isso.
       const roots = DM()?.util?.allRoots?.() || [document];
       [
+        'button[data-pin-performance-source="product_card"]',
         '[data-tid*="product_item"]',
         '[data-e2e*="product-item"]',
         '[data-pin-performance-source="product_card"]',
