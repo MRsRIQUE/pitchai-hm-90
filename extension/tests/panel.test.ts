@@ -24,17 +24,24 @@ describe("painel distribuído", () => {
     expect(panelSource).toMatch(/responderNoChat:\s*false/);
   });
 
-  it("mantém voz e chat como canais independentes atrás do mestre 👁️", () => {
+  it("mantém voz e chat independentes atrás do mestre 👁️, que liga os dois quando não há canal", () => {
     expect(contentSource).toMatch(
       /cfg\?\.iaLigada !== false && !!\(cfg\?\.respostasIA \|\| cfg\?\.responderNoChat\)/,
     );
     expect(contentSource).toContain("if (cfg.responderNoChat) {");
     expect(contentSource).toContain("if (cfg.respostasIA) {");
     expect(contentSource).toContain("await deliverReply(item, reply, cfg)");
-    // o olho liga/desliga só o mestre; nunca força a voz
+    // o olho liga/desliga o mestre e não mexe nos canais já escolhidos
     expect(contentSource).toContain("fresh.iaLigada = on;");
+    // Ligar o olho sem nenhum canal ativo não pode deixar a IA muda e fora do
+    // chat: os dois canais nascem ligados juntos, nunca um só. Afirmações em
+    // linhas separadas de propósito — content.js é CRLF e um trecho de várias
+    // linhas nunca casaria.
+    expect(contentSource).toContain("if (on && !fresh.respostasIA && !fresh.responderNoChat) {");
+    expect(contentSource).toContain("fresh.respostasIA = true;");
     expect(contentSource).toContain("fresh.responderNoChat = true;");
-    expect(contentSource).not.toContain("fresh.respostasIA = true;");
+    // Desligar o olho continua sem apagar a escolha de canais do vendedor.
+    expect(contentSource).not.toContain("fresh.respostasIA = false;");
   });
 
   it("protege o chat contra spam, auto-loop e sobrescrita de rascunho", () => {

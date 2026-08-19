@@ -53,6 +53,10 @@ export const Route = createFileRoute("/api/public/live/mapping")({
         if (!access.ok || !access.userId) {
           return j(access.status ?? 403, {
             error: access.status === 401 ? "invalid_token" : "payment_required",
+            // Aditivo: `error` segue igual para a extensão antiga. `reason` diz
+            // o motivo preciso (hoje só "device_mismatch"), que sem isto sairia
+            // rotulado como "payment_required" — uma mentira para quem pagou.
+            reason: access.reason,
             message: access.message,
             locked: true,
           });

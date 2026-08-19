@@ -4,6 +4,24 @@
   const PENDING_KEY = "pitchai.pendingSyncToken";
   const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
   const RESULT_TYPE = "PITCHAI_SYNC_TOKEN_RESULT";
+  // Identificador da instalação: LIDO aqui, nunca criado. Quem cria é o
+  // content.js — dois criadores numa instalação nova gerariam dois UUIDs e o
+  // vínculo nasceria trocado. Ausente não bloqueia: o cabeçalho só não vai.
+  const INSTALL_ID_KEY = "pitchai_install_id";
+
+  function installHeaders() {
+    return new Promise((resolve) => {
+      try {
+        chrome.storage.local.get([INSTALL_ID_KEY], (res) => {
+          const id = res?.[INSTALL_ID_KEY];
+          const valido = typeof id === "string" && UUID_RE.test(id);
+          resolve(valido ? { "X-PitchAI-Install": id.toLowerCase() } : {});
+        });
+      } catch {
+        resolve({});
+      }
+    });
+  }
 
   function postResult(requestId, result) {
     window.postMessage(
@@ -72,7 +90,7 @@
       const response = await fetch(`${window.location.origin}/api/public/live/verify`, {
         method: "POST",
         credentials: "omit",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", ...(await installHeaders()) },
         body: JSON.stringify({ token }),
       });
       const status = await response.json().catch(() => ({}));

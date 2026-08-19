@@ -22,6 +22,7 @@ import {
   Zap,
 } from "lucide-react";
 import { ExtensionStatusBanner } from "@/components/live/ExtensionStatusBanner";
+import { DeviceBindingPanel } from "@/components/live/DeviceBindingPanel";
 import {
   signInWithEmailAndPassword,
   createUserWithEmailAndPassword,
@@ -266,7 +267,16 @@ export function SyncTokenCard() {
   }
 
   async function regen() {
-    if (!confirm("Gerar novo token invalida o anterior. Confirma?")) return;
+    // Precisa dizer o que o botão NÃO faz: muita gente gera um token novo
+    // achando que assim libera o outro computador. Não libera — o vínculo
+    // acompanha o código novo, e quem solta o navegador é o botão de
+    // desvincular, logo acima.
+    if (
+      !confirm(
+        "Gerar novo token invalida o anterior — você vai precisar colar o novo código na extensão.\n\nIsso NÃO desvincula o navegador: para usar em outra máquina, use o botão “Desvincular navegador”.\n\nConfirma?",
+      )
+    )
+      return;
     setBusy(true);
     try {
       const t = await regenerateSyncToken();
@@ -546,6 +556,8 @@ export function SyncTokenCard() {
           <Copy className="h-4 w-4" />
         </Button>
       </div>
+
+      <DeviceBindingPanel />
 
       <div className="flex flex-wrap gap-2">
         <Button size="sm" onClick={pushNow} disabled={busy}>

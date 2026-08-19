@@ -7,6 +7,7 @@ import {
   verifyFirebaseIdToken,
 } from "@/lib/firebase.server";
 import { resolveUserAccess } from "@/lib/live/access.server";
+import { carryDeviceBindingToNewToken } from "@/lib/live/api-auth.server";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -75,6 +76,12 @@ async function ensureToken(
   }
 
   const token = await createToken(uid, email, userToken, oldConfig);
+  // O código mudou, a instalação não. Sem isto, regenerar o token viraria um
+  // desvínculo ilimitado — o token novo nasceria solto e prenderia na primeira
+  // máquina que chamasse, e a regra de uma liberação por dia não valeria nada.
+  // O mesmo vale para o caminho de reparo: quem conserta o próprio token não
+  // ganha uma máquina nova de brinde.
+  await carryDeviceBindingToNewToken(uid, token);
   if (UUID_RE.test(existingToken)) {
     const owner = await getSyncTokenOwner(existingToken).catch(() => null);
     if (owner === uid) {

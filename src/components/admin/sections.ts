@@ -26,9 +26,9 @@ export const ADMIN_SECTIONS: (AppSection & { id: AdminSectionId })[] = [
   },
   {
     id: "ranking",
-    label: "Ranking de produtos",
+    label: "Produtos quentes",
     icon: Flame,
-    title: "Ranking de produtos",
+    title: "Produtos quentes",
     subtitle: "Catálogo que alimenta a página pública /quentes.",
   },
   {

@@ -22,6 +22,7 @@ import { Route as QuentesRouteImport } from './routes/quentes'
 import { Route as ResetPasswordRouteImport } from './routes/reset-password'
 import { Route as TermosRouteImport } from './routes/termos'
 import { Route as CheckoutReturnRouteImport } from './routes/checkout.return'
+import { Route as ApiAccountDeviceBindingRouteImport } from './routes/api/account/device-binding'
 import { Route as ApiAccountEnsureRouteImport } from './routes/api/account/ensure'
 import { Route as ApiAccountSyncTokenRouteImport } from './routes/api/account/sync-token'
 import { Route as ApiAdminCheckRouteImport } from './routes/api/admin/check'
@@ -103,6 +104,11 @@ const TermosRoute = TermosRouteImport.update({
 const CheckoutReturnRoute = CheckoutReturnRouteImport.update({
   id: '/checkout/return',
   path: '/checkout/return',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiAccountDeviceBindingRoute = ApiAccountDeviceBindingRouteImport.update({
+  id: '/api/account/device-binding',
+  path: '/api/account/device-binding',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ApiAccountEnsureRoute = ApiAccountEnsureRouteImport.update({
@@ -207,6 +213,7 @@ export interface FileRoutesByFullPath {
   '/reset-password': typeof ResetPasswordRoute
   '/termos': typeof TermosRoute
   '/checkout/return': typeof CheckoutReturnRoute
+  '/api/account/device-binding': typeof ApiAccountDeviceBindingRoute
   '/api/account/ensure': typeof ApiAccountEnsureRoute
   '/api/account/sync-token': typeof ApiAccountSyncTokenRoute
   '/api/admin/check': typeof ApiAdminCheckRoute
@@ -239,6 +246,7 @@ export interface FileRoutesByTo {
   '/reset-password': typeof ResetPasswordRoute
   '/termos': typeof TermosRoute
   '/checkout/return': typeof CheckoutReturnRoute
+  '/api/account/device-binding': typeof ApiAccountDeviceBindingRoute
   '/api/account/ensure': typeof ApiAccountEnsureRoute
   '/api/account/sync-token': typeof ApiAccountSyncTokenRoute
   '/api/admin/check': typeof ApiAdminCheckRoute
@@ -272,6 +280,7 @@ export interface FileRoutesById {
   '/reset-password': typeof ResetPasswordRoute
   '/termos': typeof TermosRoute
   '/checkout/return': typeof CheckoutReturnRoute
+  '/api/account/device-binding': typeof ApiAccountDeviceBindingRoute
   '/api/account/ensure': typeof ApiAccountEnsureRoute
   '/api/account/sync-token': typeof ApiAccountSyncTokenRoute
   '/api/admin/check': typeof ApiAdminCheckRoute
@@ -306,6 +315,7 @@ export interface FileRouteTypes {
     | '/reset-password'
     | '/termos'
     | '/checkout/return'
+    | '/api/account/device-binding'
     | '/api/account/ensure'
     | '/api/account/sync-token'
     | '/api/admin/check'
@@ -338,6 +348,7 @@ export interface FileRouteTypes {
     | '/reset-password'
     | '/termos'
     | '/checkout/return'
+    | '/api/account/device-binding'
     | '/api/account/ensure'
     | '/api/account/sync-token'
     | '/api/admin/check'
@@ -370,6 +381,7 @@ export interface FileRouteTypes {
     | '/reset-password'
     | '/termos'
     | '/checkout/return'
+    | '/api/account/device-binding'
     | '/api/account/ensure'
     | '/api/account/sync-token'
     | '/api/admin/check'
@@ -403,6 +415,7 @@ export interface RootRouteChildren {
   ResetPasswordRoute: typeof ResetPasswordRoute
   TermosRoute: typeof TermosRoute
   CheckoutReturnRoute: typeof CheckoutReturnRoute
+  ApiAccountDeviceBindingRoute: typeof ApiAccountDeviceBindingRoute
   ApiAccountEnsureRoute: typeof ApiAccountEnsureRoute
   ApiAccountSyncTokenRoute: typeof ApiAccountSyncTokenRoute
   ApiAdminCheckRoute: typeof ApiAdminCheckRoute
@@ -513,6 +526,13 @@ declare module '@tanstack/react-router' {
       path: '/checkout/return'
       fullPath: '/checkout/return'
       preLoaderRoute: typeof CheckoutReturnRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/account/device-binding': {
+      id: '/api/account/device-binding'
+      path: '/api/account/device-binding'
+      fullPath: '/api/account/device-binding'
+      preLoaderRoute: typeof ApiAccountDeviceBindingRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/account/ensure': {
@@ -651,6 +671,7 @@ const rootRouteChildren: RootRouteChildren = {
   ResetPasswordRoute: ResetPasswordRoute,
   TermosRoute: TermosRoute,
   CheckoutReturnRoute: CheckoutReturnRoute,
+  ApiAccountDeviceBindingRoute: ApiAccountDeviceBindingRoute,
   ApiAccountEnsureRoute: ApiAccountEnsureRoute,
   ApiAccountSyncTokenRoute: ApiAccountSyncTokenRoute,
   ApiAdminCheckRoute: ApiAdminCheckRoute,

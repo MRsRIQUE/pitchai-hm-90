@@ -28,6 +28,7 @@ import { APP_VERSION } from "@/lib/live/version";
 
 import { QuickStartModal } from "../QuickStartModal";
 import { SetupWizard } from "../SetupWizard";
+import { QuentesDoTime } from "../QuentesDoTime";
 import { useUserSubscription } from "@/hooks/useUserSubscription";
 import { useIsAdmin } from "@/hooks/useIsAdmin";
 import { PaymentGuardOverlay } from "../PaymentGuardModal";
@@ -420,6 +421,7 @@ function LiveDashboardContent() {
 
         {active === "desempenho" ? <DesempenhoSection /> : null}
         {active === "produtos" ? <ProdutosSection /> : null}
+        {active === "produtos" ? <QuentesDoTime /> : null}
         {active === "ia" ? <IaSection /> : null}
         {active === "voz" ? (
           <VozSection

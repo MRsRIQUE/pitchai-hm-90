@@ -269,7 +269,9 @@
 
   // Assinatura criptográfica HMAC para proteger requisições contra adulteração
   async function signRequest(token, endpoint) {
-    if (!token) return {};
+    // O cabeçalho da instalação acompanha a assinatura, mas fica FORA dela.
+    const install = await installHeaders();
+    if (!token) return install;
     const ts = Date.now().toString();
     const nonce = Math.random().toString(36).substring(2, 10);
     try {
@@ -290,6 +292,7 @@
         .map((b) => b.toString(16).padStart(2, "0"))
         .join("");
       return {
+        ...install,
         "X-PitchAI-Signature": sigHex,
         "X-PitchAI-Timestamp": ts,
         "X-PitchAI-Nonce": nonce,
@@ -297,7 +300,7 @@
         Authorization: `Bearer ${token}`,
       };
     } catch {
-      return { Authorization: `Bearer ${token}` };
+      return { ...install, Authorization: `Bearer ${token}` };
     }
   }
 
@@ -432,8 +435,61 @@
     tokenRemaining: 0,
     tokenLimit: 0,
     upgrade: null,
+    // Recusa por navegador: os três vêm do verify e são só do servidor.
+    boundAt: null,
+    canReleaseAt: null,
+    actionUrl: null,
     bannerEl: null,
   };
+
+  // A licença está vinculada a outro navegador. O verify é a fonte autoritativa
+  // deste motivo — as outras rotas só respondem 403.
+  const DEVICE_MISMATCH = "device_mismatch";
+  // Rede de segurança para o servidor antigo, que ainda não manda actionUrl.
+  const DEVICE_RELEASE_PATH = "/app?desvincular=1";
+
+  /**
+   * Aplica a recusa por navegador. A mensagem é SEMPRE a do servidor: ela trata
+   * do caso da reinstalação e traz a hora exata da próxima liberação — texto
+   * nosso aqui mentiria a data. Não apaga o syncToken e não pede token novo: o
+   * token está certo, quem está errado é o navegador.
+   */
+  function applyDeviceMismatch(data) {
+    extSecurity.isLocked = true;
+    extSecurity.aiLocked = false;
+    extSecurity.reason = DEVICE_MISMATCH;
+    extSecurity.message = data?.message || "Esta licença está vinculada a outro navegador.";
+    extSecurity.boundAt = data?.boundAt || null;
+    extSecurity.canReleaseAt = data?.canReleaseAt || null;
+    extSecurity.actionUrl = data?.actionUrl || DEVICE_RELEASE_PATH;
+    extSecurity.plan = data?.plan || extSecurity.plan;
+    extSecurity.upgrade = null;
+    updateLockUI();
+  }
+
+  // As rotas que não são o verify recusam com 403, e o rótulo em `error` continua
+  // saindo como "invalid_token"/"payment_required" — decidir por ele daria falso
+  // positivo. Então o 403 só levanta a suspeita e quem confirma é o verify.
+  // O `reason` no corpo é o servidor novo; sem ele o caminho continua valendo,
+  // porque a extensão nova vai conviver com servidor antigo em cache.
+  // Uma confirmação por vez: cada verify grava um nonce no Firestore, então
+  // rajada de 403 não pode virar rajada de verify.
+  const DEVICE_RECHECK_MS = 60000;
+  let _deviceRecheckAt = 0;
+
+  function noteApiRefusal(res, data) {
+    if (res?.status !== 403 && data?.reason !== DEVICE_MISMATCH) return;
+    // Sem token não há o que confirmar, e insistir seria pior do que não fazer
+    // nada: checkExtensionLock("") trava com "Sync token ausente", e um verify
+    // que falhe na rede trava com "verification_unavailable" — os dois fora do
+    // ciclo normal de 60s. Enquanto trava, clickLiveControl e finishLive
+    // devolvem false e o vendedor fica sem os botões de LIVE.
+    if (!extSecurity.syncToken) return;
+    if (extSecurity.reason === DEVICE_MISMATCH) return; // já travado por isto
+    if (Date.now() - _deviceRecheckAt < DEVICE_RECHECK_MS) return;
+    _deviceRecheckAt = Date.now();
+    checkExtensionLock(extSecurity.syncToken).catch(() => {});
+  }
 
   async function checkExtensionLock(syncToken) {
     extSecurity.syncToken = String(syncToken || "");
@@ -453,6 +509,12 @@
         body: JSON.stringify({ token: syncToken }),
       });
       const data = await res.json().catch(() => ({}));
+      // A recusa por navegador chega em HTTP 200 e precisa ganhar do valid/locked:
+      // um corpo com valid:true passaria batido se ficasse depois.
+      if (data.reason === DEVICE_MISMATCH) {
+        applyDeviceMismatch(data);
+        return false;
+      }
       if (res.ok && data.valid && !data.locked) {
         extSecurity.isLocked = false;
         extSecurity.aiLocked = Boolean(data.aiLocked || data.reason === "quota_exceeded");
@@ -520,11 +582,19 @@
       const btn = document.getElementById("pitchai-lock-action");
       if (btn) {
         const isQuota = extSecurity.reason === "quota_exceeded";
-        btn.textContent = isQuota
-          ? extSecurity.upgrade?.cta || "Ver plano com mais tokens ↗"
-          : "Desbloquear no Pitch AI ↗";
+        const isDevice = extSecurity.reason === DEVICE_MISMATCH;
+        btn.textContent = isDevice
+          ? "Desvincular navegador ↗"
+          : isQuota
+            ? extSecurity.upgrade?.cta || "Ver plano com mais tokens ↗"
+            : "Desbloquear no Pitch AI ↗";
         btn.onclick = () => {
-          const target = isQuota ? extSecurity.upgrade?.url || "/planos" : "/app";
+          // O verify manda o actionUrl; o caminho fixo só cobre o servidor antigo.
+          const target = isDevice
+            ? extSecurity.actionUrl || DEVICE_RELEASE_PATH
+            : isQuota
+              ? extSecurity.upgrade?.url || "/planos"
+              : "/app";
           window.open(new URL(target, API_BASE).href, "_blank");
         };
       }
@@ -536,6 +606,64 @@
   const STORAGE_KEY = "pitchai.config.v1";
   const PENDING_SYNC_KEY = "pitchai.pendingSyncToken";
   const SYNC_UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+  // ---------- Identificador desta instalação (trava de licença) ----------
+  // UUID v4 criado UMA vez e nunca regerado: nem em erro, nem em recusa, nem em
+  // troca de token. Regerar por conta própria daria ao vendedor um jeito
+  // acidental de furar a trava e ao servidor um vínculo novo a cada tropeço.
+  // Não deriva de _crypto_salt_v2 nem de chrome.runtime.id: o salt é material
+  // de chave e não pode sair pela rede; o runtime.id é o mesmo em toda máquina
+  // desde que o manifest fixou a "key", então não distinguiria navegador nenhum.
+  const INSTALL_ID_KEY = "pitchai_install_id";
+  let _installId = "";
+  let _installIdPromise = null;
+
+  function getInstallId() {
+    if (_installId) return Promise.resolve(_installId);
+    // Uma promessa só: duas chamadas concorrentes na primeira execução criariam
+    // dois UUIDs e a última gravação venceria — vínculo trocado sem motivo.
+    if (!_installIdPromise) {
+      _installIdPromise = (async () => {
+        const stored = await new Promise((resolve) => {
+          try {
+            chrome.storage.local.get([INSTALL_ID_KEY], (res) => resolve(res?.[INSTALL_ID_KEY]));
+          } catch {
+            resolve(null);
+          }
+        });
+        // Fora do formato vale como AUSENTE, e ausente nunca bloqueia: o
+        // servidor trata a instalação como ainda não vinculada.
+        if (typeof stored === "string" && SYNC_UUID_RE.test(stored)) {
+          _installId = stored.toLowerCase();
+          return _installId;
+        }
+        // Único ponto do código que cria um id — e só quando não havia nenhum.
+        const fresh = String(crypto.randomUUID()).toLowerCase();
+        try {
+          await chrome.storage.local.set({ [INSTALL_ID_KEY]: fresh });
+        } catch {}
+        _installId = fresh;
+        return _installId;
+      })();
+    }
+    return _installIdPromise;
+  }
+
+  /**
+   * Cabeçalho de identificação da instalação. Vai em TODA chamada ao API_BASE,
+   * inclusive nas que não são assinadas: endpoint sem ele funciona, mas não
+   * trava — e um só endpoint furado já basta para a trava não valer nada.
+   * Fora do HMAC de propósito: não é segredo, e assinar não acrescenta nada
+   * quando a chave da assinatura é o próprio token que já foi compartilhado.
+   */
+  async function installHeaders() {
+    try {
+      const id = await getInstallId();
+      return id ? { "X-PitchAI-Install": id } : {};
+    } catch {
+      return {};
+    }
+  }
   const DEMO_CMD_KEY = "pitchai.demo.cmd";
   let lastCmdTs = 0;
   const MAP_STATUS_KEY = "pitchai.dommap.status";
@@ -638,11 +766,12 @@
         if (!cfg?.syncToken) return;
         const payload = await buildMappingPayload();
         if (!Object.keys(payload.targets).length && !Object.keys(payload.regions).length) return;
-        await fetch(`${API_BASE}/api/public/live/mapping`, {
+        const r = await fetch(`${API_BASE}/api/public/live/mapping`, {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: { "Content-Type": "application/json", ...(await installHeaders()) },
           body: JSON.stringify({ action: "push", token: cfg.syncToken, payload }),
         });
+        noteApiRefusal(r);
       } catch (e) {
         console.warn("[Pitchai] push mapping falhou", e);
       }
@@ -659,10 +788,11 @@
       if (Object.keys(localT).length || Object.keys(localR).length) return;
       const r = await fetch(`${API_BASE}/api/public/live/mapping`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", ...(await installHeaders()) },
         body: JSON.stringify({ action: "pull", token: cfg.syncToken, host: location.host }),
       });
       const data = await r.json().catch(() => null);
+      noteApiRefusal(r, data);
       const payload = data?.payload;
       if (!payload || payload.host !== location.host) return;
       _mappingSelfWrite = Date.now();
@@ -987,11 +1117,12 @@
     if (Date.now() - _lastPush < 5000) return;
     _lastPush = Date.now();
     try {
-      await fetch(`${API_BASE}/api/public/live/config`, {
+      const r = await fetch(`${API_BASE}/api/public/live/config`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", ...(await installHeaders()) },
         body: JSON.stringify({ action: "push", token: cfg.syncToken, config: cfg }),
       });
+      noteApiRefusal(r);
     } catch (e) {
       console.warn("[Pitchai] push config falhou", e);
     }
@@ -1063,10 +1194,11 @@
       try {
         const r = await fetch(`${API_BASE}/api/public/live/session`, {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: { "Content-Type": "application/json", ...(await installHeaders()) },
           body: JSON.stringify({ action: "start", token: cfg.syncToken }),
         });
         const data = await r.json().catch(() => ({}));
+        noteApiRefusal(r, data);
         if (data?.session_id) {
           session.id = data.session_id;
           session.token = cfg.syncToken;
@@ -1086,11 +1218,12 @@
   async function sessionEnd() {
     if (!session.id || !session.token) return;
     try {
-      await fetch(`${API_BASE}/api/public/live/session`, {
+      const r = await fetch(`${API_BASE}/api/public/live/session`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", ...(await installHeaders()) },
         body: JSON.stringify({ action: "end", token: session.token, session_id: session.id }),
       });
+      noteApiRefusal(r);
     } catch {}
     session.id = null;
     session.token = null;
@@ -1102,9 +1235,9 @@
     if (demo?.isOn?.()) return;
     if (!session.id || !session.token) return;
     try {
-      await fetch(`${API_BASE}/api/public/live/session`, {
+      const r = await fetch(`${API_BASE}/api/public/live/session`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", ...(await installHeaders()) },
         body: JSON.stringify({
           action: "event",
           token: session.token,
@@ -1113,6 +1246,7 @@
         }),
         keepalive: true,
       });
+      noteApiRefusal(r);
     } catch {}
   }
   window.addEventListener("beforeunload", () => {
@@ -2253,13 +2387,28 @@
     }
     return monitorEl;
   }
-  /** Aplica o dispositivo de saída da live (VB-Cable) na voz da IA. */
+  /**
+   * Aplica o dispositivo de saída da live (VB-Cable) na voz da IA e diz se
+   * conseguiu. Devolver o motivo é essencial: um deviceId é SALGADO POR ORIGEM
+   * no Chrome, então o id escolhido no app web (pitchai-hm.vercel.app) não vale
+   * aqui em shop.tiktok.com — o setSinkId recusa e, sem este retorno, a voz
+   * sairia no alto-falante do vendedor com cara de sucesso.
+   */
   async function applySink(el, cfg) {
     const id = cfg?.voz?.outputDeviceId;
-    if (!id || typeof el.setSinkId !== "function") return;
+    if (!id) return { roteado: false, motivo: "nenhum dispositivo de saída escolhido" };
+    if (typeof el.setSinkId !== "function") {
+      return { roteado: false, motivo: "este navegador não permite escolher a saída" };
+    }
     try {
       await el.setSinkId(id);
-    } catch {}
+      return { roteado: true, motivo: "" };
+    } catch (error) {
+      return {
+        roteado: false,
+        motivo: `o dispositivo salvo não existe nesta página (${String(error?.name || error)})`,
+      };
+    }
   }
 
   // ---------- Ponte de voz com a fonte virtual (media-injector.js) ----------
@@ -2278,6 +2427,18 @@
   const VIRTUAL_STATUS_TTL = 5000; // evita um round-trip de status a cada fala
   const VIRTUAL_STATUS_RETRY = 2000; // Estúdio ligado, mas o TikTok ainda não pegou o microfone
   const VIRTUAL_STATUS_QUIET = 60000; // sem injector na página: não insiste a cada fala
+
+  // Diagnóstico da cadeia de voz na página do vendedor. Fica DESLIGADO: liga-se
+  // com localStorage.setItem("pitchai:audio-debug", "1") no console da aba do
+  // TikTok e desliga sozinho ao fechar. Lido a cada chamada de propósito — assim
+  // dá para ligar no meio de uma live sem recarregar e perder a transmissão.
+  const AUDIO_DEBUG_KEY = "pitchai:audio-debug";
+  function audioDebug(what, data) {
+    try {
+      if (localStorage.getItem(AUDIO_DEBUG_KEY) !== "1") return;
+      console.log("[PitchAI Áudio]", what, data);
+    } catch {}
+  }
 
   const pendingMedia = new Map();
   let mediaSeq = 0;
@@ -2324,26 +2485,41 @@
   }
 
   /**
-   * A voz pode entrar no microfone virtual agora? Não basta o Estúdio estar
-   * ligado (enabled/published): o TikTok precisa ter selecionado a fonte de
-   * áudio, e é isso que audioOwner conta — vale para o topo e para os iframes.
+   * Vale a pena TENTAR a fala pelo microfone virtual? Basta o Estúdio estar
+   * publicando. O audioOwner do status NÃO decide mais nada: ele nasce de um
+   * aviso com validade de 12s que o frame que capturou o microfone manda para o
+   * frame de cima, e basta um iframe intermediário sem o injector para o aviso
+   * não subir — o status diria "ninguém capturando" com a live capturando.
+   * Quem decide de verdade é o próprio "speak": ele percorre os frames e
+   * responde media-inactive na hora quando ninguém assume. Aqui só evitamos
+   * gastar uma fala inteira perguntando a uma página que não tem injector.
    */
   async function isVirtualSourceActive() {
     if (Date.now() < virtualSource.until) return virtualSource.active;
     const res = await sendMedia("status");
     const s = res.ok ? res.status || {} : {};
     const publicando = Boolean(s.enabled && s.published);
-    const active = publicando && Boolean(s.audioOwner);
+    const capturando = Boolean(s.audioOwner);
     let ttl = VIRTUAL_STATUS_TTL;
     // silêncio total é página sem injector: não vale travar toda fala perguntando
     if (res.timedOut) ttl = VIRTUAL_STATUS_QUIET;
-    // Estúdio ligado sem captura é o vendedor que ainda não escolheu a Pitch AI
-    // em "Fonte de áudio". O cabo é a resposta certa, mas o aviso de captura sai
-    // no instante em que ele escolher: reavalia logo para a fala seguinte já ir
-    // pelo microfone virtual.
-    else if (publicando && !active) ttl = VIRTUAL_STATUS_RETRY;
-    virtualSource = { until: Date.now() + ttl, active };
-    return active;
+    // Publicando sem aviso de captura: pode ser o vendedor que ainda não escolheu
+    // a Pitch AI em "Fonte de áudio", pode ser o aviso que não subiu. Tentamos
+    // assim mesmo e reavaliamos logo, porque o quadro muda a qualquer momento.
+    else if (publicando && !capturando) ttl = VIRTUAL_STATUS_RETRY;
+    virtualSource = { until: Date.now() + ttl, active: publicando };
+    audioDebug("status da fonte virtual", {
+      publicando,
+      capturando,
+      audioOwnerHere: s.audioOwnerHere,
+      audioContext: s.audioContext,
+      duckAuto: s.duckAuto,
+      duckAutoLevel: s.duckAutoLevel,
+      timedOut: Boolean(res.timedOut),
+      erro: res.error,
+      decisao: publicando ? "tentar o microfone virtual" : "ir direto para o dispositivo",
+    });
+    return publicando;
   }
 
   /**
@@ -2378,6 +2554,18 @@
     });
     virtualVoice = speaking;
     const res = await speaking.done;
+    audioDebug("resposta do speak", {
+      ok: Boolean(res.ok),
+      code: res.code,
+      erro: res.error,
+      timedOut: Boolean(res.timedOut),
+      spoke: res.status?.spoke,
+      voiceActive: res.status?.voiceActive,
+      ducking: res.status?.ducking,
+      duckLevel: res.status?.duckLevel,
+      audioOwnerHere: res.status?.audioOwnerHere,
+      audioContext: res.status?.audioContext,
+    });
     // status.spoke === false é fala cortada (stopSpeak ou fala nova): tocou, não é erro
     if (res.ok) return { ok: true, inactive: false };
     if (res.code === MEDIA_INACTIVE) {
@@ -2478,11 +2666,19 @@
     }
     return playThroughDevice(voice, cfg);
   }
-  /** Caminho antigo: <audio> com setSinkId no dispositivo da live. */
+  /**
+   * Caminho antigo: <audio> com setSinkId no dispositivo da live. Sem um
+   * dispositivo válido NESTA origem ele não é caminho nenhum — a voz toca no
+   * alto-falante do vendedor e a live não ouve nada. Tocamos assim mesmo (é
+   * melhor do que engolir a fala), mas avisamos, porque calado isso passa por
+   * sucesso e o vendedor descobre no ar.
+   */
   async function playThroughDevice(voice, cfg) {
     try {
       const a = ensureAudio();
-      await applySink(a, cfg);
+      const sink = await applySink(a, cfg);
+      audioDebug("fala pelo dispositivo", { roteado: sink.roteado, motivo: sink.motivo });
+      if (!sink.roteado) warnVoiceOffAir(sink.motivo);
       a.volume = Math.min(1, Math.max(0, Number(cfg?.voz?.gain ?? 1)));
       a.src = voice.url();
       await startMonitor(voice, cfg);
@@ -2491,6 +2687,20 @@
     } catch {
       return false;
     }
+  }
+
+  // O aviso vale por fala perdida, não por live: repetir a cada resposta enterra
+  // o resto do histórico. Um lembrete a cada 5 minutos basta para ele agir.
+  const OFF_AIR_WARN_MS = 300000;
+  let offAirWarnedAt = 0;
+  function warnVoiceOffAir(motivo) {
+    if (Date.now() - offAirWarnedAt < OFF_AIR_WARN_MS) return;
+    offAirWarnedAt = Date.now();
+    activity.log({
+      type: "error",
+      text: `A voz da IA está saindo no seu computador, não na live: ${motivo}. Ative o Estúdio (fonte virtual) e escolha "Pitch AI — Microfone Virtual" em Fonte de áudio no TikTok.`,
+      ts: Date.now(),
+    });
   }
   /** Corta a fala onde quer que ela esteja: <audio> local e microfone virtual. */
   function stopSpeaking() {
@@ -2588,6 +2798,7 @@
           body: JSON.stringify({ text, voice: voice.id, speed: voice.speed }),
           signal: options.signal,
         });
+        noteApiRefusal(r);
         if (!r.ok) {
           const detail = await r.text().catch(() => "");
           throw new Error(`voz ${r.status}${detail ? ` · ${detail.slice(0, 100)}` : ""}`);
@@ -2822,6 +3033,7 @@
         }),
         signal,
       });
+      noteApiRefusal(response);
       if (!response.ok) throw new Error(`banco ${response.status}`);
       const data = await response.json();
       const lines = sanitizePitchLines(data.pitches, settings.variants);
@@ -3279,6 +3491,7 @@
           whitelist: cfg.filtros?.whitelist || [],
         }),
       });
+      noteApiRefusal(r);
       if (r.ok) {
         const data = await r.json();
         if (data.remaining !== undefined) {
@@ -5698,10 +5911,11 @@
         const payload = await buildMappingPayload();
         const r = await fetch(`${API_BASE}/api/public/live/mapping`, {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: { "Content-Type": "application/json", ...(await installHeaders()) },
           body: JSON.stringify({ action: "push", token: cfg.syncToken, payload }),
         });
         const data = await r.json().catch(() => null);
+        noteApiRefusal(r, data);
         if (!r.ok) throw new Error(data?.error || "falhou ao enviar");
         const n = Object.keys(payload.targets).length + Object.keys(payload.regions).length;
         return `Mapeamento enviado (${n} apontamento(s))`;
@@ -5711,10 +5925,11 @@
         if (!cfg?.syncToken) throw new Error("configure o token de sincronização primeiro");
         const r = await fetch(`${API_BASE}/api/public/live/mapping`, {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: { "Content-Type": "application/json", ...(await installHeaders()) },
           body: JSON.stringify({ action: "pull", token: cfg.syncToken, host: location.host }),
         });
         const data = await r.json().catch(() => null);
+        noteApiRefusal(r, data);
         if (!r.ok) throw new Error(data?.error || "falhou ao baixar");
         const payload = data?.payload;
         if (!payload) throw new Error("nenhum mapeamento salvo para este site");
@@ -6027,11 +6242,15 @@
       const on = !listenBtn.classList.contains("primary");
       applyListenUi(on); // feedback imediato
       // O botão é o interruptor mestre da IA: liga/desliga a leitura do chat
-      // SEM mexer nos canais. Voz e texto continuam sendo escolhidos no painel.
-      // Se nada estiver ativo ao ligar, assume o canal de TEXTO (nunca força voz).
+      // SEM mexer nos canais que o vendedor já escolheu no painel. Só há uma
+      // exceção: ligar o olho sem NENHUM canal ativo não pode virar uma IA muda
+      // e sem chat, então nesse caso os dois nascem ligados — voz e texto.
       await updateConfig((fresh) => {
         fresh.iaLigada = on;
-        if (on && !fresh.respostasIA && !fresh.responderNoChat) fresh.responderNoChat = true;
+        if (on && !fresh.respostasIA && !fresh.responderNoChat) {
+          fresh.respostasIA = true;
+          fresh.responderNoChat = true;
+        }
         return fresh;
       }).catch(() => null);
       if (on) {

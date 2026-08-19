@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
-import { fetchRanking } from "@/lib/live/admin";
+import { fetchPublicRanking } from "@/lib/live/admin";
 import { SitePageFrame } from "@/components/live/SitePageFrame";
 
 export const Route = createFileRoute("/quentes")({
@@ -28,7 +28,7 @@ function brl(n: number) {
 function QuentesPage() {
   const { data: items = [], isLoading } = useQuery({
     queryKey: ["ranking", "public"],
-    queryFn: fetchRanking,
+    queryFn: fetchPublicRanking,
   });
 
   return (
