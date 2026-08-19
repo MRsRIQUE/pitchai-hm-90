@@ -4783,19 +4783,66 @@
    */
   async function getPinnedProduct(cfg) {
     try {
+      const produtos = cfg?.produtos || [];
+      // Rota 1: cards da vitrine (visão do espectador) pelo parser genérico.
       const cards = await productCards();
       const pinned = cards.find((card) => isPinnedCard(card));
-      if (!pinned) return null;
-      const parsed = parseProductCard(pinned);
-      if (!parsed) return null;
-      const produtos = cfg?.produtos || [];
-      const byPid = parsed.pid
-        ? produtos.find((p) => String(p.pid || "") === String(parsed.pid))
-        : null;
-      if (byPid) return byPid;
-      const key = normKey(parsed.name || "");
-      const byName = key ? produtos.find((p) => normKey(p?.name || "") === key) : null;
-      return byName || parsed;
+      if (pinned) {
+        const parsed = parseProductCard(pinned);
+        if (parsed) {
+          const byPid = parsed.pid
+            ? produtos.find((p) => String(p.pid || "") === String(parsed.pid))
+            : null;
+          if (byPid) return byPid;
+          const key = normKey(parsed.name || "");
+          const byName = key ? produtos.find((p) => normKey(p?.name || "") === key) : null;
+          if (byName) return byName;
+        }
+      }
+      // Rota 2 (Console de LIVE): a linha fixada carrega o botão "Desafixar".
+      // O parser genérico rejeita essas linhas, então busca direto pelo botão.
+      const roots = DM()?.util?.allRoots?.() || [document];
+      for (const root of roots) {
+        let btn = null;
+        try {
+          btn = root.querySelector("button.pc_pin_product_unpin");
+        } catch {}
+        if (!btn) continue;
+        const row =
+          btn.closest("div.rounded-4.mb-8") || btn.closest("div[class*='rounded']") || btn;
+        // Nome completo = maior <span> da linha (o título guarda o texto inteiro).
+        let rowName = "";
+        try {
+          for (const span of row.querySelectorAll("span")) {
+            const t = (span.textContent || "").trim();
+            if (t.length > rowName.length && t.length <= 200) rowName = t;
+          }
+        } catch {}
+        const key = normKey(rowName);
+        if (!key) continue;
+        // Casa com o catálogo: igualdade/contenção e, senão, maior sobreposição
+        // de palavras — nunca o primeiro da lista por padrão.
+        let best = null;
+        let bestScore = 0;
+        for (const p of produtos) {
+          const pn = normKey(p?.name || "");
+          if (!pn) continue;
+          let score = 0;
+          if (pn === key || pn.includes(key) || key.includes(pn)) score = 100;
+          else {
+            const words = key.split(" ").filter((w) => w.length > 3);
+            const hits = words.filter((w) => pn.includes(w)).length;
+            score = words.length ? hits / words.length : 0;
+          }
+          if (score > bestScore) {
+            bestScore = score;
+            best = p;
+          }
+        }
+        if (best && bestScore >= 0.6) return best;
+        return { name: rowName, price: "", description: "", pid: "" };
+      }
+      return null;
     } catch {
       return null;
     }
