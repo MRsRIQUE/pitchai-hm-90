@@ -4758,7 +4758,9 @@
   async function runAutoPin(cfg, af) {
     const min = Math.max(5, Number(af.minSec) || 20);
     const max = Math.max(min, Number(af.maxSec) || 60);
-    auto.nextPinAt = Date.now() + (min + Math.random() * (max - min)) * 1000;
+    // Bloqueia ticks durante o ciclo (que inclui a espera da animação de
+    // desafixar); o próximo horário é marcado ao FINAL do ciclo.
+    auto.nextPinAt = Number.MAX_SAFE_INTEGER;
 
     let produtos = cfg.produtos || [];
     // A seleção manual de produtos tem prioridade sobre o termo de busca.
@@ -4798,7 +4800,10 @@
         if (!unpinned.ok) {
           res = unpinned;
         } else {
-          if (unpinned.changed) await sleep(450);
+          // Ao desfixar, o TikTok reordena a lista com animação. Clicar antes
+          // dela assentar pega o card errado (ou o que estava se movendo).
+          // Espera fixa de 10s entre desafixar e fixar o próximo.
+          if (unpinned.changed) await sleep(10000);
           res = await pinProduct(alvo);
         }
       } catch (e) {
@@ -4823,6 +4828,8 @@
           : `Destaque só no roteiro (${res.reason}): ${alvo.name}`,
       ts: Date.now(),
     });
+    // Intervalo conta do FIM do ciclo (a espera da animação já consumiu tempo).
+    auto.nextPinAt = Date.now() + (min + Math.random() * (max - min)) * 1000;
     return res;
   }
 
