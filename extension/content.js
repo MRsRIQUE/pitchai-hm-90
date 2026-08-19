@@ -554,7 +554,7 @@
     const limit = Number(extSecurity.tokenLimit) || 0;
     const remaining = Number(extSecurity.tokenRemaining) || 0;
     const pct = limit > 0 ? remaining / limit : 1;
-    const shouldWarn = limit > 0 && pct > 0 && pct <= 0.10;
+    const shouldWarn = limit > 0 && pct > 0 && pct <= 0.1;
     const shouldReset = limit > 0 && pct > 0.15;
 
     if (shouldReset) {
@@ -583,7 +583,8 @@
       }
       const text = document.getElementById("pitchai-low-token-text");
       const pctDisplay = Math.round(pct * 100);
-      if (text) text.textContent = `⚠️ Restam ${pctDisplay}% dos tokens de IA — faça upgrade no site`;
+      if (text)
+        text.textContent = `⚠️ Restam ${pctDisplay}% dos tokens de IA — faça upgrade no site`;
       const btn = document.getElementById("pitchai-low-token-action");
       if (btn) {
         btn.onclick = () => {

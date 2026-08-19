@@ -17,7 +17,11 @@
   function saveTokenStatus(tokenRemaining, tokenLimit, plan) {
     try {
       chrome.storage.local.set({
-        [TOKEN_STATUS_KEY]: { tokenRemaining: Number(tokenRemaining) || 0, tokenLimit: Number(tokenLimit) || 0, plan: plan || "free" },
+        [TOKEN_STATUS_KEY]: {
+          tokenRemaining: Number(tokenRemaining) || 0,
+          tokenLimit: Number(tokenLimit) || 0,
+          plan: plan || "free",
+        },
       });
     } catch {}
   }
@@ -25,7 +29,9 @@
     return new Promise((resolve) => {
       try {
         chrome.storage.local.get([TOKEN_STATUS_KEY], (r) => resolve(r?.[TOKEN_STATUS_KEY] || null));
-      } catch { resolve(null); }
+      } catch {
+        resolve(null);
+      }
     });
   }
 
@@ -1781,7 +1787,9 @@
         const link = document.createElement("span");
         link.className = "pnl-token-meter-action";
         link.textContent = "Ver planos ↗";
-        link.addEventListener("click", () => window.open(new URL("/planos", API_BASE).href, "_blank"));
+        link.addEventListener("click", () =>
+          window.open(new URL("/planos", API_BASE).href, "_blank"),
+        );
         text.appendChild(link);
       } else {
         text.textContent = `${remaining.toLocaleString("pt-BR")} de ${limit.toLocaleString("pt-BR")} tokens (${Math.round(pct)}%)`;
@@ -1797,7 +1805,9 @@
     } catch {}
 
     // Renderiza o medidor de tokens ao carregar (estado salvo de sessões anteriores).
-    (async () => { renderTokenMeter(await loadTokenStatus()); })();
+    (async () => {
+      renderTokenMeter(await loadTokenStatus());
+    })();
 
     // Primeiro uso: animação em tela cheia e tutorial navegável.
     const ONBOARD_KEY = "pitchai.onboarded.v2";
