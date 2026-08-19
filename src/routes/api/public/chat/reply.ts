@@ -1,7 +1,11 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { guardApiRequest, recordAiUsageTokens } from "@/lib/live/api-auth.server";
 import { corsHeaders } from "@/lib/live/cors.server";
-import { isNonEmptyText, validateContentForPublish } from "@/lib/live/validation.server";
+import {
+  isNonEmptyText,
+  sanitizeReplyForPublish,
+  validateContentForPublish,
+} from "@/lib/live/validation.server";
 
 type ReplyBody = {
   message?: string;
@@ -10,6 +14,8 @@ type ReplyBody = {
   history?: { role: "user" | "assistant"; content: string }[];
   blacklist?: string[];
   whitelist?: string[];
+  /** Resposta curta: instrução de no máximo 20 palavras em uma única frase. */
+  brief?: boolean;
 };
 
 // Marcador estruturado — o modelo devolve isto sozinho quando decide ignorar.
@@ -60,6 +66,10 @@ async function callModel(
   const config: Record<string, unknown> = { systemInstruction: system };
   if (options?.highThinking || modelName === AI_MODELS.complex) {
     config.thinkingConfig = { thinkingLevel: ThinkingLevel.HIGH };
+  } else {
+    // Respostas breves de chat: criatividade moderada com teto curto de saída.
+    // (Modelos com thinkingConfig não aceitam temperature/maxOutputTokens.)
+    config.generationConfig = { temperature: 0.8, maxOutputTokens: 120 };
   }
 
   let response;
@@ -162,6 +172,9 @@ export const Route = createFileRoute("/api/public/chat/reply")({
           .slice(0, 40)
           .trim();
 
+        // Modo breve: resposta de no máximo 20 palavras, uma frase só.
+        const brief = body.brief === true;
+
         const filterRules = [
           "",
           "REGRAS DE RESPOSTA (obrigatórias):",
@@ -171,6 +184,9 @@ export const Route = createFileRoute("/api/public/chat/reply")({
           "- Se não souber o dado exato (frete, cupom, prazo), responda mesmo assim de forma honesta e curta, orientando a conferir no carrinho/checkout — nunca invente valor.",
           `- Para ignorar, responda EXATAMENTE e somente: ${IGNORE_TAG}`,
           "- Responda em 1 frase curta e natural, como se estivesse falando ao vivo.",
+          brief
+            ? "- Esta é uma resposta BREVE: use NO MÁXIMO 20 palavras, em uma única frase."
+            : "",
           author
             ? `- Comece a resposta cumprimentando pelo primeiro nome: "${author.split(/\s+/)[0]}, ...".`
             : "- Comece a resposta chamando o espectador de forma amigável (ex: 'oi, ...').",
@@ -235,7 +251,9 @@ export const Route = createFileRoute("/api/public/chat/reply")({
 
         const ignore = raw.replace(/[\s"'.]/g, "").toUpperCase() === "[[IGNORAR]]";
         // Se o marcador aparecer no meio de um texto, limpa e mantém a resposta.
-        const rawReply = ignore ? "" : raw.split(IGNORE_TAG).join("");
+        // Sanitização server-side: emojis, asteriscos e quebras duplicadas saem
+        // antes de qualquer validação/publicação.
+        const rawReply = ignore ? "" : sanitizeReplyForPublish(raw.split(IGNORE_TAG).join(""));
         const validation = validateContentForPublish(rawReply);
 
         if (!ignore && !validation.valid) {

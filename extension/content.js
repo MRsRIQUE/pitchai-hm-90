@@ -2299,6 +2299,11 @@
               `${i + 1}. ${p.name}${p.price ? " — " + p.price : ""}${p.active ? " [ATIVO]" : ""}${p.description ? " · " + p.description : ""}`,
           )
           .join("\n");
+    let espectadores = "";
+    try {
+      const analytics = RG()?.readAnalytics?.();
+      if (analytics?.espectadores) espectadores = analytics.espectadores;
+    } catch {}
     return [
       "Você é a IA vendedora da live no TikTok Shop.",
       ctx.brandName && `Marca: ${ctx.brandName}.`,
@@ -2307,6 +2312,7 @@
       `Tom: ${ctx.tone || "empolgado e amigável"}.`,
       ctx.extraContext && `Contexto: ${ctx.extraContext}`,
       `Regras: ${ctx.rules || "Nunca invente preços ou promoções."}`,
+      espectadores ? `Publico atual na live: ${espectadores} espectadores.` : "",
       catalog ? `Catálogo:\n${catalog}` : "",
       destaque
         ? `Produto FIXADO em destaque: "${destaque.name}". Fale APENAS deste produto — não divulgue outros.`
@@ -2978,8 +2984,9 @@
     // A cada 4 ciclos troca o pitch por um CTA de engajamento (segue, like,
     // carrinho) — variado e sem consumir tokens da IA.
     ctaState.count++;
+    const ctaEnabled = cfg.cta?.enabled !== false;
     const line =
-      ctaState.count % 4 === 0
+      ctaEnabled && ctaState.count % 4 === 0
         ? CTA_LINES[Math.floor(Math.random() * CTA_LINES.length)]
         : lines[chatState.pitchIdx % lines.length];
     chatState.pitchIdx++;

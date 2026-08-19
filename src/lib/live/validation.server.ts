@@ -45,3 +45,19 @@ export function validateContentForPublish(rawText: unknown): {
     content: trimmed,
   };
 }
+
+/**
+ * Limpeza server-side da resposta gerada antes de devolver ao cliente:
+ * remove emojis (incluindo sequências ZWJ e modificadores de tom de pele),
+ * asteriscos de markdown e quebras de linha duplicadas. Não altera o restante
+ * do texto além do trim. Não-string vira "".
+ */
+export function sanitizeReplyForPublish(text: unknown): string {
+  if (typeof text !== "string") return "";
+  return text
+    .replace(/[\p{Extended_Pictographic}\u200D\uFE0F\p{Emoji_Modifier}]/gu, "")
+    .replace(/\*/g, "")
+    .replace(/\r\n/g, "\n")
+    .replace(/\n{2,}/g, "\n")
+    .trim();
+}

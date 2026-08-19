@@ -212,6 +212,8 @@
     violacao: true,
     autoMod: true,
     notificacoesVenda: true,
+    saudacoes: { enabled: true, minIntervalSec: 60 },
+    cta: { enabled: true },
     autoFixar: { enabled: false, query: "", minSec: 20, maxSec: 60, ids: [], names: [] },
     encerrarTempo: { enabled: false, minutes: 120 },
     agendar: { enabled: false, at: "" },

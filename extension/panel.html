@@ -295,6 +295,53 @@
             </div>
           </section>
 
+          <!-- Saudações e engajamento -->
+          <section class="pnl-card">
+            <div class="pnl-card-header">
+              <div class="pnl-card-title">
+                <span class="pnl-card-icon">👋</span>
+                <div>
+                  <h3>Saudações e engajamento</h3>
+                  <p>Cumprimente quem entra e incentive likes, follows e carrinho</p>
+                </div>
+              </div>
+            </div>
+
+            <div class="pnl-list">
+              <div class="pnl-row">
+                <div>
+                  <h3>Cumprimentar quem entra na live (voz)</h3>
+                  <p>A IA diz o nome de quem entra e dá boas-vindas automaticamente por voz.</p>
+                </div>
+                <button class="pnl-toggle" data-key="saudacoes.enabled"></button>
+              </div>
+
+              <div class="pnl-row">
+                <div>
+                  <h3>Intervalo mínimo entre saudações (s)</h3>
+                  <p>Evita cumprimentar a mesma pessoa varias vezes seguidas.</p>
+                  <div class="pnl-inline">
+                    <label
+                      >Mín (s)<input
+                        type="number"
+                        min="30"
+                        max="600"
+                        data-key="saudacoes.minIntervalSec"
+                    /></label>
+                  </div>
+                </div>
+              </div>
+
+              <div class="pnl-row">
+                <div>
+                  <h3>Frases de engajamento (follow, like, carrinho)</h3>
+                  <p>A IA incentiva o espectador a seguir, curtir ou abrir o carrinho.</p>
+                </div>
+                <button class="pnl-toggle" data-key="cta.enabled"></button>
+              </div>
+            </div>
+          </section>
+
           <!-- Proteções e Escudo Anti-Ban -->
           <section class="pnl-card">
             <div class="pnl-card-header">
