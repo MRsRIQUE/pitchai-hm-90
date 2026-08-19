@@ -4401,10 +4401,10 @@
     if (!list && set.size < 2) {
       const roots = DM()?.util?.allRoots?.() || [document];
       [
-      '[data-tid*="product_item"]',
-      '[data-e2e*="product-item"]',
-      '[data-pin-performance-source="product_card"]',
-      '[class*="ProductItem" i]',
+        '[data-tid*="product_item"]',
+        '[data-e2e*="product-item"]',
+        '[data-pin-performance-source="product_card"]',
+        '[class*="ProductItem" i]',
         '[class*="product-item" i]',
         '[class*="GoodsItem" i]',
       ].forEach((sel) => {
