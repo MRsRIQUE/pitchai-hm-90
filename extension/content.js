@@ -1922,6 +1922,10 @@
       '[class*="GoodsItem" i]',
       '[class*="goods-item" i]',
       '[class*="ShopProduct" i]',
+      // Console de LIVE (product dashboard): a âncora estável é o botão de
+      // fixar do card; o walk ancestral sobe até a linha-raiz (div.rounded-4.mb-8).
+      'button[data-pin-performance-source="product_card"]',
+      "div.rounded-4.mb-8",
       // Assinatura estável observada no Gerenciador de LIVE atual. O botão
       // `pc_pin_product_list_pin` pertence ao cabeçalho e não identifica card.
       "button.pc_pin_product_pin",
@@ -4273,6 +4277,18 @@
       const exact = card.querySelector("button.pc_pin_product_pin");
       if (exact && DM()?.util?.isVisible?.(exact)) return exact;
     } catch {}
+    // Console de LIVE: o atributo de tracking é constante nos dois estados;
+    // serve como pin quando a classe de estado ainda não é a de desafixar.
+    try {
+      const tracked = card.querySelector('button[data-pin-performance-source="product_card"]');
+      if (
+        tracked &&
+        !tracked.matches?.(".pc_pin_product_unpin") &&
+        !tracked.matches?.(".pc_pin_product_list_pin") &&
+        DM()?.util?.isVisible?.(tracked)
+      )
+        return tracked;
+    } catch {}
     let btns = [];
     try {
       btns = Array.from(
@@ -4309,6 +4325,11 @@
   }
 
   function findUnpinButton(card) {
+    // Console de LIVE: classe de estado do próprio botão (Desafixar).
+    try {
+      const exact = card.querySelector("button.pc_pin_product_unpin");
+      if (exact && DM()?.util?.isVisible?.(exact)) return exact;
+    } catch {}
     let buttons = [];
     try {
       buttons = Array.from(
@@ -4380,9 +4401,10 @@
     if (!list && set.size < 2) {
       const roots = DM()?.util?.allRoots?.() || [document];
       [
-        '[data-tid*="product_item"]',
-        '[data-e2e*="product-item"]',
-        '[class*="ProductItem" i]',
+      '[data-tid*="product_item"]',
+      '[data-e2e*="product-item"]',
+      '[data-pin-performance-source="product_card"]',
+      '[class*="ProductItem" i]',
         '[class*="product-item" i]',
         '[class*="GoodsItem" i]',
       ].forEach((sel) => {
