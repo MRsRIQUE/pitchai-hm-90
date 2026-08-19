@@ -218,3 +218,48 @@ export function hasActiveCompedAccess(comped?: CompedAccessRecord | null): boole
   const timestamp = Date.parse(until);
   return Number.isFinite(timestamp) && timestamp > Date.now();
 }
+
+// ---------------------------------------------------------------------------
+// Identificação e ordenação dos planos comerciais
+// ---------------------------------------------------------------------------
+
+/**
+ * Converte qualquer identificador de plano (inclusive aliases e legado de
+ * homologação) no price_id canônico do catálogo (`PITCHAI_PLANS`), ou null
+ * quando não corresponde a nenhum plano comercial.
+ */
+export function canonicalPlanId(plan?: string | null): string | null {
+  const value = String(plan || "").trim().toLowerCase();
+  if (!value || value === "free" || value === "gratuito") return null;
+  const aliases: Record<string, string> = {
+    pitchai_mensal: "pitchai_mensal",
+    mensal: "pitchai_mensal",
+    pro_mensal: "pitchai_mensal",
+    starter: "pitchai_mensal",
+    pitchai_pro_monthly: "pitchai_mensal",
+    pitchai_trimestral: "pitchai_trimestral",
+    trimestral: "pitchai_trimestral",
+    pitchai_trimestral_teste_1real: "pitchai_trimestral",
+    pro: "pitchai_trimestral",
+    studio: "pitchai_trimestral",
+    pitchai_anual: "pitchai_anual",
+    anual: "pitchai_anual",
+    pitchai_pro_yearly: "pitchai_anual",
+    pitchai_max_monthly: "pitchai_anual",
+    pitchai_max_yearly: "pitchai_anual",
+    max: "pitchai_anual",
+  };
+  return (
+    aliases[value] ??
+    PITCHAI_PLANS.find((p) => p.priceId === value)?.priceId ??
+    null
+  );
+}
+
+/**
+ * Posição do plano no catálogo comercial derivada da ordem de `PITCHAI_PLANS`
+ * (mensal < trimestral < anual). -1 quando o price_id não está no catálogo.
+ */
+export function planRank(priceId?: string | null): number {
+  return PITCHAI_PLANS.findIndex((p) => p.priceId === priceId);
+}

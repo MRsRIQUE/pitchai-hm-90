@@ -11,6 +11,7 @@ import {
   PlanTier,
   type CompedAccessRecord,
 } from "@/lib/live/plans";
+import { resolvePlanQuota } from "@/lib/live/quotas";
 
 export interface UserSubscriptionData {
   plan: string | null;
@@ -40,6 +41,20 @@ export interface UseUserSubscriptionResult {
   planName: string;
   /** Data de validade da cortesia (camelCase do comped_access ou snake_case do legado) */
   compedGrantedUntil: string | null;
+  /** Identificador bruto do plano concedido (pago ou cortesia), ex.: "pitchai_trimestral" */
+  plan: string | null;
+  /** Franquia mensal de tokens do plano atual (0 sem acesso) */
+  tokenLimit: number;
+  /** Tokens consumidos no mês corrente */
+  tokenUsed: number;
+  /** Tokens restantes no mês corrente */
+  tokenRemaining: number;
+  /** Percentual restante da franquia mensal (0-100, arredondado) */
+  tokenRemainingPct: number;
+  /** Fim do período pago atual (current_period_end ou granted_until da assinatura) */
+  planExpiresAt: string | null;
+  /** Dias até o fim do acesso (assinatura paga ou cortesia); null sem data válida */
+  daysUntilExpiry: number | null;
   /** Se o recurso de voz e áudio da IA em tempo real está liberado */
   allowAudio: boolean;
   /** Se as ferramentas de chat da IA estão ativas */
@@ -65,6 +80,7 @@ export function useUserSubscription(): UseUserSubscriptionResult {
   const [compedAccess, setCompedAccess] = useState<CompedAccessRecord | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<Error | null>(null);
+  const [tokenUsed, setTokenUsed] = useState<number>(0);
 
   // Busca dados de assinatura no Firestore para um determinado user_id
   const fetchSubscription = useCallback(async (uid: string) => {
@@ -74,9 +90,12 @@ export function useUserSubscription(): UseUserSubscriptionResult {
       // Path correto: users/{uid}/subscription/current (subdoc com ID "current").
       // Antes era doc(db,"users",uid,"subscription") que aponta para collection
       // (sem docID) — getDoc sempre retornava null.
-      const [snap, compedSnap] = await Promise.all([
+      // O mês do token_usage segue o relógio UTC do backend (api-auth.server.ts).
+      const month = new Date().toISOString().slice(0, 7);
+      const [snap, compedSnap, usageSnap] = await Promise.all([
         getDoc(doc(db, "users", uid, "subscription", "current")),
         getDoc(doc(db, "comped_access", uid)),
+        getDoc(doc(db, "users", uid, "token_usage", month)),
       ]);
       if (snap.exists()) {
         const d = snap.data() as Record<string, unknown>;
@@ -92,6 +111,14 @@ export function useUserSubscription(): UseUserSubscriptionResult {
         setSubscription(null);
       }
       setCompedAccess(compedSnap.exists() ? (compedSnap.data() as CompedAccessRecord) : null);
+      if (usageSnap.exists()) {
+        const u = usageSnap.data() as Record<string, unknown>;
+        const input = Math.max(0, Number(u.tokensInput) || 0);
+        const output = Math.max(0, Number(u.tokensOutput) || 0);
+        setTokenUsed(input + output);
+      } else {
+        setTokenUsed(0);
+      }
       // DEBUG
       console.debug(
         "[useUserSubscription] compedAccess raw:",
@@ -117,6 +144,7 @@ export function useUserSubscription(): UseUserSubscriptionResult {
       } else {
         setSubscription(null);
         setCompedAccess(null);
+        setTokenUsed(0);
         setLoading(false);
       }
     });
@@ -219,6 +247,27 @@ export function useUserSubscription(): UseUserSubscriptionResult {
     ? (compedUntil(compedAccess) ?? subscription?.granted_until ?? null)
     : null;
 
+  // Franquia mensal de tokens: limite vem do plano, consumo do doc de uso do
+  // mês corrente (mesma fonte que o backend usa para bloquear a extensão).
+  const tokenLimit = isPaidActive ? resolvePlanQuota(rawPlan).monthlyTokenLimit : 0;
+  const tokenUsedCount = isPaidActive ? tokenUsed : 0;
+  const tokenRemaining = Math.max(0, tokenLimit - tokenUsedCount);
+  const tokenRemainingPct =
+    tokenLimit > 0 ? Math.max(0, Math.round((tokenRemaining / tokenLimit) * 100)) : 0;
+
+  // Fim do acesso: assinatura paga usa current_period_end/granted_until do
+  // doc de assinatura; cortesia já tem compedGrantedUntil.
+  const planExpiresAt = paidSubscriptionActive
+    ? (subscription?.current_period_end ?? subscription?.granted_until ?? null)
+    : null;
+  const accessExpiresAt = isComped ? compedGrantedUntil : planExpiresAt;
+  const daysUntilExpiry = (() => {
+    if (!accessExpiresAt) return null;
+    const timestamp = Date.parse(accessExpiresAt);
+    if (!Number.isFinite(timestamp)) return null;
+    return Math.ceil((timestamp - Date.now()) / 86_400_000);
+  })();
+
   // Liberação de Áudio/Voz da IA:
   // - Liberado se for Cortesia (comped) ou se o plano do usuário aceitar áudio (Trimestral, Anual ou Max)
   const isAudioPlan =
@@ -241,6 +290,13 @@ export function useUserSubscription(): UseUserSubscriptionResult {
     source,
     planName,
     compedGrantedUntil,
+    plan: rawPlan,
+    tokenLimit,
+    tokenUsed: tokenUsedCount,
+    tokenRemaining,
+    tokenRemainingPct,
+    planExpiresAt,
+    daysUntilExpiry,
     allowAudio,
     allowChat,
     allowLiveAssist,
