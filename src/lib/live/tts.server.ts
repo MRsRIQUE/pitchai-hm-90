@@ -339,7 +339,9 @@ async function synthesizeWithGemini(
       const detail = `model=${model}: ${errorText(error)}`;
 
       if (isQuotaError(error)) {
-        return {
+        // Flash e Pro têm cotas independentes no projeto: esgotou uma, tenta a
+        // próxima da cascata antes de devolver 429 para a extensão.
+        lastFailure = {
           ok: false,
           status: 429,
           code: "quota_exceeded",
@@ -347,6 +349,7 @@ async function synthesizeWithGemini(
             "A cota da API de voz do Google foi excedida. Aguarde alguns minutos ou revise o limite do projeto no Google AI Studio.",
           detail,
         };
+        continue;
       }
 
       if (isAuthError(error)) {

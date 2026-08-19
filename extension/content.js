@@ -6346,11 +6346,18 @@
       el("span", { class: "pitchai-control-label" }, "Proteção"),
       master,
     );
-    protectionLabel.addEventListener("click", () => toggleProtection().catch(() => {}));
+    // O label envolve o botão `master`, que já tem o próprio handler; clicar
+    // no texto ao lado só repete o clique no botão. (Antes chamava uma
+    // `toggleProtection` que nunca existiu — ReferenceError no console.)
+    protectionLabel.addEventListener("click", (event) => {
+      if (event.target === master || master.contains(event.target)) return;
+      master.click();
+    });
     protectionLabel.addEventListener("keydown", (event) => {
       if (event.key !== "Enter" && event.key !== " ") return;
       event.preventDefault();
-      toggleProtection().catch(() => {});
+      if (event.target === master) return;
+      master.click();
     });
     const controlsGroup = el(
       "div",
