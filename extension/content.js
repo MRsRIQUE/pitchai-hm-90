@@ -433,7 +433,22 @@
     tokenLimit: 0,
     upgrade: null,
     bannerEl: null,
+    lowTokenWarned: false,
   };
+
+  const TOKEN_USAGE_STORAGE_KEY = "pitchai.token.status";
+
+  function publishTokenUsage() {
+    try {
+      chrome.storage.local.set({
+        [TOKEN_USAGE_STORAGE_KEY]: {
+          tokenRemaining: Number(extSecurity.tokenRemaining) || 0,
+          tokenLimit: Number(extSecurity.tokenLimit) || 0,
+          plan: extSecurity.plan || "free",
+        },
+      });
+    } catch {}
+  }
 
   async function checkExtensionLock(syncToken) {
     extSecurity.syncToken = String(syncToken || "");
@@ -465,6 +480,7 @@
         extSecurity.tokenLimit = data.tokenLimit ?? 0;
         extSecurity.upgrade = data.upgrade || null;
         updateLockUI();
+        publishTokenUsage();
         return true;
       } else {
         extSecurity.isLocked = true;
@@ -479,6 +495,7 @@
         extSecurity.tokenLimit = data.tokenLimit ?? 0;
         extSecurity.upgrade = data.upgrade || null;
         updateLockUI();
+        publishTokenUsage();
         return false;
       }
     } catch {
@@ -489,6 +506,7 @@
       extSecurity.message =
         "Não foi possível confirmar sua licença. Verifique a internet e tente novamente.";
       updateLockUI();
+      publishTokenUsage();
       return false;
     }
   }
@@ -530,6 +548,51 @@
       }
     } else if (banner) {
       banner.remove();
+    }
+
+    // Low token warning banner (10% threshold, reset at 15%)
+    const limit = Number(extSecurity.tokenLimit) || 0;
+    const remaining = Number(extSecurity.tokenRemaining) || 0;
+    const pct = limit > 0 ? remaining / limit : 1;
+    const shouldWarn = limit > 0 && pct > 0 && pct <= 0.10;
+    const shouldReset = limit > 0 && pct > 0.15;
+
+    if (shouldReset) {
+      extSecurity.lowTokenWarned = false;
+    }
+
+    let warnBanner = document.getElementById("pitchai-low-token-banner");
+    if (shouldWarn && !extSecurity.isLocked) {
+      if (!extSecurity.lowTokenWarned) {
+        extSecurity.lowTokenWarned = true;
+      }
+      if (!warnBanner) {
+        warnBanner = document.createElement("div");
+        warnBanner.id = "pitchai-low-token-banner";
+        warnBanner.style.cssText =
+          "position:fixed;top:0;left:0;right:0;z-index:9999998;background:#854d0e;color:#fef08a;padding:8px 16px;font-family:sans-serif;font-size:13px;font-weight:600;display:flex;align-items:center;justify-content:space-between;box-shadow:0 4px 12px rgba(0,0,0,0.4);border-bottom:2px solid #eab308;";
+        const text = document.createElement("span");
+        text.id = "pitchai-low-token-text";
+        const btn = document.createElement("button");
+        btn.id = "pitchai-low-token-action";
+        btn.textContent = "Ver planos ↗";
+        btn.style.cssText =
+          "background:#eab308;color:#000;border:none;padding:4px 12px;border-radius:4px;font-weight:700;cursor:pointer;";
+        warnBanner.append(text, btn);
+        document.body?.prepend(warnBanner);
+      }
+      const text = document.getElementById("pitchai-low-token-text");
+      const pctDisplay = Math.round(pct * 100);
+      if (text) text.textContent = `⚠️ Restam ${pctDisplay}% dos tokens de IA — faça upgrade no site`;
+      const btn = document.getElementById("pitchai-low-token-action");
+      if (btn) {
+        btn.onclick = () => {
+          const target = extSecurity.upgrade?.url || "/planos";
+          window.open(new URL(target, API_BASE).href, "_blank");
+        };
+      }
+    } else if (warnBanner) {
+      warnBanner.remove();
     }
   }
 
@@ -2836,6 +2899,7 @@
       }
       saveStoredPitchBanks();
       if (data.tokenRemaining !== undefined) extSecurity.tokenRemaining = data.tokenRemaining;
+      publishTokenUsage();
       activity.log({
         type: "pitch",
         text: `Banco econômico preparado: ${lines.length} variações para ${product.name}.`,
@@ -3288,6 +3352,7 @@
         extSecurity.tokenRemaining = data.tokenRemaining ?? extSecurity.tokenRemaining;
         extSecurity.tokenLimit = data.tokenLimit ?? extSecurity.tokenLimit;
         extSecurity.upgrade = data.upgrade || extSecurity.upgrade;
+        publishTokenUsage();
         if (data.ignore) {
           activity.markStatus(item.id, "ignored", data.reason || "off_topic");
           sessionEvent({ kind: "ignored" });
