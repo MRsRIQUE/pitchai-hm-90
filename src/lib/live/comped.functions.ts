@@ -1,6 +1,14 @@
 import { createServerFn } from "@tanstack/react-start";
 import { requireFirebaseAuth, type FirebaseAuthContext } from "@/lib/firebase-auth";
-import { getUserByEmail, isAdmin, fsQuery, fsSet } from "@/lib/firebase.server";
+import { fsQuery, isAdmin } from "@/lib/firebase.server";
+import { AdminError } from "@/lib/admin/errors";
+import {
+  grantComped,
+  revokeComped,
+  validateCompedUserId,
+  validateGrantCompedInput,
+  type GrantCompedValue,
+} from "@/lib/admin/comped";
 
 export type CompedAccess = {
   userId: string;
@@ -11,14 +19,17 @@ export type CompedAccess = {
   note: string | null;
 };
 
-async function assertAdmin(ctx: FirebaseAuthContext) {
-  if (
-    !(await isAdmin(ctx.userId, ctx.user?.email, {
+async function assertAdmin(ctx: FirebaseAuthContext): Promise<void> {
+  let admin = false;
+  try {
+    admin = await isAdmin(ctx.userId, ctx.user?.email, {
       mode: "server",
       userToken: ctx.firebaseToken,
-    }))
-  )
-    throw new Error("Forbidden");
+    });
+  } catch {
+    admin = false;
+  }
+  if (!admin) throw new AdminError(403, "Forbidden");
 }
 
 function adminFirestoreOptions(ctx: FirebaseAuthContext) {
@@ -46,43 +57,27 @@ export const listCompedAccess = createServerFn({ method: "POST" })
     }));
   });
 
-/* Concede acesso gratuito a um e-mail existente, por N dias. */
+/* Concede acesso gratuito a um e-mail existente, por N dias.
+ * Regras unificadas com /api/admin/courtesy (plans.ts é a fonte única). */
 export const grantCompedAccess = createServerFn({ method: "POST" })
   .middleware([requireFirebaseAuth])
-  .validator((data: { email: string; days: number; note?: string }) => {
-    const email = String(data.email ?? "")
-      .trim()
-      .toLowerCase();
-    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) throw new Error("E-mail inválido");
-    const days = Number(data.days);
-    if (!Number.isFinite(days) || days < 1 || days > 3650) throw new Error("Período inválido");
-    return { email, days, note: String(data.note ?? "").slice(0, 300) };
-  })
+  .validator(
+    (data: {
+      email?: unknown;
+      days?: unknown;
+      note?: unknown;
+      plan?: unknown;
+    }): GrantCompedValue => {
+      const validated = validateGrantCompedInput(data ?? {});
+      if (!validated.ok) throw new Error(validated.error);
+      return validated.value;
+    },
+  )
   .handler(async ({ data, context }): Promise<{ ok: true } | { error: string }> => {
     try {
       await assertAdmin(context);
-      const firestore = adminFirestoreOptions(context);
-
-      const user = await getUserByEmail(data.email, firestore);
-      if (!user) return { error: "Nenhuma conta encontrada com esse e-mail" };
-
-      const uid = user.id;
-      const until = new Date(Date.now() + data.days * 86400000).toISOString();
-      const now = new Date().toISOString();
-      await fsSet(
-        `comped_access/${uid}`,
-        {
-          email: data.email,
-          plan: "pitchai_trimestral",
-          status: "comped",
-          grantedUntil: until,
-          note: data.note || null,
-          grantedBy: context.userId,
-          grantedAt: now,
-          updatedAt: now,
-        },
-        firestore,
-      );
+      const result = await grantComped(data, context.userId, adminFirestoreOptions(context));
+      if (!result.ok) return { error: result.error };
       return { ok: true };
     } catch (error) {
       const detail = error instanceof Error ? error.message : String(error ?? "erro desconhecido");
@@ -96,27 +91,20 @@ export const grantCompedAccess = createServerFn({ method: "POST" })
 /* Revoga o acesso de cortesia de uma conta. */
 export const revokeCompedAccess = createServerFn({ method: "POST" })
   .middleware([requireFirebaseAuth])
-  .validator((data: { userId: string }) => {
-    const userId = String(data.userId ?? "").trim();
-    // Firebase Auth UIDs não são necessariamente UUIDs.
-    if (!/^[A-Za-z0-9_-]{6,128}$/.test(userId)) throw new Error("Conta inválida");
-    return { userId };
+  .validator((data: { userId: string }): { userId: string } => {
+    const check = validateCompedUserId(data?.userId);
+    if (!check.ok) throw new Error(check.error);
+    return { userId: check.userId };
   })
   .handler(async ({ data, context }): Promise<{ ok: true } | { error: string }> => {
     await assertAdmin(context);
     try {
-      const firestore = adminFirestoreOptions(context);
-      await fsSet(
-        `comped_access/${data.userId}`,
-        {
-          status: "revoked",
-          grantedUntil: new Date(0).toISOString(),
-          note: "revoked",
-          grantedBy: context.userId,
-          updatedAt: new Date().toISOString(),
-        },
-        firestore,
+      const result = await revokeComped(
+        data.userId,
+        context.userId,
+        adminFirestoreOptions(context),
       );
+      if (!result.ok) return { error: result.error };
     } catch (err) {
       return { error: err instanceof Error ? err.message : "revoke_failed" };
     }

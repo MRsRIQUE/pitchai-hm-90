@@ -303,6 +303,72 @@ p {
   box-shadow: 0 0 10px var(--warn);
 }
 
+/* ---------- Token Meter ---------- */
+.pnl-token-meter {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: 8px;
+  font-size: 11px;
+}
+.pnl-token-meter[hidden] {
+  display: none;
+}
+.pnl-token-meter-bar {
+  width: 80px;
+  height: 6px;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 999px;
+  overflow: hidden;
+  flex-shrink: 0;
+}
+.pnl-token-meter-fill {
+  height: 100%;
+  border-radius: inherit;
+  background: var(--ok);
+  transition: width 0.4s ease, background 0.4s ease;
+}
+.pnl-token-meter.warning .pnl-token-meter-fill {
+  background: var(--warn);
+}
+.pnl-token-meter.danger .pnl-token-meter-fill {
+  background: var(--danger);
+}
+.pnl-token-meter-text {
+  color: var(--muted);
+  white-space: nowrap;
+}
+.pnl-token-meter.warning .pnl-token-meter-text {
+  color: var(--warn);
+}
+.pnl-token-meter.danger .pnl-token-meter-text {
+  color: var(--danger);
+  font-weight: 600;
+}
+.pnl-token-meter.warning,
+.pnl-token-meter.danger {
+  background: var(--warn-soft);
+  border: 1px solid rgba(249, 115, 22, 0.3);
+  border-radius: 8px;
+  padding: 6px 10px;
+  margin-left: 0;
+  margin-top: 6px;
+}
+.pnl-token-meter.danger {
+  background: var(--danger-soft);
+  border-color: rgba(239, 68, 68, 0.3);
+}
+.pnl-token-meter-action {
+  color: var(--brand-2);
+  text-decoration: underline;
+  cursor: pointer;
+  font-weight: 600;
+  margin-left: 4px;
+}
+.pnl-token-meter-action:hover {
+  color: #fff;
+}
+
 /* ---------- Tabs Navigation ---------- */
 .pnl-tabs-nav {
   display: flex;

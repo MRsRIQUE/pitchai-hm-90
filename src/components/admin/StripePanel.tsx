@@ -10,19 +10,15 @@ function statusTone(status: string): "ok" | "warn" | undefined {
   return undefined;
 }
 
-export function StripePanel({
-  data,
-  loading,
-  error,
-  onRefresh,
-  refreshing,
-}: {
+export interface StripePanelProps {
   data?: StripeAdminSnapshot;
   loading: boolean;
   error: unknown;
   onRefresh: () => void;
   refreshing: boolean;
-}) {
+}
+
+export function StripePanel({ data, loading, error, onRefresh, refreshing }: StripePanelProps) {
   if (error) {
     return (
       <AdminCard title="Stripe" hint="Dados financeiros consultados diretamente no Stripe.">

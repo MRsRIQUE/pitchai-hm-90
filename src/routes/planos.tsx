@@ -6,7 +6,15 @@ import { getFirebaseAuth } from "@/lib/firebase";
 import { SitePageFrame } from "@/components/live/SitePageFrame";
 import { FlameWrap } from "@/components/ui/flame-wrap";
 import { useUserSubscription } from "@/hooks/useUserSubscription";
-import { PITCHAI_PLANS, PLAN_FEATURES, formatBRL, monthlyEquivalent } from "@/lib/live/plans";
+import { SubscriptionNotice } from "@/components/live/SubscriptionNotice";
+import {
+  PITCHAI_PLANS,
+  PLAN_FEATURES,
+  canonicalPlanId,
+  formatBRL,
+  monthlyEquivalent,
+  planRank,
+} from "@/lib/live/plans";
 import { formatTokenLimit, resolvePlanQuota } from "@/lib/live/quotas";
 
 export const Route = createFileRoute("/planos")({
@@ -52,7 +60,14 @@ const PLANO_SEM_VOZ = PITCHAI_PLANS.find((p) => !p.allowAudio);
 const PLANOS_COM_VOZ = PITCHAI_PLANS.filter((p) => p.allowAudio);
 
 function PlanosPage() {
-  const { isComped, compedGrantedUntil, userId, userEmail } = useUserSubscription();
+  const { isComped, compedGrantedUntil, userId, userEmail, plan, isPaidActive } =
+    useUserSubscription();
+
+  // Plano comercial ativo (pago ou cortesia) identificado no catálogo, com
+  // posição derivada da ordem de PITCHAI_PLANS: mensal < trimestral < anual.
+  const activePlanId = isPaidActive ? canonicalPlanId(plan) : null;
+  const activeRank = activePlanId === null ? -1 : planRank(activePlanId);
+  const isTopPlan = activeRank === PITCHAI_PLANS.length - 1;
 
   async function handleSignOut() {
     try {
@@ -66,6 +81,7 @@ function PlanosPage() {
   return (
     <SitePageFrame>
       <div className="wrap">
+        <SubscriptionNotice />
         <header className="sec-head">
           <div className="eyebrow">Planos</div>
           <h1>
@@ -115,9 +131,23 @@ function PlanosPage() {
           {PITCHAI_PLANS.map((p) => {
             const per = p.months === 1 ? "/mês" : p.months === 3 ? "/trimestre" : "/ano";
             const quota = resolvePlanQuota(p.priceId);
+            const rank = planRank(p.priceId);
+            const isCurrent = activePlanId === p.priceId;
+            const isLower = activeRank >= 0 && rank >= 0 && rank < activeRank;
+            const isUpgradeTarget = activeRank >= 0 && rank === activeRank + 1;
             const card = (
-              <div className={`plan${p.highlight ? " pop" : ""}${p.badge ? " has-badge" : ""}`}>
-                {p.badge && <span className="plan-badge">{p.badge}</span>}
+              <div
+                className={`plan${p.highlight ? " pop" : ""}${p.badge || isCurrent || isUpgradeTarget ? " has-badge" : ""}${isLower ? " is-lower" : ""}`}
+                style={isLower ? { opacity: 0.55, filter: "grayscale(0.75)" } : undefined}
+              >
+                {(p.badge || isCurrent || isUpgradeTarget) && (
+                  <span
+                    className="plan-badge"
+                    style={isCurrent || isUpgradeTarget ? { background: "var(--accent)" } : undefined}
+                  >
+                    {isCurrent ? "Assinado" : isUpgradeTarget ? "Faça upgrade" : p.badge}
+                  </span>
+                )}
                 <div className="plan-name">{p.name}</div>
                 <div className="plan-desc">
                   {p.months === 12
@@ -149,13 +179,31 @@ function PlanosPage() {
                   </span>
                 </div>
 
-                <Link
-                  to="/comprar"
-                  search={{ plan: p.priceId }}
-                  className={`btn ${p.highlight ? "btn-dark" : "btn-outline"}`}
-                >
-                  Assinar Plano {p.name}
-                </Link>
+                {isCurrent ? (
+                  <button
+                    type="button"
+                    className="btn btn-outline"
+                    disabled
+                    style={{ opacity: 0.55, cursor: "not-allowed" }}
+                  >
+                    Plano atual
+                  </button>
+                ) : isLower ? (
+                  <span className="plan-note">Incluído no seu plano atual</span>
+                ) : (
+                  <Link
+                    to="/comprar"
+                    search={{ plan: p.priceId }}
+                    className={`btn ${p.highlight ? "btn-dark" : "btn-outline"}`}
+                  >
+                    {isUpgradeTarget ? "Fazer upgrade" : `Assinar Plano ${p.name}`}
+                  </Link>
+                )}
+                {isCurrent && isTopPlan && (
+                  <p className="plan-note" style={{ marginBottom: 0, marginTop: 12, textAlign: "center" }}>
+                    <strong>Plano máximo</strong> — você já está no topo do Pitch AI.
+                  </p>
+                )}
 
                 <ul>
                   <li>

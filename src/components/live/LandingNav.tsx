@@ -1,6 +1,9 @@
 import { useEffect, useRef, useState } from "react";
 import { Link } from "@tanstack/react-router";
-import { ChevronDown } from "lucide-react";
+import { ChevronDown, LogOut } from "lucide-react";
+import { onAuthStateChanged } from "firebase/auth";
+import { getFirebaseAuth } from "@/lib/firebase";
+import { useLogout } from "@/lib/use-logout";
 import { PitchAiLogo } from "@/components/live/PitchAiLogo";
 
 /**
@@ -127,6 +130,11 @@ function Dropdown({ item, onNavigate }: { item: NavItem; onNavigate: () => void 
 
 export function LandingNav() {
   const [open, setOpen] = useState(false);
+  const { logout } = useLogout();
+  // Usuário logado não vê "Entrar" de novo: ganha atalho direto para o app
+  // e um botão de sair discreto ao lado.
+  const [signedIn, setSignedIn] = useState(false);
+  useEffect(() => onAuthStateChanged(getFirebaseAuth(), (user) => setSignedIn(!!user)), []);
 
   return (
     <header className="lp-nav">
@@ -148,19 +156,43 @@ export function LandingNav() {
         </nav>
 
         <div className="lp-nav-actions">
-          <Link to="/entrar" className="lp-nav-link lp-nav-signin">
-            Entrar
-          </Link>
+          {signedIn ? (
+            <>
+              <button
+                type="button"
+                className="lp-nav-link lp-nav-signin"
+                onClick={logout}
+                title="Sair da sua conta"
+                style={{ display: "inline-flex", alignItems: "center", gap: 6, cursor: "pointer" }}
+              >
+                Sair
+                <LogOut size={14} aria-hidden="true" />
+              </button>
+              <Link to="/app" className="lp-nav-cta">
+                <span className="lp-nav-cta-bg" aria-hidden="true" />
+                <span className="lp-nav-cta-label">Ir para o app</span>
+                <span className="lp-nav-cta-arrow">
+                  <ArrowDownRight />
+                </span>
+              </Link>
+            </>
+          ) : (
+            <>
+              <Link to="/entrar" className="lp-nav-link lp-nav-signin">
+                Entrar
+              </Link>
 
-          {/* CTA do template: bloco roxo atrás, pastilha clara por cima e o
+              {/* CTA do template: bloco roxo atrás, pastilha clara por cima e o
               quadrado da seta, que gira -45° no hover */}
-          <Link to="/app" className="lp-nav-cta">
-            <span className="lp-nav-cta-bg" aria-hidden="true" />
-            <span className="lp-nav-cta-label">Começar grátis</span>
-            <span className="lp-nav-cta-arrow">
-              <ArrowDownRight />
-            </span>
-          </Link>
+              <Link to="/app" className="lp-nav-cta">
+                <span className="lp-nav-cta-bg" aria-hidden="true" />
+                <span className="lp-nav-cta-label">Começar grátis</span>
+                <span className="lp-nav-cta-arrow">
+                  <ArrowDownRight />
+                </span>
+              </Link>
+            </>
+          )}
 
           <button
             type="button"
@@ -203,9 +235,35 @@ export function LandingNav() {
               )}
             </div>
           ))}
-          <Link to="/entrar" onClick={() => setOpen(false)}>
-            Entrar
-          </Link>
+          {signedIn ? (
+            <>
+              <Link to="/app" onClick={() => setOpen(false)}>
+                Ir para o app
+              </Link>
+              <button
+                type="button"
+                onClick={() => {
+                  setOpen(false);
+                  logout();
+                }}
+                style={{
+                  background: "none",
+                  border: "none",
+                  color: "inherit",
+                  font: "inherit",
+                  textAlign: "left",
+                  cursor: "pointer",
+                  padding: 0,
+                }}
+              >
+                Sair
+              </button>
+            </>
+          ) : (
+            <Link to="/entrar" onClick={() => setOpen(false)}>
+              Entrar
+            </Link>
+          )}
         </div>
       ) : null}
     </header>

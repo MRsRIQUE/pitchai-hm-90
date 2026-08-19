@@ -50,6 +50,28 @@
     }
   }
 
+  const TOKEN_STATUS_KEY = "pitchai.token.status";
+  function saveTokenStatus(tokenRemaining, tokenLimit, plan) {
+    try {
+      chrome.storage.local.set({
+        [TOKEN_STATUS_KEY]: {
+          tokenRemaining: Number(tokenRemaining) || 0,
+          tokenLimit: Number(tokenLimit) || 0,
+          plan: plan || "free",
+        },
+      });
+    } catch {}
+  }
+  function loadTokenStatus() {
+    return new Promise((resolve) => {
+      try {
+        chrome.storage.local.get([TOKEN_STATUS_KEY], (r) => resolve(r?.[TOKEN_STATUS_KEY] || null));
+      } catch {
+        resolve(null);
+      }
+    });
+  }
+
   async function signRequest(token, endpoint) {
     // O cabeçalho da instalação acompanha a assinatura, mas fica FORA dela.
     const install = await installHeaders();
@@ -216,7 +238,7 @@
     iaLigada: true,
     respostasIA: true,
     responderNoChat: false,
-    respostasIntervaloSec: 15,
+    respostasIntervaloSec: 8,
     revisarAntesDeEnviar: false,
     pitchBank: {
       enabled: true,
@@ -230,6 +252,8 @@
     violacao: true,
     autoMod: true,
     notificacoesVenda: true,
+    saudacoes: { enabled: true, minIntervalSec: 60 },
+    cta: { enabled: true },
     autoFixar: { enabled: false, query: "", minSec: 20, maxSec: 60, ids: [], names: [] },
     encerrarTempo: { enabled: false, minutes: 120 },
     agendar: { enabled: false, at: "" },
@@ -1303,7 +1327,15 @@
         clearInterval(tick);
         tick = setInterval(() => {
           elapsed++;
-          timeEl.textContent = fmt(elapsed);
+          // O cronômetro mostra o tempo da LIVE do TikTok (detectado pela
+          // barra no gerenciador), não o tempo do vídeo — o vídeo pode ser
+          // trocado/reiniciado no meio da transmissão.
+          const st = lastLiveState;
+          if (st?.active && st.startedAt) {
+            timeEl.textContent = fmt(Math.max(0, Math.floor((Date.now() - st.startedAt) / 1000)));
+          } else {
+            timeEl.textContent = fmt(elapsed);
+          }
         }, 1000);
         info.textContent = status.message || "Fonte virtual ativa no TikTok";
         renderDiag(status);
@@ -1506,7 +1538,12 @@
     setInterval(pollMap, 4000);
 
     const liveDetectionEl = document.getElementById("pnl-live-detection");
+    // Último estado da LIVE publicado pela barra (pitchai.live.state); o
+    // cronômetro do painel usa o startedAt dele para mostrar o tempo real da
+    // transmissão do TikTok em vez do tempo do vídeo carregado.
+    let lastLiveState = null;
     function renderLiveState(state) {
+      if (state) lastLiveState = state;
       if (!liveDetectionEl) return;
       if (!state?.known) {
         liveDetectionEl.textContent =
@@ -1668,6 +1705,7 @@
           credsEl.style.color = "#22c55e";
           setDot("ok");
           webTarget = "/app";
+          saveTokenStatus(data.tokenRemaining, data.tokenLimit, data.plan);
         } else if (data.aiLocked || data.reason === "quota_exceeded") {
           credsEl.textContent =
             data.upgrade?.message ||
@@ -1675,21 +1713,25 @@
           credsEl.style.color = "#f97316";
           setDot("warn");
           webTarget = data.upgrade?.url || "/planos";
+          saveTokenStatus(data.tokenRemaining, data.tokenLimit, data.plan);
         } else if (data.valid) {
           credsEl.textContent =
             data.message || "Código válido, mas a licença está temporariamente bloqueada.";
           credsEl.style.color = "#f97316";
           setDot("warn");
           webTarget = data.reason === "payment_required" ? "/planos" : "/app";
+          saveTokenStatus(data.tokenRemaining, data.tokenLimit, data.plan);
         } else {
           credsEl.textContent = `Código inválido ou expirado. Gere um novo no painel do site.`;
           credsEl.style.color = "#ef4444";
           setDot("warn");
+          saveTokenStatus(0, 0, "free");
         }
       } catch {
         credsEl.textContent = "Licença não confirmada · conecte-se à internet para liberar";
         credsEl.style.color = "#ef4444";
         setDot("warn");
+        saveTokenStatus(0, 0, "free");
       }
     }
     tokenInput.value = cfg.syncToken || "";
@@ -1769,6 +1811,58 @@
       clearTimeout(verifyTimer);
       verifyTimer = setTimeout(renderCreds, 450);
     });
+
+    // ---------- Medidor de tokens ----------
+    function renderTokenMeter(state) {
+      const meter = document.getElementById("pnl-token-meter");
+      const fill = document.getElementById("pnl-token-meter-fill");
+      const text = document.getElementById("pnl-token-meter-text");
+      if (!meter || !fill || !text) return;
+
+      const remaining = Number(state?.tokenRemaining) || 0;
+      const limit = Number(state?.tokenLimit) || 0;
+
+      if (!limit || limit <= 0) {
+        meter.hidden = true;
+        return;
+      }
+
+      meter.hidden = false;
+      const pct = Math.min(100, Math.max(0, (remaining / limit) * 100));
+      fill.style.width = `${pct}%`;
+
+      meter.classList.remove("warning", "danger");
+
+      if (remaining <= 0) {
+        meter.classList.add("danger");
+        text.textContent = "Tokens esgotados no período atual.";
+      } else if (pct <= 10) {
+        meter.classList.add("warning");
+        text.textContent = `Você chegou a 10% dos tokens — faça upgrade para continuar`;
+        const link = document.createElement("span");
+        link.className = "pnl-token-meter-action";
+        link.textContent = "Ver planos ↗";
+        link.addEventListener("click", () =>
+          window.open(new URL("/planos", API_BASE).href, "_blank"),
+        );
+        text.appendChild(link);
+      } else {
+        text.textContent = `${remaining.toLocaleString("pt-BR")} de ${limit.toLocaleString("pt-BR")} tokens (${Math.round(pct)}%)`;
+      }
+    }
+
+    // Reage a mudanças no estado de tokens (escrito pelo próprio painel após
+    // verify ou pelo content.js via chrome.storage).
+    try {
+      chrome.storage.onChanged.addListener((changes) => {
+        if (changes[TOKEN_STATUS_KEY]) renderTokenMeter(changes[TOKEN_STATUS_KEY].newValue);
+      });
+    } catch {}
+
+    // Renderiza o medidor de tokens ao carregar (estado salvo de sessões anteriores).
+    (async () => {
+      renderTokenMeter(await loadTokenStatus());
+    })();
 
     // Primeiro uso: animação em tela cheia e tutorial navegável.
     const ONBOARD_KEY = "pitchai.onboarded.v2";

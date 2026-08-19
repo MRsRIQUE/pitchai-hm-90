@@ -440,7 +440,26 @@
     canReleaseAt: null,
     actionUrl: null,
     bannerEl: null,
+    lowTokenWarned: false,
   };
+
+  const TOKEN_USAGE_STORAGE_KEY = "pitchai.token.status";
+
+  function publishTokenUsage() {
+    try {
+      chrome.storage.local.set({
+        [TOKEN_USAGE_STORAGE_KEY]: {
+          tokenRemaining: Number(extSecurity.tokenRemaining) || 0,
+          tokenLimit: Number(extSecurity.tokenLimit) || 0,
+          plan: extSecurity.plan || "free",
+        },
+      });
+    } catch {}
+  }
+
+  // Cache do verify positivo: sem isto cada resposta no chat esperava uma
+  // viagem ao servidor só para reconfirmar o que já foi confirmado há pouco.
+  const _lockOkCache = { at: 0, ttlMs: 20000 };
 
   // A licença está vinculada a outro navegador. O verify é a fonte autoritativa
   // deste motivo — as outras rotas só respondem 403.
@@ -488,6 +507,11 @@
     if (extSecurity.reason === DEVICE_MISMATCH) return; // já travado por isto
     if (Date.now() - _deviceRecheckAt < DEVICE_RECHECK_MS) return;
     _deviceRecheckAt = Date.now();
+    // O cache de 20s do verify vale para o ciclo normal, NÃO para uma suspeita
+    // de recusa por navegador: sem zerar aqui, um 403 que chegue logo depois de
+    // um verify bom voltaria "ok" do cache e o device_mismatch só apareceria no
+    // ciclo seguinte, com o vendedor operando travado sem saber por quê.
+    _lockOkCache.at = 0;
     checkExtensionLock(extSecurity.syncToken).catch(() => {});
   }
 
@@ -500,6 +524,14 @@
       extSecurity.message = "Sync token ausente. Insira seu token no painel da extensão.";
       updateLockUI();
       return false;
+    }
+    if (
+      !extSecurity.isLocked &&
+      !extSecurity.aiLocked &&
+      extSecurity.syncToken === syncToken &&
+      Date.now() - _lockOkCache.at < _lockOkCache.ttlMs
+    ) {
+      return true;
     }
     try {
       const authHeaders = await signRequest(syncToken, "verify");
@@ -526,7 +558,9 @@
         extSecurity.tokenRemaining = data.tokenRemaining ?? 0;
         extSecurity.tokenLimit = data.tokenLimit ?? 0;
         extSecurity.upgrade = data.upgrade || null;
+        _lockOkCache.at = Date.now();
         updateLockUI();
+        publishTokenUsage();
         return true;
       } else {
         extSecurity.isLocked = true;
@@ -541,6 +575,7 @@
         extSecurity.tokenLimit = data.tokenLimit ?? 0;
         extSecurity.upgrade = data.upgrade || null;
         updateLockUI();
+        publishTokenUsage();
         return false;
       }
     } catch {
@@ -551,6 +586,7 @@
       extSecurity.message =
         "Não foi possível confirmar sua licença. Verifique a internet e tente novamente.";
       updateLockUI();
+      publishTokenUsage();
       return false;
     }
   }
@@ -600,6 +636,52 @@
       }
     } else if (banner) {
       banner.remove();
+    }
+
+    // Low token warning banner (10% threshold, reset at 15%)
+    const limit = Number(extSecurity.tokenLimit) || 0;
+    const remaining = Number(extSecurity.tokenRemaining) || 0;
+    const pct = limit > 0 ? remaining / limit : 1;
+    const shouldWarn = limit > 0 && pct > 0 && pct <= 0.1;
+    const shouldReset = limit > 0 && pct > 0.15;
+
+    if (shouldReset) {
+      extSecurity.lowTokenWarned = false;
+    }
+
+    let warnBanner = document.getElementById("pitchai-low-token-banner");
+    if (shouldWarn && !extSecurity.isLocked) {
+      if (!extSecurity.lowTokenWarned) {
+        extSecurity.lowTokenWarned = true;
+      }
+      if (!warnBanner) {
+        warnBanner = document.createElement("div");
+        warnBanner.id = "pitchai-low-token-banner";
+        warnBanner.style.cssText =
+          "position:fixed;top:0;left:0;right:0;z-index:9999998;background:#854d0e;color:#fef08a;padding:8px 16px;font-family:sans-serif;font-size:13px;font-weight:600;display:flex;align-items:center;justify-content:space-between;box-shadow:0 4px 12px rgba(0,0,0,0.4);border-bottom:2px solid #eab308;";
+        const text = document.createElement("span");
+        text.id = "pitchai-low-token-text";
+        const btn = document.createElement("button");
+        btn.id = "pitchai-low-token-action";
+        btn.textContent = "Ver planos ↗";
+        btn.style.cssText =
+          "background:#eab308;color:#000;border:none;padding:4px 12px;border-radius:4px;font-weight:700;cursor:pointer;";
+        warnBanner.append(text, btn);
+        document.body?.prepend(warnBanner);
+      }
+      const text = document.getElementById("pitchai-low-token-text");
+      const pctDisplay = Math.round(pct * 100);
+      if (text)
+        text.textContent = `⚠️ Restam ${pctDisplay}% dos tokens de IA — faça upgrade no site`;
+      const btn = document.getElementById("pitchai-low-token-action");
+      if (btn) {
+        btn.onclick = () => {
+          const target = extSecurity.upgrade?.url || "/planos";
+          window.open(new URL(target, API_BASE).href, "_blank");
+        };
+      }
+    } else if (warnBanner) {
+      warnBanner.remove();
     }
   }
 
@@ -994,7 +1076,7 @@
     respostasIA: true,
     responderNoChat: false,
     // Intervalo mínimo (segundos) entre respostas da IA no chat — anti-spam.
-    respostasIntervaloSec: 15,
+    respostasIntervaloSec: 8,
     autoFixar: { enabled: false, query: "", minSec: 20, maxSec: 60, ids: [], names: [] },
     encerrarTempo: { enabled: false, minutes: 120 },
     notificacoesVenda: true,
@@ -1060,7 +1142,7 @@
 
   /** Intervalo mínimo entre respostas no chat, configurável no painel (anti-spam). */
   function replyIntervalMs(cfg) {
-    const sec = Math.max(4, Math.min(300, Number(cfg?.respostasIntervaloSec) || 15));
+    const sec = Math.max(4, Math.min(300, Number(cfg?.respostasIntervaloSec) || 8));
     return sec * 1000;
   }
 
@@ -1992,6 +2074,10 @@
       '[class*="GoodsItem" i]',
       '[class*="goods-item" i]',
       '[class*="ShopProduct" i]',
+      // Console de LIVE (product dashboard): a âncora estável é o botão de
+      // fixar do card; o walk ancestral sobe até a linha-raiz (div.rounded-4.mb-8).
+      'button[data-pin-performance-source="product_card"]',
+      "div.rounded-4.mb-8",
       // Assinatura estável observada no Gerenciador de LIVE atual. O botão
       // `pc_pin_product_list_pin` pertence ao cabeçalho e não identifica card.
       "button.pc_pin_product_pin",
@@ -2352,6 +2438,11 @@
               `${i + 1}. ${p.name}${p.price ? " — " + p.price : ""}${p.active ? " [ATIVO]" : ""}${p.description ? " · " + p.description : ""}`,
           )
           .join("\n");
+    let espectadores = "";
+    try {
+      const analytics = RG()?.readAnalytics?.();
+      if (analytics?.espectadores) espectadores = analytics.espectadores;
+    } catch {}
     return [
       "Você é a IA vendedora da live no TikTok Shop.",
       ctx.brandName && `Marca: ${ctx.brandName}.`,
@@ -2360,11 +2451,14 @@
       `Tom: ${ctx.tone || "empolgado e amigável"}.`,
       ctx.extraContext && `Contexto: ${ctx.extraContext}`,
       `Regras: ${ctx.rules || "Nunca invente preços ou promoções."}`,
+      espectadores ? `Publico atual na live: ${espectadores} espectadores.` : "",
       catalog ? `Catálogo:\n${catalog}` : "",
       destaque
         ? `Produto FIXADO em destaque: "${destaque.name}". Fale APENAS deste produto — não divulgue outros.`
         : "",
       "Responda em 1 frase curta, natural. Nunca escreva emojis nem asteriscos.",
+      'Quando souber o nome de quem comentou, chame pelo nome às vezes (ex.: "Maria, anota essa:") — não em TODA resposta, só quando natural.',
+      "Varie as aberturas: nunca comece duas respostas com a mesma palavra.",
     ]
       .filter(Boolean)
       .join("\n");
@@ -2814,6 +2908,11 @@
       if (options.signal?.aborted || options.isCancelled?.()) spoken = false;
     } catch (error) {
       if (error?.name !== "AbortError") {
+        console.warn("[PITCHAI-TTS] falha:", String(error?.message || error).slice(0, 200), {
+          text: String(text || "").slice(0, 60),
+          voice: voice?.id,
+          fromCache,
+        });
         activity.log({
           type: "error",
           text: `Falha ao falar resposta: ${String(error?.message || error).slice(0, 140)}`,
@@ -3048,6 +3147,7 @@
       }
       saveStoredPitchBanks();
       if (data.tokenRemaining !== undefined) extSecurity.tokenRemaining = data.tokenRemaining;
+      publishTokenUsage();
       activity.log({
         type: "pitch",
         text: `Banco econômico preparado: ${lines.length} variações para ${product.name}.`,
@@ -3072,6 +3172,18 @@
     }
   }
 
+  // ---------- CTAs de engajamento (intercalados entre pitches, sem IA) ----------
+  const CTA_LINES = [
+    "Se está gostando da live, já deixa o follow pra não perder as próximas ofertas!",
+    "Pessoal, dá um like na live pra ajudar o canal a crescer!",
+    "Viu algo que gostou? Adiciona no carrinho agora, o estoque é limitado!",
+    "Compartilha essa live com alguém que vai amar essas ofertas!",
+    "Fica comigo que ainda tem promoção chegando por aí!",
+    "Quem já comprou, conta aqui no chat a experiência pra galera!",
+    "Toca no produto fixado aí em cima pra ver todos os detalhes!",
+  ];
+  const ctaState = { count: 0 };
+
   async function pitchTick(runId) {
     if (extSecurity.isLocked || extSecurity.aiLocked) return "blocked";
     const cfg = await loadConfig();
@@ -3086,7 +3198,14 @@
     if (runId !== chatState.pitchRunId || controller.signal.aborted) return "cancelled";
     if (isAudioBusy() || chatState.busy || chatState.queue.length) return "busy";
     if (!lines.length) return "empty";
-    const line = lines[chatState.pitchIdx % lines.length];
+    // A cada 4 ciclos troca o pitch por um CTA de engajamento (segue, like,
+    // carrinho) — variado e sem consumir tokens da IA.
+    ctaState.count++;
+    const ctaEnabled = cfg.cta?.enabled !== false;
+    const line =
+      ctaEnabled && ctaState.count % 4 === 0
+        ? CTA_LINES[Math.floor(Math.random() * CTA_LINES.length)]
+        : lines[chatState.pitchIdx % lines.length];
     chatState.pitchIdx++;
     chatState.pitchIdx = chatState.pitchIdx % 1000000;
     chatState.lastReplyAt = Date.now();
@@ -3501,6 +3620,7 @@
         extSecurity.tokenRemaining = data.tokenRemaining ?? extSecurity.tokenRemaining;
         extSecurity.tokenLimit = data.tokenLimit ?? extSecurity.tokenLimit;
         extSecurity.upgrade = data.upgrade || extSecurity.upgrade;
+        publishTokenUsage();
         if (data.ignore) {
           activity.markStatus(item.id, "ignored", data.reason || "off_topic");
           sessionEvent({ kind: "ignored" });
@@ -3653,7 +3773,9 @@
     const rows = [];
     if (!node) return rows;
     const direct = Array.from(node.children || []);
-    const parsedDirect = direct.filter((c) => parseMessage(c));
+    const parsedDirect = direct.filter(
+      (c) => parseMessage(c) || JOIN_EVENT_RX.test((c.textContent || "").trim()),
+    );
     if (parsedDirect.length >= Math.max(1, Math.floor(direct.length * 0.4))) {
       return parsedDirect;
     }
@@ -3665,7 +3787,11 @@
     }
     const picked = [];
     for (const el of all) {
-      if (!parseMessage(el)) continue;
+      if (
+        !parseMessage(el) &&
+        !JOIN_EVENT_RX.test((el.textContent || "").replace(/\s+/g, " ").trim())
+      )
+        continue;
       // ignora se um ancestral já foi escolhido (evita contar a mesma msg 2x)
       if (picked.some((p) => p.contains(el))) continue;
       picked.push(el);
@@ -3673,10 +3799,95 @@
     return picked.length ? picked : parsedDirect;
   }
 
+  // ---------- Saudações de entrada (sem consumir tokens de IA) ----------
+  // O feed do console mostra "X entrou na live" / "X começou a seguir"; esses
+  // eventos eram descartados pelo SYSTEM_MSG_RX. Agora alimentam uma fila de
+  // nomes que vira uma saudação por voz a cada intervalo.
+  const JOIN_EVENT_RX =
+    /^(.{2,40}?)\s+(?:entrou na (?:live|sala)|acabou de seguir|come[çc]ou a seguir|joined)/i;
+  const welcome = { names: [], follows: [], lastAt: 0, seen: new Map(), timer: null };
+
+  function registerJoin(name, kind) {
+    const key = normKey(name || "");
+    if (!key || key.length < 2) return;
+    const now = Date.now();
+    if (now - (welcome.seen.get(key) || 0) < 10 * 60 * 1000) return; // 1 saudação/pessoa/10min
+    welcome.seen.set(key, now);
+    if (welcome.seen.size > 400) {
+      for (const [k, at] of welcome.seen) {
+        if (now - at > 20 * 60 * 1000) welcome.seen.delete(k);
+      }
+    }
+    if (kind === "follow") welcome.follows.push(name);
+    else welcome.names.push(name);
+  }
+
+  function buildWelcomeLine() {
+    let line = "";
+    const follow = welcome.follows.splice(0, 2);
+    const names = welcome.names.splice(0, 3);
+    if (follow.length) {
+      line =
+        follow.length === 1
+          ? `Valeu pelo follow, ${follow[0]}!`
+          : `Valeu pelo follow, ${follow[0]} e ${follow[1]}!`;
+    }
+    if (names.length) {
+      const lista =
+        names.length === 1
+          ? names[0]
+          : names.length === 2
+            ? `${names[0]} e ${names[1]}`
+            : `${names[0]}, ${names[1]} e ${names[2]}`;
+      const partes = [
+        "Bem-vindo à live",
+        "Chegou gente boa, welcome",
+        "Olha quem chegou, bem-vindos",
+      ];
+      const abre = partes[Math.floor(Math.random() * partes.length)];
+      line += `${line ? " " : ""}${abre} ${lista}!`;
+    }
+    return line;
+  }
+
+  async function flushWelcome() {
+    if (extSecurity.isLocked || extSecurity.aiLocked) return;
+    if (!welcome.names.length && !welcome.follows.length) return;
+    const cfg = await loadConfig();
+    if (cfg.saudacoes?.enabled === false) {
+      welcome.names = [];
+      welcome.follows = [];
+      return;
+    }
+    if (!cfg.respostasIA) return; // saudação é um recurso de voz
+    const intervalMs = Math.max(30, Number(cfg.saudacoes?.minIntervalSec) || 60) * 1000;
+    if (Date.now() - welcome.lastAt < intervalMs) return;
+    const line = buildWelcomeLine();
+    if (!line) return;
+    welcome.lastAt = Date.now();
+    activity.log({ type: "pitch", text: line, ts: Date.now() });
+    await speakText(line, cfg, { useCache: true }).catch(() => {});
+  }
+
+  function startWelcomeLoop() {
+    if (welcome.timer) return;
+    welcome.timer = setInterval(() => {
+      flushWelcome().catch(() => {});
+    }, 15000);
+  }
+
   /** Lê tudo o que já está na tela; `silent` só marca como visto, sem responder. */
   function sweepChat(node, { silent = false } = {}) {
     let n = 0;
     for (const row of collectChatRows(node)) {
+      // Eventos de sistema ("X entrou na live", "X começou a seguir") viram
+      // saudação, não pergunta para a IA.
+      const rawJoin = (row.textContent || "").replace(/\s+/g, " ").trim();
+      const join = rawJoin.match(JOIN_EVENT_RX);
+      if (join) {
+        registerJoin(join[1].trim(), /seguir|follow/i.test(rawJoin) ? "follow" : "enter");
+        continue;
+      }
       const m = parseMessage(row);
       if (!m) continue;
       const key = `${m.author}|${m.text}`.toLowerCase();
@@ -3752,6 +3963,9 @@
     }
     chatState.queue = [];
     chatState.node = null;
+    // Se o desligamento caiu no meio de um processQueue, o busy ficaria true
+    // para sempre e o religar nunca processaria mensagem nenhuma.
+    chatState.busy = false;
 
     stopPitchLoop();
     stopHealthCheck();
@@ -3977,7 +4191,9 @@
 
     async simulateViolation() {
       const cfg = await loadConfig();
-      await setViolation("Aviso de integridade: possível violação de conteúdo (simulado)", cfg);
+      await setViolation("Aviso de integridade: possível violação de conteúdo (simulado)", cfg, {
+        strong: true,
+      });
       setTimeout(async () => {
         const c = await loadConfig();
         await clearViolation(c);
@@ -4207,6 +4423,7 @@
     saleTimes: new Map(),
     violationTimer: null,
     violationActive: false,
+    lastViolationEndAt: 0,
     liveTimer: null,
     liveActive: false,
     liveStartedAt: 0,
@@ -4420,6 +4637,18 @@
       const exact = card.querySelector("button.pc_pin_product_pin");
       if (exact && DM()?.util?.isVisible?.(exact)) return exact;
     } catch {}
+    // Console de LIVE: o atributo de tracking é constante nos dois estados;
+    // serve como pin quando a classe de estado ainda não é a de desafixar.
+    try {
+      const tracked = card.querySelector('button[data-pin-performance-source="product_card"]');
+      if (
+        tracked &&
+        !tracked.matches?.(".pc_pin_product_unpin") &&
+        !tracked.matches?.(".pc_pin_product_list_pin") &&
+        DM()?.util?.isVisible?.(tracked)
+      )
+        return tracked;
+    } catch {}
     let btns = [];
     try {
       btns = Array.from(
@@ -4456,6 +4685,11 @@
   }
 
   function findUnpinButton(card) {
+    // Console de LIVE: classe de estado do próprio botão (Desafixar).
+    try {
+      const exact = card.querySelector("button.pc_pin_product_unpin");
+      if (exact && DM()?.util?.isVisible?.(exact)) return exact;
+    } catch {}
     let buttons = [];
     try {
       buttons = Array.from(
@@ -4524,11 +4758,16 @@
     if (list) {
       collectProductCards(list, set);
     }
-    if (!list && set.size < 2) {
+    if (set.size < 2) {
+      // Fallback incondicional: mesmo com `list` resolvido, ele pode apontar
+      // para o painel errado (ex.: vitrine lateral em vez do dashboard de
+      // produtos). O scan document-wide pelos seletores estáveis cobre isso.
       const roots = DM()?.util?.allRoots?.() || [document];
       [
+        'button[data-pin-performance-source="product_card"]',
         '[data-tid*="product_item"]',
         '[data-e2e*="product-item"]',
+        '[data-pin-performance-source="product_card"]',
         '[class*="ProductItem" i]',
         '[class*="product-item" i]',
         '[class*="GoodsItem" i]',
@@ -4563,6 +4802,81 @@
   }
 
   /** Localiza o produto e deixa a linha virtualizada visível para o clique real. */
+  /**
+   * Rota dedicada ao Console de LIVE (product dashboard), mapeada ao vivo em
+   * 19/08/2026: cada linha é `div.rounded-4.mb-8` com
+   * `button[data-pin-performance-source="product_card"]` e o nome completo em
+   * `textContent` de um span interno (o "…" visível é só CSS ellipsis).
+   * O parser genérico pode rejeitar essas linhas (sem classe de título, texto
+   * cheio de "Fixar"/"Em estoque"), então este matcher roda por último como
+   * garantia antes de declarar "card não encontrado".
+   */
+  function findDashboardRow(name) {
+    const key = normKey(name || "");
+    if (!key) return null;
+    const roots = DM()?.util?.allRoots?.() || [document];
+    const seen = new Set();
+    const rows = [];
+    for (const root of roots) {
+      let btns = [];
+      try {
+        btns = Array.from(
+          root.querySelectorAll('button[data-pin-performance-source="product_card"]'),
+        );
+      } catch {}
+      for (const btn of btns) {
+        const row =
+          btn.closest("div.rounded-4.mb-8") ||
+          btn.closest('div[class*="rounded"]') ||
+          btn.parentElement?.parentElement?.parentElement ||
+          btn.parentElement;
+        if (!row || seen.has(row)) continue;
+        seen.add(row);
+        rows.push(row);
+      }
+    }
+    let best = null;
+    let bestScore = 0;
+    let tie = false;
+    for (const row of rows) {
+      if (!row.isConnected) continue;
+      // Nome: span da linha com o texto mais longo (o do título carrega o
+      // nome completo; botões/labels são curtos).
+      let rowName = "";
+      try {
+        for (const span of row.querySelectorAll("span")) {
+          const t = (span.textContent || "").trim();
+          if (t.length > rowName.length && t.length <= 200) rowName = t;
+        }
+      } catch {}
+      const t = normKey(rowName);
+      if (!t) continue;
+      const words = key.split(" ").filter((w) => w.length > 3);
+      const exact = t.includes(key) || key.includes(t) ? words.length + 1 : 0;
+      const hits = words.filter((w) => t.includes(w)).length;
+      const score = Math.max(exact, hits);
+      if (score > bestScore) {
+        bestScore = score;
+        best = row;
+        tie = false;
+      } else if (score === bestScore && score > 0) {
+        tie = true;
+      }
+    }
+    console.debug("[PITCHAI-PIN] findDashboardRow:", {
+      key,
+      rows: rows.length,
+      bestScore,
+      tie,
+      bestName: best ? (best.querySelector("span")?.textContent || "").slice(0, 60) : null,
+    });
+    if (tie || !best) return null;
+    return bestScore >=
+      Math.max(1, Math.ceil(key.split(" ").filter((w) => w.length > 3).length / 2))
+      ? best
+      : null;
+  }
+
   async function locateProductCard(name, expectedPid = "") {
     const sector = await regionNode("products");
     let list = (await mapNode("products")) || sector;
@@ -4610,7 +4924,15 @@
     }
     const fallbackCards = await productCards();
     console.debug("[PITCHAI-PIN] fallback productCards:", fallbackCards.length);
-    return matchCard(fallbackCards, name, expectedPid);
+    const fallbackMatch = matchCard(fallbackCards, name, expectedPid);
+    if (fallbackMatch) return fallbackMatch;
+    // Última garantia: rota dedicada às linhas do Console de LIVE.
+    const dashboardRow = findDashboardRow(name);
+    if (dashboardRow) {
+      console.debug("[PITCHAI-PIN] resolvido via findDashboardRow");
+      return dashboardRow;
+    }
+    return null;
   }
 
   /** Acha o card do produto pelo nome normalizado (tolerante a truncamento). */
@@ -4679,22 +5001,98 @@
    */
   async function getPinnedProduct(cfg) {
     try {
+      const produtos = cfg?.produtos || [];
+      // Rota 1: cards da vitrine (visão do espectador) pelo parser genérico.
       const cards = await productCards();
       const pinned = cards.find((card) => isPinnedCard(card));
-      if (!pinned) return null;
-      const parsed = parseProductCard(pinned);
-      if (!parsed) return null;
-      const produtos = cfg?.produtos || [];
-      const byPid = parsed.pid
-        ? produtos.find((p) => String(p.pid || "") === String(parsed.pid))
-        : null;
-      if (byPid) return byPid;
-      const key = normKey(parsed.name || "");
-      const byName = key ? produtos.find((p) => normKey(p?.name || "") === key) : null;
-      return byName || parsed;
+      if (pinned) {
+        const parsed = parseProductCard(pinned);
+        if (parsed) {
+          const byPid = parsed.pid
+            ? produtos.find((p) => String(p.pid || "") === String(parsed.pid))
+            : null;
+          if (byPid) return byPid;
+          const key = normKey(parsed.name || "");
+          const byName = key ? produtos.find((p) => normKey(p?.name || "") === key) : null;
+          if (byName) return byName;
+        }
+      }
+      // Rota 2 (Console de LIVE): a linha fixada carrega o botão "Desafixar".
+      // O parser genérico rejeita essas linhas, então busca direto pelo botão.
+      const roots = DM()?.util?.allRoots?.() || [document];
+      for (const root of roots) {
+        let btn = null;
+        try {
+          btn = root.querySelector("button.pc_pin_product_unpin");
+        } catch {}
+        if (!btn) continue;
+        const row =
+          btn.closest("div.rounded-4.mb-8") || btn.closest("div[class*='rounded']") || btn;
+        // Nome completo = maior <span> da linha (o título guarda o texto inteiro).
+        let rowName = "";
+        try {
+          for (const span of row.querySelectorAll("span")) {
+            const t = (span.textContent || "").trim();
+            if (t.length > rowName.length && t.length <= 200) rowName = t;
+          }
+        } catch {}
+        const key = normKey(rowName);
+        if (!key) continue;
+        // Casa com o catálogo: igualdade/contenção e, senão, maior sobreposição
+        // de palavras — nunca o primeiro da lista por padrão.
+        let best = null;
+        let bestScore = 0;
+        for (const p of produtos) {
+          const pn = normKey(p?.name || "");
+          if (!pn) continue;
+          let score = 0;
+          if (pn === key || pn.includes(key) || key.includes(pn)) score = 100;
+          else {
+            const words = key.split(" ").filter((w) => w.length > 3);
+            const hits = words.filter((w) => pn.includes(w)).length;
+            score = words.length ? hits / words.length : 0;
+          }
+          if (score > bestScore) {
+            bestScore = score;
+            best = p;
+          }
+        }
+        if (best && bestScore >= 0.6) return best;
+        return { name: rowName, price: "", description: "", pid: "" };
+      }
+      return null;
     } catch {
       return null;
     }
+  }
+
+  /**
+   * Garantia anti-misclick: antes de qualquer clique em "Fixar", confirma que
+   * o card na mão é MESMO o produto-alvo (pelo nome da linha). Durante a
+   * animação de reordenação do TikTok a referência antiga morre e a
+   * re-localização pode devolver a linha que subiu para o topo — clicar nela
+   * fixaria o produto errado.
+   */
+  function cardBelongsToTarget(card, name) {
+    if (!card || !card.isConnected) return false;
+    const key = normKey(name || "");
+    if (!key) return false;
+    let cardName = parseProductCard(card)?.name || "";
+    if (!cardName) {
+      // Linha do Console de LIVE: nome completo vive no maior <span> da linha.
+      try {
+        for (const span of card.querySelectorAll("span")) {
+          const t = (span.textContent || "").trim();
+          if (t.length > cardName.length && t.length <= 200) cardName = t;
+        }
+      } catch {}
+    }
+    const t = normKey(cardName);
+    if (!t) return false;
+    if (t === key || t.includes(key) || key.includes(t)) return true;
+    const words = key.split(" ").filter((w) => w.length > 3);
+    const hits = words.filter((w) => t.includes(w)).length;
+    return words.length > 0 && hits / words.length >= 0.8;
   }
 
   async function pinProduct(alvo) {
@@ -4703,19 +5101,31 @@
     if (isPinnedCard(card)) {
       return { ok: true, reason: "já estava fixado" };
     }
+    if (!cardBelongsToTarget(card, alvo.name)) {
+      return { ok: false, reason: "animacao da vitrine: card encontrado nao e o produto-alvo" };
+    }
     // O TikTok ocasionalmente aceita o evento de clique sem executar a ação.
     // Repete uma única vez, mas somente após confirmar que o card continua no
-    // estado "Fixar"; assim nunca alterna de volta um produto já fixado.
+    // estado "Fixar" E que continua sendo o produto-alvo; assim nunca alterna
+    // de volta um produto fixado nem clica na linha errada que subiu no lugar.
     for (let clickAttempt = 0; clickAttempt < 2; clickAttempt++) {
-      const currentCard = card.isConnected
-        ? card
-        : await locateProductCard(alvo.name || "", alvo.pid || "");
-      if (currentCard && isPinnedCard(currentCard)) return { ok: true, reason: "fixado" };
-      const btn = currentCard && findPinButton(currentCard);
+      let currentCard = card.isConnected ? card : null;
+      if (!currentCard) {
+        currentCard = await locateProductCard(alvo.name || "", alvo.pid || "");
+        if (currentCard && !cardBelongsToTarget(currentCard, alvo.name)) {
+          return { ok: false, reason: "animacao da vitrine: perdi o card do produto-alvo" };
+        }
+      }
+      if (!currentCard) return { ok: false, reason: "card saiu da vitrine" };
+      if (isPinnedCard(currentCard)) return { ok: true, reason: "fixado" };
+      const btn = findPinButton(currentCard);
       if (!btn) return { ok: false, reason: "botão de fixar não encontrado" };
       realClick(btn);
       await confirmPinDialog();
-      for (let attempt = 0; attempt < 10; attempt++) {
+      // Depois do clique a lista reordena com animação: dá tempo suficiente
+      // antes de concluir (16 × 250ms = 4s) e só re-localiza por nome+pid,
+      // nunca confiando em referência antiga.
+      for (let attempt = 0; attempt < 16; attempt++) {
         await sleep(250);
         const current = currentCard.isConnected
           ? currentCard
@@ -4729,7 +5139,22 @@
   /** Desfixa somente o card que o TikTok identifica como produto em destaque. */
   async function unpinCurrentProduct() {
     const cards = await productCards();
-    const pinned = cards.find((card) => isPinnedCard(card));
+    let pinned = cards.find((card) => isPinnedCard(card));
+    if (!pinned) {
+      // Linha do Console de LIVE pode escapar do parser genérico: procura
+      // diretamente pelo botão "Desafixar" das linhas mapeadas.
+      const roots = DM()?.util?.allRoots?.() || [document];
+      for (const root of roots) {
+        let btn = null;
+        try {
+          btn = root.querySelector("button.pc_pin_product_unpin");
+        } catch {}
+        if (btn) {
+          pinned = btn.closest("div.rounded-4.mb-8") || btn.closest("div[class*='rounded']");
+          break;
+        }
+      }
+    }
     if (!pinned) return { ok: true, changed: false, reason: "nenhum produto estava fixado" };
     const button = findUnpinButton(pinned);
     if (!button) {
@@ -4758,6 +5183,30 @@
     };
   }
 
+  /**
+   * O que está fixado agora, com o nome da linha (para comparar com o alvo).
+   * Retorna { card, isTarget } ou null se nada estiver fixado.
+   */
+  async function findCurrentlyPinned(targetName) {
+    const cards = await productCards();
+    let pinned = cards.find((card) => isPinnedCard(card));
+    if (!pinned) {
+      const roots = DM()?.util?.allRoots?.() || [document];
+      for (const root of roots) {
+        let btn = null;
+        try {
+          btn = root.querySelector("button.pc_pin_product_unpin");
+        } catch {}
+        if (btn) {
+          pinned = btn.closest("div.rounded-4.mb-8") || btn.closest("div[class*='rounded']");
+          break;
+        }
+      }
+    }
+    if (!pinned) return null;
+    return { card: pinned, isTarget: cardBelongsToTarget(pinned, targetName || "") };
+  }
+
   async function autoPinTick({ force = false } = {}) {
     if (auto.pinBusy) return { ok: false, reason: "fixação em andamento" };
     if (extSecurity.isLocked) {
@@ -4778,7 +5227,9 @@
   async function runAutoPin(cfg, af) {
     const min = Math.max(5, Number(af.minSec) || 20);
     const max = Math.max(min, Number(af.maxSec) || 60);
-    auto.nextPinAt = Date.now() + (min + Math.random() * (max - min)) * 1000;
+    // Bloqueia ticks durante o ciclo (que inclui a espera da animação de
+    // desafixar); o próximo horário é marcado ao FINAL do ciclo.
+    auto.nextPinAt = Number.MAX_SAFE_INTEGER;
 
     let produtos = cfg.produtos || [];
     // A seleção manual de produtos tem prioridade sobre o termo de busca.
@@ -4814,11 +5265,20 @@
     let res = { ok: false, reason: "modo demo" };
     if (!demo.isOn()) {
       try {
-        const unpinned = await unpinCurrentProduct();
-        if (!unpinned.ok) {
-          res = unpinned;
+        // Lê o estado atual ANTES de clicar:
+        // - alvo já fixado → desfixa, espera a animação (10s) e refixa;
+        // - outro produto fixado ou nada fixado → apenas fixa o alvo
+        //   (o TikTok troca o destaque sozinho ao fixar um novo produto).
+        const current = await findCurrentlyPinned(alvo.name || "");
+        if (current?.isTarget) {
+          const unpinned = await unpinCurrentProduct();
+          if (!unpinned.ok) {
+            res = unpinned;
+          } else {
+            if (unpinned.changed) await sleep(10000);
+            res = await pinProduct(alvo);
+          }
         } else {
-          if (unpinned.changed) await sleep(450);
           res = await pinProduct(alvo);
         }
       } catch (e) {
@@ -4843,6 +5303,8 @@
           : `Destaque só no roteiro (${res.reason}): ${alvo.name}`,
       ts: Date.now(),
     });
+    // Intervalo conta do FIM do ciclo (a espera da animação já consumiu tempo).
+    auto.nextPinAt = Date.now() + (min + Math.random() * (max - min)) * 1000;
     return res;
   }
 
@@ -4999,27 +5461,42 @@
   }
 
   // ---------- Monitor de violação ----------
-  async function setViolation(txt, cfg) {
+  async function setViolation(txt, cfg, { strong = false } = {}) {
     if (auto.violationActive) return;
     auto.violationActive = true;
     activity.log({
       type: "violation",
-      text: `⚠ Violação detectada: ${txt.slice(0, 80)}`,
+      text: `⚠️ Violação detectada: ${txt.slice(0, 80)}`,
       ts: Date.now(),
     });
     sessionEvent({ kind: "violation", violation: { text: txt.slice(0, 120) } });
     if (chatState.healthEl) {
-      chatState.healthEl.textContent = `⚠ violação: ${txt.slice(0, 40)}`;
+      chatState.healthEl.textContent = `⚠️ violação: ${txt.slice(0, 40)}`;
       chatState.healthEl.className = "pitchai-status err";
     }
     if (cfg?.protecaoGeral) {
       stopPitchLoop();
       activity.log({ type: "violation", text: "Proteção geral: IA pausada.", ts: Date.now() });
     }
-    // Aviso real na área monitorada é condição de segurança: encerra a LIVE
-    // imediatamente para evitar novas vendas/conteúdo enquanto o operador não
-    // consegue intervir. Em modo demo, finishLive apenas registra a simulação.
-    await finishLive("aviso de violação detectado");
+    // Encerrar a live é destrutivo e irreversível: só acontece com o toggle
+    // "encerrar ao detectar violação" LIGADO (cfg.violacao), com palavra FORTE
+    // (violação/penalidade/strike — não basta um "aviso" genérico de UI) e no
+    // máximo uma vez a cada 10 minutos.
+    const podeEncerrar =
+      cfg?.violacao !== false &&
+      strong &&
+      VIOLATION_STRONG_RX.test(txt) &&
+      Date.now() - (auto.lastViolationEndAt || 0) > 10 * 60 * 1000;
+    if (podeEncerrar) {
+      auto.lastViolationEndAt = Date.now();
+      await finishLive("aviso de violação detectado");
+    } else if (cfg?.violacao !== false) {
+      activity.log({
+        type: "violation",
+        text: "Aviso fraco/genérico: não encerrei a live (sem palavra forte ou fora da janela de 10 min).",
+        ts: Date.now(),
+      });
+    }
   }
 
   async function clearViolation(cfg) {
@@ -5139,12 +5616,16 @@
     // nó apontado pelo usuário: qualquer texto vale. Nó achado no auto-scan:
     // só vale se o texto realmente parecer um aviso.
     let bad = !!txt && !VIOLATION_OK_RX.test(txt) && (apontado || violationRx().test(txt));
+    // Palavra forte = violação/penalidade/strike no próprio texto. Só isso
+    // autoriza o encerramento automático; achado fraco apenas registra.
+    let strong = bad && VIOLATION_STRONG_RX.test(txt);
 
     if (!bad) {
       const found = await findViolationHeuristic();
       if (found) {
         txt = found.text;
         bad = true;
+        strong = VIOLATION_STRONG_RX.test(txt);
       }
     }
 
@@ -5157,7 +5638,7 @@
       });
     }
 
-    if (bad) await setViolation(txt, cfg);
+    if (bad) await setViolation(txt, cfg, { strong });
     else await clearViolation(cfg);
   }
   function startViolationWatcher() {
@@ -6112,6 +6593,7 @@
     scanFx.mount();
     const unlocked = await checkExtensionLock(cfg.syncToken);
     bindPushToTalk();
+    startWelcomeLoop(); // saudações de entrada (checa licença/quota sozinha)
     if (unlocked) startAutomations();
     // Revalida periodicamente para bloquear vencimentos e recuperar após
     // indisponibilidade temporária sem exigir que o usuário recarregue a página.
@@ -6254,7 +6736,16 @@
         return fresh;
       }).catch(() => null);
       if (on) {
-        sessionStart();
+        // Sessão com retry: se o servidor estiver meio fora, 3 tentativas
+        // espaçadas em vez de desistir na primeira.
+        for (let attempt = 0; attempt < 3; attempt++) {
+          const sid = await sessionStart();
+          if (sid) break;
+          console.warn(`[Pitch AI] sessionStart falhou (tentativa ${attempt + 1}/3)`);
+          session.starting = null;
+          session.id = null;
+          if (attempt < 2) await new Promise((r) => setTimeout(r, 2000));
+        }
         const ok = await startChatListener();
         if (!ok) {
           let tries = 0;
@@ -6262,6 +6753,7 @@
             if ((await startChatListener()) || ++tries > 20) clearInterval(iv);
           }, 1000);
         }
+        updateHealth();
       } else {
         stopPitchLoop();
         stopChatListener();
@@ -6372,11 +6864,18 @@
       el("span", { class: "pitchai-control-label" }, "Proteção"),
       master,
     );
-    protectionLabel.addEventListener("click", () => toggleProtection().catch(() => {}));
+    // O label envolve o botão `master`, que já tem o próprio handler; clicar
+    // no texto ao lado só repete o clique no botão. (Antes chamava uma
+    // `toggleProtection` que nunca existiu — ReferenceError no console.)
+    protectionLabel.addEventListener("click", (event) => {
+      if (event.target === master || master.contains(event.target)) return;
+      master.click();
+    });
     protectionLabel.addEventListener("keydown", (event) => {
       if (event.key !== "Enter" && event.key !== " ") return;
       event.preventDefault();
-      toggleProtection().catch(() => {});
+      if (event.target === master) return;
+      master.click();
     });
     const controlsGroup = el(
       "div",

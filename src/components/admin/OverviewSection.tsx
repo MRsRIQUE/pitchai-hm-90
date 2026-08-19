@@ -9,6 +9,7 @@ import {
 } from "@/lib/live/admin";
 import { AdminAlert, AdminCard, AdminLoading, AdminStat } from "./admin-ui";
 import { adminErrorDetail, brl } from "./format";
+import { calculateTotalCostBrl, calculateMarginPct } from "./metrics";
 import type { AdminSectionId } from "./sections";
 
 /**
@@ -49,13 +50,8 @@ export function OverviewSection({ onNavigate }: { onNavigate: (id: AdminSectionI
   const commissionTotal =
     pendingCommissions.reduce((sum, item) => sum + item.amount_cents, 0) / 100;
   const costData = costs.data;
-  const costTotal = costData
-    ? ((costData.tokens_in_mes / 1000) * costData.chat_per_1k_in +
-        (costData.tokens_out_mes / 1000) * costData.chat_per_1k_out +
-        costData.minutos_tts_mes * costData.tts_per_min) *
-      costData.usd_brl
-    : 0;
-  const marginPct = monthlyRevenue > 0 ? ((monthlyRevenue - costTotal) / monthlyRevenue) * 100 : 0;
+  const costTotal = calculateTotalCostBrl(costData);
+  const marginPct = calculateMarginPct(monthlyRevenue, costTotal);
   const rankedProducts = ranking.data ?? [];
   const highlighted = rankedProducts.filter((product) => product.destaque).length;
 

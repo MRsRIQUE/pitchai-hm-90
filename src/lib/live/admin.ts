@@ -13,6 +13,9 @@ import {
 import { PITCHAI_PLANS } from "@/lib/live/plans";
 import { DEFAULT_PLAN_QUOTAS, PLAN_QUOTA_SCHEMA_VERSION, type PlanQuota } from "@/lib/live/quotas";
 import { createStripeClient, type StripeEnv } from "@/lib/stripe.server";
+import { AdminError } from "@/lib/admin/errors";
+import { fsDeleteMany } from "@/lib/admin/firestore";
+import type Stripe from "stripe";
 
 export { DEFAULT_PLAN_QUOTAS, type PlanQuota } from "@/lib/live/quotas";
 import { parseLocaleNumber } from "@/lib/live/number-parsing";
@@ -114,9 +117,22 @@ export type StripeAdminSnapshot = {
   fetchedAt: string;
 };
 
+/** Falha de leitura do Firestore nunca derruba o fluxo: vira "não é admin". */
+async function safeIsAdmin(
+  uid: string,
+  email?: string | null,
+  options?: { mode?: "server"; userToken?: string },
+): Promise<boolean> {
+  try {
+    return await isAdmin(uid, email, options);
+  } catch {
+    return false;
+  }
+}
+
 async function ensureAdmin(ctx: FirebaseAuthContext): Promise<void> {
-  if (!(await isAdmin(ctx.userId, ctx.user?.email, adminFirestoreOptions(ctx))))
-    throw new Error("Forbidden");
+  if (!(await safeIsAdmin(ctx.userId, ctx.user?.email, adminFirestoreOptions(ctx))))
+    throw new AdminError(403, "Forbidden");
 }
 
 function adminFirestoreOptions(ctx: FirebaseAuthContext) {
@@ -163,7 +179,7 @@ const getAdminStatus = createServerFn({ method: "GET" })
   .middleware([requireFirebaseAuth])
   .handler(async ({ context }): Promise<{ ok: boolean; error?: string }> => {
     try {
-      const admin = await isAdmin(
+      const admin = await safeIsAdmin(
         context.userId,
         context.user?.email,
         adminFirestoreOptions(context),
@@ -357,7 +373,10 @@ const deleteAllProducts = createServerFn({ method: "POST" })
     await ensureAdmin(context);
     const firestore = adminFirestoreOptions(context);
     const docs = await fsQuery("ranked_products", firestore);
-    for (const d of docs) await fsDelete(`ranked_products/${d.id}`, firestore);
+    await fsDeleteMany(
+      docs.map((d) => `ranked_products/${d.id}`),
+      firestore,
+    );
     return { ok: true };
   });
 
@@ -704,18 +723,22 @@ function stripeEnvironment(): StripeEnv {
   return process.env.STRIPE_SECRET_KEY?.startsWith("sk_live_") ? "live" : "sandbox";
 }
 
-function monthlyRecurringCents(price: any, quantity = 1): number {
-  const amount = Number(price?.unit_amount || 0) * Math.max(1, Number(quantity || 1));
-  const interval = price?.recurring?.interval;
-  const count = Math.max(1, Number(price?.recurring?.interval_count || 1));
+function monthlyRecurringCents(
+  price: Stripe.Price | Stripe.DeletedPrice | undefined,
+  quantity = 1,
+): number {
+  const live = price && !price.deleted ? price : undefined;
+  const amount = Number(live?.unit_amount || 0) * Math.max(1, Number(quantity || 1));
+  const interval = live?.recurring?.interval;
+  const count = Math.max(1, Number(live?.recurring?.interval_count || 1));
   if (interval === "year") return Math.round(amount / (12 * count));
   if (interval === "week") return Math.round((amount * 52) / (12 * count));
   if (interval === "day") return Math.round((amount * 365) / (12 * count));
   return Math.round(amount / count);
 }
 
-async function listAllStripeSubscriptions(stripe: any): Promise<any[]> {
-  const subscriptions: any[] = [];
+async function listAllStripeSubscriptions(stripe: Stripe): Promise<Stripe.Subscription[]> {
+  const subscriptions: Stripe.Subscription[] = [];
   let startingAfter: string | undefined;
   do {
     const page = await stripe.subscriptions.list({
@@ -731,8 +754,11 @@ async function listAllStripeSubscriptions(stripe: any): Promise<any[]> {
   return subscriptions;
 }
 
-async function listAllStripeInvoicesSince(stripe: any, since: number): Promise<any[]> {
-  const invoices: any[] = [];
+async function listAllStripeInvoicesSince(
+  stripe: Stripe,
+  since: number,
+): Promise<Stripe.Invoice[]> {
+  const invoices: Stripe.Invoice[] = [];
   let startingAfter: string | undefined;
   do {
     const page = await stripe.invoices.list({
@@ -768,18 +794,22 @@ const getStripeAdminSnapshot = createServerFn({ method: "GET" })
     const dashboardBase =
       environment === "live" ? "https://dashboard.stripe.com" : "https://dashboard.stripe.com/test";
 
-    const subscriptions = stripeSubscriptions.map((sub: any): StripeAdminSubscription => {
+    const subscriptions = stripeSubscriptions.map((sub): StripeAdminSubscription => {
       const item = sub.items?.data?.[0];
-      const customer = typeof sub.customer === "object" ? sub.customer : null;
+      const customer =
+        typeof sub.customer === "object" && sub.customer !== null && !sub.customer.deleted
+          ? sub.customer
+          : null;
       const email = String(customer?.email || sub.metadata?.email || "");
-      const periodEnd = item?.current_period_end ?? sub.current_period_end;
+      const price = item?.price && !item.price.deleted ? item.price : undefined;
+      const periodEnd = item?.current_period_end;
       return {
         id: sub.id,
         customerId: String(customer?.id || sub.customer || ""),
         email,
-        plan: String(item?.price?.lookup_key || sub.metadata?.plan || "Sem lookup_key"),
-        amountCents: Number(item?.price?.unit_amount || 0) * Number(item?.quantity || 1),
-        currency: String(item?.price?.currency || "brl").toUpperCase(),
+        plan: String(price?.lookup_key || sub.metadata?.plan || "Sem lookup_key"),
+        amountCents: Number(price?.unit_amount || 0) * Number(item?.quantity || 1),
+        currency: String(price?.currency || "brl").toUpperCase(),
         status: String(sub.status || "unknown"),
         currentPeriodEnd: periodEnd ? new Date(periodEnd * 1000).toISOString() : null,
         cancelAtPeriodEnd: Boolean(sub.cancel_at_period_end),
@@ -789,13 +819,12 @@ const getStripeAdminSnapshot = createServerFn({ method: "GET" })
     });
 
     const revenueStatuses = new Set(["active", "trialing", "past_due"]);
-    const mrrCents = stripeSubscriptions.reduce((sum: number, sub: any) => {
+    const mrrCents = stripeSubscriptions.reduce((sum, sub) => {
       if (!revenueStatuses.has(String(sub.status))) return sum;
       return (
         sum +
         (sub.items?.data || []).reduce(
-          (itemSum: number, item: any) =>
-            itemSum + monthlyRecurringCents(item.price, item.quantity),
+          (itemSum, item) => itemSum + monthlyRecurringCents(item.price, item.quantity),
           0,
         )
       );
@@ -803,16 +832,16 @@ const getStripeAdminSnapshot = createServerFn({ method: "GET" })
 
     const balanceAmount = (kind: "available" | "pending") =>
       (balance[kind] || [])
-        .filter((item: any) => item.currency === "brl")
-        .reduce((sum: number, item: any) => sum + Number(item.amount || 0), 0);
-    const paidInvoices = stripeInvoices.filter((invoice: any) => invoice.status === "paid");
+        .filter((item) => item.currency === "brl")
+        .reduce((sum, item) => sum + Number(item.amount || 0), 0);
+    const paidInvoices = stripeInvoices.filter((invoice) => invoice.status === "paid");
 
     return {
       environment,
       currency: "BRL",
       mrrCents,
       paidLast30DaysCents: paidInvoices.reduce(
-        (sum: number, invoice: any) => sum + Number(invoice.amount_paid || 0),
+        (sum, invoice) => sum + Number(invoice.amount_paid || 0),
         0,
       ),
       availableBalanceCents: balanceAmount("available"),
@@ -827,7 +856,7 @@ const getStripeAdminSnapshot = createServerFn({ method: "GET" })
         (sub) => ["active", "trialing", "past_due"].includes(sub.status) && !sub.firestoreSynced,
       ).length,
       subscriptions,
-      recentInvoices: stripeInvoices.slice(0, 20).map((invoice: any): StripeAdminInvoice => ({
+      recentInvoices: stripeInvoices.slice(0, 20).map((invoice): StripeAdminInvoice => ({
         id: invoice.id,
         email: String(invoice.customer_email || ""),
         amountCents: Number(invoice.amount_paid || invoice.amount_due || 0),

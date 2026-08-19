@@ -16,7 +16,8 @@ export function PlanosSection() {
   const stripe = useQuery({
     queryKey: ["admin", "stripe"],
     queryFn: fetchStripeAdminSnapshot,
-    refetchInterval: 30_000,
+    refetchInterval: 120_000,
+    staleTime: 5 * 60 * 1000,
   });
 
   const mrr = plans.reduce((s, p) => s + Number(p.preco_mensal) * p.assinantes, 0);

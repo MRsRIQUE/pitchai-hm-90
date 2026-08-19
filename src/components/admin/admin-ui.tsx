@@ -96,6 +96,58 @@ export function AdminEmpty({ title, hint }: { title: string; hint?: string }) {
 }
 
 /**
+ * Confirmação inline consistente para ações destrutivas.
+ * Substitui o `confirm()` nativo mantendo o design system.
+ */
+export function AdminConfirm({
+  open,
+  onClose,
+  onConfirm,
+  title,
+  message,
+  confirmLabel = "Confirmar",
+  cancelLabel = "Cancelar",
+  destructive = true,
+}: {
+  open: boolean;
+  onClose: () => void;
+  onConfirm: () => void;
+  title: string;
+  message: ReactNode;
+  confirmLabel?: string;
+  cancelLabel?: string;
+  destructive?: boolean;
+}) {
+  if (!open) return null;
+
+  return (
+    <div role="alertdialog" className="app-alert app-alert--confirm" data-tone="danger">
+      <div className="flex flex-col gap-3">
+        <div>
+          <p className="font-semibold">{title}</p>
+          <p className="text-sm text-[var(--app-ink-2)]">{message}</p>
+        </div>
+        <div className="flex flex-wrap items-center justify-end gap-2">
+          <button type="button" className="app-btn app-btn--ghost" onClick={onClose}>
+            {cancelLabel}
+          </button>
+          <button
+            type="button"
+            className={`app-btn ${destructive ? "app-btn--destructive" : "app-btn--primary"}`}
+            onClick={() => {
+              onConfirm();
+              onClose();
+            }}
+          >
+            {confirmLabel}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/**
  * Campo numérico que só persiste no `blur`: o admin digita valores longos
  * (tokens do mês, câmbio) e salvar a cada tecla dispararia uma mutation por
  * dígito.

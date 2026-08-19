@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { onAuthStateChanged } from "firebase/auth";
 import { Home, LayoutPanelLeft } from "lucide-react";
 import { getFirebaseAuth } from "@/lib/firebase";
@@ -25,57 +25,80 @@ export const Route = createFileRoute("/admin")({
   component: AdminPage,
 });
 
-function AdminPage() {
-  const [status, setStatus] = useState<"loading" | "signed-out" | "not-admin" | "ok">("loading");
-  const [email, setEmail] = useState<string>("");
-  const [errorMsg, setErrorMsg] = useState<string>("");
+type AdminCheckResult = {
+  status: "ok" | "signed-out" | "not-admin";
+  email: string;
+  errorMsg: string;
+};
 
-  async function evaluate() {
-    const fbAuth = getFirebaseAuth();
-    const user = fbAuth.currentUser;
-    if (!user) {
-      setStatus("signed-out");
-      return;
-    }
-    setEmail(user.email ?? "");
-    setErrorMsg("");
-    try {
+function AdminPage() {
+  const qc = useQueryClient();
+
+  const { data, isLoading } = useQuery<AdminCheckResult>({
+    queryKey: ["admin", "check"],
+    queryFn: async ({ signal }): Promise<AdminCheckResult> => {
+      const fbAuth = getFirebaseAuth();
+      const user = fbAuth.currentUser;
+      if (!user) return { status: "signed-out", email: "", errorMsg: "" };
+
+      const email = user.email ?? "";
       const token = await user.getIdToken();
-      const res = await fetch("/api/admin/check", {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      const data = await res.json().catch(() => ({}) as { ok?: boolean; error?: string });
-      if (data.ok) {
-        setStatus("ok");
-        return;
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 10_000);
+
+      if (signal) signal.addEventListener("abort", () => controller.abort());
+
+      try {
+        const res = await fetch("/api/admin/check", {
+          headers: { Authorization: `Bearer ${token}` },
+          signal: controller.signal,
+        });
+        const json = await res.json().catch(() => ({}) as { ok?: boolean; error?: string });
+
+        if (json.ok) return { status: "ok", email, errorMsg: "" };
+
+        return {
+          status: res.status === 401 ? "signed-out" : "not-admin",
+          email,
+          errorMsg: json.error ?? "",
+        };
+      } catch (error) {
+        const msg = error instanceof Error ? error.message : String(error);
+        console.error("Falha ao validar acesso administrativo:", error);
+        return {
+          status: "not-admin",
+          email,
+          errorMsg: msg.includes("abort") ? "Tempo esgotado ao verificar acesso." : msg,
+        };
+      } finally {
+        clearTimeout(timeoutId);
       }
-      // 401 é sessão (token ausente/inválido), não falta de permissão: mandar
-      // para "Sem permissão" fazia o admin de verdade ler que não era admin.
-      if (data.error) setErrorMsg(data.error);
-      setStatus(res.status === 401 ? "signed-out" : "not-admin");
-    } catch (error) {
-      const msg = error instanceof Error ? error.message : String(error);
-      console.error("Falha ao validar acesso administrativo:", error);
-      setErrorMsg(msg);
-      setStatus("not-admin");
-    }
-  }
+    },
+    retry: 1,
+    refetchOnWindowFocus: false,
+    staleTime: 5 * 60 * 1_000,
+  });
 
   useEffect(() => {
-    const unsub = onAuthStateChanged(getFirebaseAuth(), () => evaluate());
+    const unsub = onAuthStateChanged(getFirebaseAuth(), () => {
+      qc.invalidateQueries({ queryKey: ["admin", "check"] });
+    });
     return () => unsub();
-  }, []);
+  }, [qc]);
 
-  if (status === "loading") {
+  if (isLoading) {
     return (
       <div className="marketing-page min-h-dvh grid place-items-center text-white/60">
         Carregando…
       </div>
     );
   }
-  if (status === "signed-out") return <SessionExpired />;
-  if (status === "not-admin") return <NotAdmin email={email} errorMsg={errorMsg} />;
-  return <Dashboard email={email} />;
+
+  const result = data ?? { status: "not-admin" as const, email: "", errorMsg: "" };
+  if (result.status === "signed-out") return <SessionExpired />;
+  if (result.status === "not-admin")
+    return <NotAdmin email={result.email} errorMsg={result.errorMsg} />;
+  return <Dashboard email={result.email} />;
 }
 
 function SessionExpired() {
