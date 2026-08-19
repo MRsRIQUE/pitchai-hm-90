@@ -4460,6 +4460,81 @@
   }
 
   /** Localiza o produto e deixa a linha virtualizada visível para o clique real. */
+  /**
+   * Rota dedicada ao Console de LIVE (product dashboard), mapeada ao vivo em
+   * 19/08/2026: cada linha é `div.rounded-4.mb-8` com
+   * `button[data-pin-performance-source="product_card"]` e o nome completo em
+   * `textContent` de um span interno (o "…" visível é só CSS ellipsis).
+   * O parser genérico pode rejeitar essas linhas (sem classe de título, texto
+   * cheio de "Fixar"/"Em estoque"), então este matcher roda por último como
+   * garantia antes de declarar "card não encontrado".
+   */
+  function findDashboardRow(name) {
+    const key = normKey(name || "");
+    if (!key) return null;
+    const roots = DM()?.util?.allRoots?.() || [document];
+    const seen = new Set();
+    const rows = [];
+    for (const root of roots) {
+      let btns = [];
+      try {
+        btns = Array.from(
+          root.querySelectorAll('button[data-pin-performance-source="product_card"]'),
+        );
+      } catch {}
+      for (const btn of btns) {
+        const row =
+          btn.closest("div.rounded-4.mb-8") ||
+          btn.closest('div[class*="rounded"]') ||
+          btn.parentElement?.parentElement?.parentElement ||
+          btn.parentElement;
+        if (!row || seen.has(row)) continue;
+        seen.add(row);
+        rows.push(row);
+      }
+    }
+    let best = null;
+    let bestScore = 0;
+    let tie = false;
+    for (const row of rows) {
+      if (!row.isConnected) continue;
+      // Nome: span da linha com o texto mais longo (o do título carrega o
+      // nome completo; botões/labels são curtos).
+      let rowName = "";
+      try {
+        for (const span of row.querySelectorAll("span")) {
+          const t = (span.textContent || "").trim();
+          if (t.length > rowName.length && t.length <= 200) rowName = t;
+        }
+      } catch {}
+      const t = normKey(rowName);
+      if (!t) continue;
+      const words = key.split(" ").filter((w) => w.length > 3);
+      const exact = t.includes(key) || key.includes(t) ? words.length + 1 : 0;
+      const hits = words.filter((w) => t.includes(w)).length;
+      const score = Math.max(exact, hits);
+      if (score > bestScore) {
+        bestScore = score;
+        best = row;
+        tie = false;
+      } else if (score === bestScore && score > 0) {
+        tie = true;
+      }
+    }
+    console.debug("[PITCHAI-PIN] findDashboardRow:", {
+      key,
+      rows: rows.length,
+      bestScore,
+      tie,
+      bestName: best ? (best.querySelector("span")?.textContent || "").slice(0, 60) : null,
+    });
+    if (tie || !best) return null;
+    return bestScore >=
+      Math.max(1, Math.ceil(key.split(" ").filter((w) => w.length > 3).length / 2))
+      ? best
+      : null;
+  }
+
   async function locateProductCard(name, expectedPid = "") {
     const sector = await regionNode("products");
     let list = (await mapNode("products")) || sector;
@@ -4507,7 +4582,15 @@
     }
     const fallbackCards = await productCards();
     console.debug("[PITCHAI-PIN] fallback productCards:", fallbackCards.length);
-    return matchCard(fallbackCards, name, expectedPid);
+    const fallbackMatch = matchCard(fallbackCards, name, expectedPid);
+    if (fallbackMatch) return fallbackMatch;
+    // Última garantia: rota dedicada às linhas do Console de LIVE.
+    const dashboardRow = findDashboardRow(name);
+    if (dashboardRow) {
+      console.debug("[PITCHAI-PIN] resolvido via findDashboardRow");
+      return dashboardRow;
+    }
+    return null;
   }
 
   /** Acha o card do produto pelo nome normalizado (tolerante a truncamento). */
