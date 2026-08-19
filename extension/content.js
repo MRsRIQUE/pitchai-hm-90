@@ -4677,25 +4677,66 @@
     }
   }
 
+  /**
+   * Garantia anti-misclick: antes de qualquer clique em "Fixar", confirma que
+   * o card na mão é MESMO o produto-alvo (pelo nome da linha). Durante a
+   * animação de reordenação do TikTok a referência antiga morre e a
+   * re-localização pode devolver a linha que subiu para o topo — clicar nela
+   * fixaria o produto errado.
+   */
+  function cardBelongsToTarget(card, name) {
+    if (!card || !card.isConnected) return false;
+    const key = normKey(name || "");
+    if (!key) return false;
+    let cardName = parseProductCard(card)?.name || "";
+    if (!cardName) {
+      // Linha do Console de LIVE: nome completo vive no maior <span> da linha.
+      try {
+        for (const span of card.querySelectorAll("span")) {
+          const t = (span.textContent || "").trim();
+          if (t.length > cardName.length && t.length <= 200) cardName = t;
+        }
+      } catch {}
+    }
+    const t = normKey(cardName);
+    if (!t) return false;
+    if (t === key || t.includes(key) || key.includes(t)) return true;
+    const words = key.split(" ").filter((w) => w.length > 3);
+    const hits = words.filter((w) => t.includes(w)).length;
+    return words.length > 0 && hits / words.length >= 0.8;
+  }
+
   async function pinProduct(alvo) {
     const card = await locateProductCard(alvo.name || "", alvo.pid || "");
     if (!card) return { ok: false, reason: "card não encontrado na vitrine" };
     if (isPinnedCard(card)) {
       return { ok: true, reason: "já estava fixado" };
     }
+    if (!cardBelongsToTarget(card, alvo.name)) {
+      return { ok: false, reason: "animacao da vitrine: card encontrado nao e o produto-alvo" };
+    }
     // O TikTok ocasionalmente aceita o evento de clique sem executar a ação.
     // Repete uma única vez, mas somente após confirmar que o card continua no
-    // estado "Fixar"; assim nunca alterna de volta um produto já fixado.
+    // estado "Fixar" E que continua sendo o produto-alvo; assim nunca alterna
+    // de volta um produto fixado nem clica na linha errada que subiu no lugar.
     for (let clickAttempt = 0; clickAttempt < 2; clickAttempt++) {
-      const currentCard = card.isConnected
-        ? card
-        : await locateProductCard(alvo.name || "", alvo.pid || "");
-      if (currentCard && isPinnedCard(currentCard)) return { ok: true, reason: "fixado" };
-      const btn = currentCard && findPinButton(currentCard);
+      let currentCard = card.isConnected ? card : null;
+      if (!currentCard) {
+        currentCard = await locateProductCard(alvo.name || "", alvo.pid || "");
+        if (currentCard && !cardBelongsToTarget(currentCard, alvo.name)) {
+          return { ok: false, reason: "animacao da vitrine: perdi o card do produto-alvo" };
+        }
+      }
+      if (!currentCard) return { ok: false, reason: "card saiu da vitrine" };
+      if (isPinnedCard(currentCard)) return { ok: true, reason: "fixado" };
+      const btn = findPinButton(currentCard);
       if (!btn) return { ok: false, reason: "botão de fixar não encontrado" };
       realClick(btn);
       await confirmPinDialog();
-      for (let attempt = 0; attempt < 10; attempt++) {
+      // Depois do clique a lista reordena com animação: dá tempo suficiente
+      // antes de concluir (16 × 250ms = 4s) e só re-localiza por nome+pid,
+      // nunca confiando em referência antiga.
+      for (let attempt = 0; attempt < 16; attempt++) {
         await sleep(250);
         const current = currentCard.isConnected
           ? currentCard
