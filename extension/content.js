@@ -2312,6 +2312,8 @@
         ? `Produto FIXADO em destaque: "${destaque.name}". Fale APENAS deste produto — não divulgue outros.`
         : "",
       "Responda em 1 frase curta, natural. Nunca escreva emojis nem asteriscos.",
+      'Quando souber o nome de quem comentou, chame pelo nome às vezes (ex.: "Maria, anota essa:") — não em TODA resposta, só quando natural.',
+      "Varie as aberturas: nunca comece duas respostas com a mesma palavra.",
     ]
       .filter(Boolean)
       .join("\n");
@@ -2947,6 +2949,18 @@
     }
   }
 
+  // ---------- CTAs de engajamento (intercalados entre pitches, sem IA) ----------
+  const CTA_LINES = [
+    "Se está gostando da live, já deixa o follow pra não perder as próximas ofertas!",
+    "Pessoal, dá um like na live pra ajudar o canal a crescer!",
+    "Viu algo que gostou? Adiciona no carrinho agora, o estoque é limitado!",
+    "Compartilha essa live com alguém que vai amar essas ofertas!",
+    "Fica comigo que ainda tem promoção chegando por aí!",
+    "Quem já comprou, conta aqui no chat a experiência pra galera!",
+    "Toca no produto fixado aí em cima pra ver todos os detalhes!",
+  ];
+  const ctaState = { count: 0 };
+
   async function pitchTick(runId) {
     if (extSecurity.isLocked || extSecurity.aiLocked) return "blocked";
     const cfg = await loadConfig();
@@ -2961,7 +2975,13 @@
     if (runId !== chatState.pitchRunId || controller.signal.aborted) return "cancelled";
     if (isAudioBusy() || chatState.busy || chatState.queue.length) return "busy";
     if (!lines.length) return "empty";
-    const line = lines[chatState.pitchIdx % lines.length];
+    // A cada 4 ciclos troca o pitch por um CTA de engajamento (segue, like,
+    // carrinho) — variado e sem consumir tokens da IA.
+    ctaState.count++;
+    const line =
+      ctaState.count % 4 === 0
+        ? CTA_LINES[Math.floor(Math.random() * CTA_LINES.length)]
+        : lines[chatState.pitchIdx % lines.length];
     chatState.pitchIdx++;
     chatState.pitchIdx = chatState.pitchIdx % 1000000;
     chatState.lastReplyAt = Date.now();
@@ -3528,7 +3548,9 @@
     const rows = [];
     if (!node) return rows;
     const direct = Array.from(node.children || []);
-    const parsedDirect = direct.filter((c) => parseMessage(c));
+    const parsedDirect = direct.filter(
+      (c) => parseMessage(c) || JOIN_EVENT_RX.test((c.textContent || "").trim()),
+    );
     if (parsedDirect.length >= Math.max(1, Math.floor(direct.length * 0.4))) {
       return parsedDirect;
     }
@@ -3540,7 +3562,11 @@
     }
     const picked = [];
     for (const el of all) {
-      if (!parseMessage(el)) continue;
+      if (
+        !parseMessage(el) &&
+        !JOIN_EVENT_RX.test((el.textContent || "").replace(/\s+/g, " ").trim())
+      )
+        continue;
       // ignora se um ancestral já foi escolhido (evita contar a mesma msg 2x)
       if (picked.some((p) => p.contains(el))) continue;
       picked.push(el);
@@ -3548,10 +3574,95 @@
     return picked.length ? picked : parsedDirect;
   }
 
+  // ---------- Saudações de entrada (sem consumir tokens de IA) ----------
+  // O feed do console mostra "X entrou na live" / "X começou a seguir"; esses
+  // eventos eram descartados pelo SYSTEM_MSG_RX. Agora alimentam uma fila de
+  // nomes que vira uma saudação por voz a cada intervalo.
+  const JOIN_EVENT_RX =
+    /^(.{2,40}?)\s+(?:entrou na (?:live|sala)|acabou de seguir|come[çc]ou a seguir|joined)/i;
+  const welcome = { names: [], follows: [], lastAt: 0, seen: new Map(), timer: null };
+
+  function registerJoin(name, kind) {
+    const key = normKey(name || "");
+    if (!key || key.length < 2) return;
+    const now = Date.now();
+    if (now - (welcome.seen.get(key) || 0) < 10 * 60 * 1000) return; // 1 saudação/pessoa/10min
+    welcome.seen.set(key, now);
+    if (welcome.seen.size > 400) {
+      for (const [k, at] of welcome.seen) {
+        if (now - at > 20 * 60 * 1000) welcome.seen.delete(k);
+      }
+    }
+    if (kind === "follow") welcome.follows.push(name);
+    else welcome.names.push(name);
+  }
+
+  function buildWelcomeLine() {
+    let line = "";
+    const follow = welcome.follows.splice(0, 2);
+    const names = welcome.names.splice(0, 3);
+    if (follow.length) {
+      line =
+        follow.length === 1
+          ? `Valeu pelo follow, ${follow[0]}!`
+          : `Valeu pelo follow, ${follow[0]} e ${follow[1]}!`;
+    }
+    if (names.length) {
+      const lista =
+        names.length === 1
+          ? names[0]
+          : names.length === 2
+            ? `${names[0]} e ${names[1]}`
+            : `${names[0]}, ${names[1]} e ${names[2]}`;
+      const partes = [
+        "Bem-vindo à live",
+        "Chegou gente boa, welcome",
+        "Olha quem chegou, bem-vindos",
+      ];
+      const abre = partes[Math.floor(Math.random() * partes.length)];
+      line += `${line ? " " : ""}${abre} ${lista}!`;
+    }
+    return line;
+  }
+
+  async function flushWelcome() {
+    if (extSecurity.isLocked || extSecurity.aiLocked) return;
+    if (!welcome.names.length && !welcome.follows.length) return;
+    const cfg = await loadConfig();
+    if (cfg.saudacoes?.enabled === false) {
+      welcome.names = [];
+      welcome.follows = [];
+      return;
+    }
+    if (!cfg.respostasIA) return; // saudação é um recurso de voz
+    const intervalMs = Math.max(30, Number(cfg.saudacoes?.minIntervalSec) || 60) * 1000;
+    if (Date.now() - welcome.lastAt < intervalMs) return;
+    const line = buildWelcomeLine();
+    if (!line) return;
+    welcome.lastAt = Date.now();
+    activity.log({ type: "pitch", text: line, ts: Date.now() });
+    await speakText(line, cfg, { useCache: true }).catch(() => {});
+  }
+
+  function startWelcomeLoop() {
+    if (welcome.timer) return;
+    welcome.timer = setInterval(() => {
+      flushWelcome().catch(() => {});
+    }, 15000);
+  }
+
   /** Lê tudo o que já está na tela; `silent` só marca como visto, sem responder. */
   function sweepChat(node, { silent = false } = {}) {
     let n = 0;
     for (const row of collectChatRows(node)) {
+      // Eventos de sistema ("X entrou na live", "X começou a seguir") viram
+      // saudação, não pergunta para a IA.
+      const rawJoin = (row.textContent || "").replace(/\s+/g, " ").trim();
+      const join = rawJoin.match(JOIN_EVENT_RX);
+      if (join) {
+        registerJoin(join[1].trim(), /seguir|follow/i.test(rawJoin) ? "follow" : "enter");
+        continue;
+      }
       const m = parseMessage(row);
       if (!m) continue;
       const key = `${m.author}|${m.text}`.toLowerCase();
@@ -4750,7 +4861,22 @@
   /** Desfixa somente o card que o TikTok identifica como produto em destaque. */
   async function unpinCurrentProduct() {
     const cards = await productCards();
-    const pinned = cards.find((card) => isPinnedCard(card));
+    let pinned = cards.find((card) => isPinnedCard(card));
+    if (!pinned) {
+      // Linha do Console de LIVE pode escapar do parser genérico: procura
+      // diretamente pelo botão "Desafixar" das linhas mapeadas.
+      const roots = DM()?.util?.allRoots?.() || [document];
+      for (const root of roots) {
+        let btn = null;
+        try {
+          btn = root.querySelector("button.pc_pin_product_unpin");
+        } catch {}
+        if (btn) {
+          pinned = btn.closest("div.rounded-4.mb-8") || btn.closest("div[class*='rounded']");
+          break;
+        }
+      }
+    }
     if (!pinned) return { ok: true, changed: false, reason: "nenhum produto estava fixado" };
     const button = findUnpinButton(pinned);
     if (!button) {
@@ -4777,6 +4903,30 @@
       changed: false,
       reason: "o TikTok não confirmou que o produto foi desfixado",
     };
+  }
+
+  /**
+   * O que está fixado agora, com o nome da linha (para comparar com o alvo).
+   * Retorna { card, isTarget } ou null se nada estiver fixado.
+   */
+  async function findCurrentlyPinned(targetName) {
+    const cards = await productCards();
+    let pinned = cards.find((card) => isPinnedCard(card));
+    if (!pinned) {
+      const roots = DM()?.util?.allRoots?.() || [document];
+      for (const root of roots) {
+        let btn = null;
+        try {
+          btn = root.querySelector("button.pc_pin_product_unpin");
+        } catch {}
+        if (btn) {
+          pinned = btn.closest("div.rounded-4.mb-8") || btn.closest("div[class*='rounded']");
+          break;
+        }
+      }
+    }
+    if (!pinned) return null;
+    return { card: pinned, isTarget: cardBelongsToTarget(pinned, targetName || "") };
   }
 
   async function autoPinTick({ force = false } = {}) {
@@ -4837,14 +4987,20 @@
     let res = { ok: false, reason: "modo demo" };
     if (!demo.isOn()) {
       try {
-        const unpinned = await unpinCurrentProduct();
-        if (!unpinned.ok) {
-          res = unpinned;
+        // Lê o estado atual ANTES de clicar:
+        // - alvo já fixado → desfixa, espera a animação (10s) e refixa;
+        // - outro produto fixado ou nada fixado → apenas fixa o alvo
+        //   (o TikTok troca o destaque sozinho ao fixar um novo produto).
+        const current = await findCurrentlyPinned(alvo.name || "");
+        if (current?.isTarget) {
+          const unpinned = await unpinCurrentProduct();
+          if (!unpinned.ok) {
+            res = unpinned;
+          } else {
+            if (unpinned.changed) await sleep(10000);
+            res = await pinProduct(alvo);
+          }
         } else {
-          // Ao desfixar, o TikTok reordena a lista com animação. Clicar antes
-          // dela assentar pega o card errado (ou o que estava se movendo).
-          // Espera fixa de 10s entre desafixar e fixar o próximo.
-          if (unpinned.changed) await sleep(10000);
           res = await pinProduct(alvo);
         }
       } catch (e) {
@@ -6138,6 +6294,7 @@
     scanFx.mount();
     const unlocked = await checkExtensionLock(cfg.syncToken);
     bindPushToTalk();
+    startWelcomeLoop(); // saudações de entrada (checa licença/quota sozinha)
     if (unlocked) startAutomations();
     // Revalida periodicamente para bloquear vencimentos e recuperar após
     // indisponibilidade temporária sem exigir que o usuário recarregue a página.
