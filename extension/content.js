@@ -3745,6 +3745,9 @@
     }
     chatState.queue = [];
     chatState.node = null;
+    // Se o desligamento caiu no meio de um processQueue, o busy ficaria true
+    // para sempre e o religar nunca processaria mensagem nenhuma.
+    chatState.busy = false;
 
     stopPitchLoop();
     stopHealthCheck();
@@ -3970,7 +3973,9 @@
 
     async simulateViolation() {
       const cfg = await loadConfig();
-      await setViolation("Aviso de integridade: possível violação de conteúdo (simulado)", cfg);
+      await setViolation("Aviso de integridade: possível violação de conteúdo (simulado)", cfg, {
+        strong: true,
+      });
       setTimeout(async () => {
         const c = await loadConfig();
         await clearViolation(c);
@@ -4200,6 +4205,7 @@
     saleTimes: new Map(),
     violationTimer: null,
     violationActive: false,
+    lastViolationEndAt: 0,
     liveTimer: null,
     liveActive: false,
     liveStartedAt: 0,
@@ -5190,27 +5196,42 @@
   }
 
   // ---------- Monitor de violação ----------
-  async function setViolation(txt, cfg) {
+  async function setViolation(txt, cfg, { strong = false } = {}) {
     if (auto.violationActive) return;
     auto.violationActive = true;
     activity.log({
       type: "violation",
-      text: `⚠ Violação detectada: ${txt.slice(0, 80)}`,
+      text: `⚠️ Violação detectada: ${txt.slice(0, 80)}`,
       ts: Date.now(),
     });
     sessionEvent({ kind: "violation", violation: { text: txt.slice(0, 120) } });
     if (chatState.healthEl) {
-      chatState.healthEl.textContent = `⚠ violação: ${txt.slice(0, 40)}`;
+      chatState.healthEl.textContent = `⚠️ violação: ${txt.slice(0, 40)}`;
       chatState.healthEl.className = "pitchai-status err";
     }
     if (cfg?.protecaoGeral) {
       stopPitchLoop();
       activity.log({ type: "violation", text: "Proteção geral: IA pausada.", ts: Date.now() });
     }
-    // Aviso real na área monitorada é condição de segurança: encerra a LIVE
-    // imediatamente para evitar novas vendas/conteúdo enquanto o operador não
-    // consegue intervir. Em modo demo, finishLive apenas registra a simulação.
-    await finishLive("aviso de violação detectado");
+    // Encerrar a live é destrutivo e irreversível: só acontece com o toggle
+    // "encerrar ao detectar violação" LIGADO (cfg.violacao), com palavra FORTE
+    // (violação/penalidade/strike — não basta um "aviso" genérico de UI) e no
+    // máximo uma vez a cada 10 minutos.
+    const podeEncerrar =
+      cfg?.violacao !== false &&
+      strong &&
+      VIOLATION_STRONG_RX.test(txt) &&
+      Date.now() - (auto.lastViolationEndAt || 0) > 10 * 60 * 1000;
+    if (podeEncerrar) {
+      auto.lastViolationEndAt = Date.now();
+      await finishLive("aviso de violação detectado");
+    } else if (cfg?.violacao !== false) {
+      activity.log({
+        type: "violation",
+        text: "Aviso fraco/genérico: não encerrei a live (sem palavra forte ou fora da janela de 10 min).",
+        ts: Date.now(),
+      });
+    }
   }
 
   async function clearViolation(cfg) {
@@ -5330,12 +5351,16 @@
     // nó apontado pelo usuário: qualquer texto vale. Nó achado no auto-scan:
     // só vale se o texto realmente parecer um aviso.
     let bad = !!txt && !VIOLATION_OK_RX.test(txt) && (apontado || violationRx().test(txt));
+    // Palavra forte = violação/penalidade/strike no próprio texto. Só isso
+    // autoriza o encerramento automático; achado fraco apenas registra.
+    let strong = bad && VIOLATION_STRONG_RX.test(txt);
 
     if (!bad) {
       const found = await findViolationHeuristic();
       if (found) {
         txt = found.text;
         bad = true;
+        strong = VIOLATION_STRONG_RX.test(txt);
       }
     }
 
@@ -5348,7 +5373,7 @@
       });
     }
 
-    if (bad) await setViolation(txt, cfg);
+    if (bad) await setViolation(txt, cfg, { strong });
     else await clearViolation(cfg);
   }
   function startViolationWatcher() {
@@ -6440,7 +6465,16 @@
         return fresh;
       }).catch(() => null);
       if (on) {
-        sessionStart();
+        // Sessão com retry: se o servidor estiver meio fora, 3 tentativas
+        // espaçadas em vez de desistir na primeira.
+        for (let attempt = 0; attempt < 3; attempt++) {
+          const sid = await sessionStart();
+          if (sid) break;
+          console.warn(`[Pitch AI] sessionStart falhou (tentativa ${attempt + 1}/3)`);
+          session.starting = null;
+          session.id = null;
+          if (attempt < 2) await new Promise((r) => setTimeout(r, 2000));
+        }
         const ok = await startChatListener();
         if (!ok) {
           let tries = 0;
@@ -6448,6 +6482,7 @@
             if ((await startChatListener()) || ++tries > 20) clearInterval(iv);
           }, 1000);
         }
+        updateHealth();
       } else {
         stopPitchLoop();
         stopChatListener();
