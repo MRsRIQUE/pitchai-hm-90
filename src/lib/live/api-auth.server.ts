@@ -530,6 +530,50 @@ async function touchBinding(uid: string, token: string, binding: DeviceBinding):
   }
 }
 
+/**
+ * O que dizer à extensão sobre o vínculo quando o acesso foi LIBERADO.
+ *
+ * Sem isto a extensão só sabe "passei", e passar tem várias causas que não são
+ * "este navegador é o vinculado": pode não ter mandado identificador, o modo
+ * pode estar off/observar, ou a leitura do Firestore pode ter falhado. O card
+ * afirmava vínculo em todos esses casos — inventando uma resposta que ninguém
+ * deu. Aqui a resposta passa a ser do servidor.
+ */
+async function describeBinding(
+  userId: string,
+  installId: string,
+): Promise<{
+  deviceBindingMode: DeviceBindingMode;
+  deviceBound: boolean;
+  deviceIsThis: boolean;
+  boundAt: string | null;
+  deviceKnown: boolean;
+}> {
+  const desconhecido = {
+    deviceBindingMode: "exigir" as DeviceBindingMode,
+    deviceBound: false,
+    deviceIsThis: false,
+    boundAt: null,
+    deviceKnown: false,
+  };
+  // Sem identificador não há vínculo possível: dizer "não vinculado" seria
+  // verdade, mas "não sabemos" é o que a extensão precisa ouvir para não
+  // desenhar um estado que ela não pode sustentar.
+  if (!installId) return desconhecido;
+  try {
+    const [mode, binding] = await Promise.all([loadDeviceBindingMode(), readDeviceBinding(userId)]);
+    return {
+      deviceBindingMode: mode,
+      deviceBound: Boolean(binding),
+      deviceIsThis: Boolean(binding && binding.installId === installId),
+      boundAt: binding?.boundAt ?? null,
+      deviceKnown: true,
+    };
+  } catch {
+    return desconhecido;
+  }
+}
+
 async function deviceMismatchResult(uid: string, boundAt: string | null): Promise<DeviceMismatch> {
   const release = await readDeviceReleaseState(uid).catch(() => ({
     lastReleaseAt: null,
@@ -1031,6 +1075,8 @@ export async function getSyncTokenStatus(token: string, request?: Request) {
     };
   }
 
+  const binding = await describeBinding(userId, extractInstallId(ambientRequest()));
+
   return {
     ok: true,
     valid: true,
@@ -1038,6 +1084,7 @@ export async function getSyncTokenStatus(token: string, request?: Request) {
     aiLocked: false,
     reason: null,
     userId,
+    ...binding,
     plan,
     planName,
     remainingChat,

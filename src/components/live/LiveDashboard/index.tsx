@@ -193,6 +193,17 @@ function LiveDashboardContent() {
     }
   }, [updateConfigRaw]);
 
+  // A extensão manda o vendedor para /app?desvincular=1 quando recusa o
+  // navegador. Sem abrir a seção Conta aqui, ele cai no Início e não vê nada: o
+  // efeito que lê esse parâmetro mora dentro do DeviceBindingPanel, que só
+  // existe sob ContaSection. O botão da extensão apontava para uma porta fechada.
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    if (new URLSearchParams(window.location.search).get("desvincular") === "1") {
+      setActive("conta");
+    }
+  }, []);
+
   // Volta para o Início se o modo Simples esconder a seção aberta.
   useEffect(() => {
     if (!sectionDisponivel(active, simples)) setActive("inicio");

@@ -498,9 +498,13 @@
     upgrade: null,
     bannerEl: null,
     lowTokenWarned: false,
-    // Vínculo de navegador: os três vêm do verify e são só do servidor.
+    // Vínculo de navegador: TODOS vêm do verify e são só do servidor.
     boundAt: null,
     canReleaseAt: null,
+    deviceKnown: false,
+    deviceBound: false,
+    deviceIsThis: false,
+    deviceMode: "",
   };
 
   const TOKEN_USAGE_STORAGE_KEY = "pitchai.token.status";
@@ -526,11 +530,16 @@
           vinculo:
             extSecurity.reason === DEVICE_MISMATCH
               ? "outra"
-              : extSecurity.isLocked
+              : extSecurity.isLocked || !extSecurity.deviceKnown
                 ? "desconhecido"
-                : "esta",
+                : extSecurity.deviceIsThis
+                  ? "esta"
+                  : "nenhuma",
           motivo: extSecurity.isLocked ? extSecurity.reason || "" : "",
-          motivoTexto: extSecurity.isLocked ? extSecurity.message || "" : "",
+          motivoTexto: extSecurity.isLocked
+            ? extSecurity.message || ""
+            : "O servidor não informou o vínculo desta instalação.",
+          modo: extSecurity.deviceMode || "",
           boundAt: extSecurity.boundAt || null,
           canReleaseAt: extSecurity.canReleaseAt || null,
           message: extSecurity.reason === DEVICE_MISMATCH ? extSecurity.message || "" : "",
@@ -612,9 +621,15 @@
         extSecurity.tokenRemaining = data.tokenRemaining ?? 0;
         extSecurity.tokenLimit = data.tokenLimit ?? 0;
         extSecurity.upgrade = data.upgrade || null;
-        // Passou pelo verify: este navegador É o vinculado (ou não há vínculo).
+        // Passar no verify NÃO significa "sou o vinculado": pode ter passado
+        // sem identificador, com mode off/observar, ou com o Firestore fora.
+        // Quem diz é o servidor, em deviceKnown/deviceBound/deviceIsThis.
         extSecurity.boundAt = data.boundAt || null;
         extSecurity.canReleaseAt = null;
+        extSecurity.deviceKnown = data.deviceKnown === true;
+        extSecurity.deviceBound = data.deviceBound === true;
+        extSecurity.deviceIsThis = data.deviceIsThis === true;
+        extSecurity.deviceMode = data.deviceBindingMode || "";
         _lockOkCache.at = Date.now();
         updateLockUI();
         publishTokenUsage();
@@ -857,7 +872,7 @@
         if (!Object.keys(payload.targets).length && !Object.keys(payload.regions).length) return;
         await fetch(`${API_BASE}/api/public/live/mapping`, {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: { "Content-Type": "application/json", ...(await installHeaders()) },
           body: JSON.stringify({ action: "push", token: cfg.syncToken, payload }),
         });
       } catch (e) {
@@ -876,7 +891,7 @@
       if (Object.keys(localT).length || Object.keys(localR).length) return;
       const r = await fetch(`${API_BASE}/api/public/live/mapping`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", ...(await installHeaders()) },
         body: JSON.stringify({ action: "pull", token: cfg.syncToken, host: location.host }),
       });
       const data = await r.json().catch(() => null);
@@ -1206,7 +1221,7 @@
     try {
       await fetch(`${API_BASE}/api/public/live/config`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", ...(await installHeaders()) },
         body: JSON.stringify({ action: "push", token: cfg.syncToken, config: cfg }),
       });
     } catch (e) {
@@ -1280,7 +1295,7 @@
       try {
         const r = await fetch(`${API_BASE}/api/public/live/session`, {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: { "Content-Type": "application/json", ...(await installHeaders()) },
           body: JSON.stringify({ action: "start", token: cfg.syncToken }),
         });
         const data = await r.json().catch(() => ({}));
@@ -1305,7 +1320,7 @@
     try {
       await fetch(`${API_BASE}/api/public/live/session`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", ...(await installHeaders()) },
         body: JSON.stringify({ action: "end", token: session.token, session_id: session.id }),
       });
     } catch {}
@@ -1321,7 +1336,7 @@
     try {
       await fetch(`${API_BASE}/api/public/live/session`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", ...(await installHeaders()) },
         body: JSON.stringify({
           action: "event",
           token: session.token,
@@ -6316,7 +6331,7 @@
         const payload = await buildMappingPayload();
         const r = await fetch(`${API_BASE}/api/public/live/mapping`, {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: { "Content-Type": "application/json", ...(await installHeaders()) },
           body: JSON.stringify({ action: "push", token: cfg.syncToken, payload }),
         });
         const data = await r.json().catch(() => null);
@@ -6329,7 +6344,7 @@
         if (!cfg?.syncToken) throw new Error("configure o token de sincronização primeiro");
         const r = await fetch(`${API_BASE}/api/public/live/mapping`, {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: { "Content-Type": "application/json", ...(await installHeaders()) },
           body: JSON.stringify({ action: "pull", token: cfg.syncToken, host: location.host }),
         });
         const data = await r.json().catch(() => null);

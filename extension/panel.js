@@ -70,7 +70,11 @@
     }
 
     if (st.vinculo === "esta") {
-      stateEl.textContent = "✅ Vinculado a este navegador";
+      // "observar" e "off" não barram ninguém. Dizer só "vinculado" prometeria
+      // uma trava que não está valendo.
+      const so =
+        st.modo && st.modo !== "exigir" ? ` (modo ${st.modo}: ninguém é barrado ainda)` : "";
+      stateEl.textContent = `✅ Vinculado a este navegador${so}`;
       const desde = momentoBR(st.boundAt);
       detailEl.textContent = desde
         ? `A licença está ativa aqui desde ${desde}. Para usar em outro navegador, desvincule na sua conta — uma vez por dia.`
@@ -98,9 +102,8 @@
       // A licença não foi confirmada. Afirmar "nenhum navegador vinculado" seria
       // inventar: o servidor não respondeu sobre o vínculo.
       stateEl.textContent = "Vínculo não confirmado";
-      detailEl.textContent = st.motivoTexto
-        ? `A licença ainda não foi confirmada, então não dá para saber o vínculo. ${st.motivoTexto}`
-        : "A licença ainda não foi confirmada, então não dá para saber o vínculo. Confira o Sync token acima.";
+      detailEl.textContent =
+        st.motivoTexto || "Não foi possível determinar o vínculo desta instalação.";
       btn.hidden = true;
       return;
     }
@@ -1845,7 +1848,7 @@
       try {
         const r = await fetch(`${API_BASE}/api/public/live/config`, {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: { "Content-Type": "application/json", ...(await installHeaders()) },
           body: JSON.stringify({ action: "pull", token: cfg.syncToken }),
         });
         const data = await r.json();
@@ -1866,7 +1869,7 @@
         const { syncToken, ...toSend } = cfg;
         const r = await fetch(`${API_BASE}/api/public/live/config`, {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: { "Content-Type": "application/json", ...(await installHeaders()) },
           body: JSON.stringify({ action: "push", token: cfg.syncToken, config: toSend }),
         });
         const data = await r.json();
