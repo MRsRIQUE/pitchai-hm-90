@@ -1,5 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
+import { z } from "zod";
 import { guardApiRequest, recordAiUsageTokens } from "@/lib/live/api-auth.server";
+import { throttle } from "@/lib/live/rate-limit.server";
 import { corsHeaders } from "@/lib/live/cors.server";
 import {
   isNonEmptyText,
@@ -7,16 +9,24 @@ import {
   validateContentForPublish,
 } from "@/lib/live/validation.server";
 
-type ReplyBody = {
-  message?: string;
-  author?: string;
-  systemPrompt?: string;
-  history?: { role: "user" | "assistant"; content: string }[];
-  blacklist?: string[];
-  whitelist?: string[];
+const ReplyBodySchema = z.object({
+  message: z.string().max(4000),
+  author: z.string().max(120).optional(),
+  systemPrompt: z.string().max(8000).optional(),
+  history: z
+    .array(
+      z.object({
+        role: z.enum(["user", "assistant"]),
+        content: z.string().max(4000),
+      }),
+    )
+    .max(40)
+    .optional(),
+  blacklist: z.array(z.string().max(120)).max(100).optional(),
+  whitelist: z.array(z.string().max(120)).max(100).optional(),
   /** Resposta curta: instrução de no máximo 20 palavras em uma única frase. */
-  brief?: boolean;
-};
+  brief: z.boolean().optional(),
+});
 
 // Marcador estruturado — o modelo devolve isto sozinho quando decide ignorar.
 // Antes era a palavra "IGNORAR" solta, que vazava pro cliente quando o modelo
@@ -136,11 +146,30 @@ export const Route = createFileRoute("/api/public/chat/reply")({
             message: "Missing GEMINI_API_KEY or GCP_API_KEY",
           });
 
-        let body: ReplyBody;
+        let body: z.infer<typeof ReplyBodySchema>;
         try {
-          body = (await request.json()) as ReplyBody;
+          const parsed = ReplyBodySchema.safeParse(await request.json());
+          if (!parsed.success) {
+            return new Response("Invalid body", { status: 400, headers: CORS });
+          }
+          body = parsed.data;
         } catch {
           return new Response("Invalid JSON", { status: 400, headers: CORS });
+        }
+
+        const gate = throttle(`chat_reply:${guard.userId ?? "anon"}`, {
+          limit: 120,
+          windowMs: 60_000,
+        });
+        if (!gate.ok) {
+          return new Response(JSON.stringify({ error: "rate_limited" }), {
+            status: 429,
+            headers: {
+              ...CORS,
+              "Content-Type": "application/json",
+              "Retry-After": String(gate.retryAfter),
+            },
+          });
         }
 
         const message = (body.message ?? "").toString().slice(0, 1000).trim();

@@ -1,12 +1,21 @@
 import { createFileRoute } from "@tanstack/react-router";
+import { z } from "zod";
 import { GoogleGenAI, ThinkingLevel } from "@google/genai";
 import { corsHeaders } from "@/lib/live/cors.server";
 import { guardAiRequest, recordAiUsageTokens } from "@/lib/live/api-auth.server";
+import { throttle } from "@/lib/live/rate-limit.server";
 import { resolveChatModel } from "@/lib/live/ai-models";
 import { validateContentForPublish } from "@/lib/live/validation.server";
 
 const MAX_PROMPT_CHARS = 20_000;
 const MAX_SYSTEM_INSTRUCTION_CHARS = 8_000;
+
+const BodySchema = z.object({
+  prompt: z.string().max(MAX_PROMPT_CHARS),
+  mode: z.enum(["general", "complex", "fast"]).default("general"),
+  systemInstruction: z.string().max(MAX_SYSTEM_INSTRUCTION_CHARS).optional(),
+  enableHighThinking: z.boolean().default(false),
+});
 
 export const Route = createFileRoute("/api/public/gemini/generate")({
   server: {
@@ -36,6 +45,23 @@ export const Route = createFileRoute("/api/public/gemini/generate")({
           });
         }
 
+        const gate = throttle(`ai_generate:${guard.userId ?? "anon"}`, {
+          limit: 60,
+          windowMs: 60_000,
+        });
+        if (!gate.ok)
+          return new Response(
+            JSON.stringify({ error: "rate_limited", retryAfter: gate.retryAfter }),
+            {
+              status: 429,
+              headers: {
+                ...CORS,
+                "Content-Type": "application/json",
+                "Retry-After": String(gate.retryAfter),
+              },
+            },
+          );
+
         const apiKey = process.env.GEMINI_API_KEY || process.env.GCP_API_KEY;
         if (!apiKey) {
           return json(500, {
@@ -45,18 +71,19 @@ export const Route = createFileRoute("/api/public/gemini/generate")({
         }
 
         try {
-          const body = await request.json();
-          const {
-            prompt,
-            mode = "general", // "general" | "complex" | "fast"
-            systemInstruction,
-            enableHighThinking = false,
-          } = body as {
-            prompt: string;
-            mode?: "general" | "complex" | "fast";
-            systemInstruction?: string;
-            enableHighThinking?: boolean;
-          };
+          const parsed = BodySchema.safeParse(await request.json().catch(() => null));
+          if (!parsed.success) {
+            const tooLarge = parsed.error.issues.some(
+              (i) => i.code === "too_big" || i.code === "invalid_string",
+            );
+            return json(tooLarge ? 413 : 400, {
+              error: tooLarge ? "payload_too_large" : "invalid_body",
+              message: tooLarge
+                ? "Prompt ou instrução excede o limite de tamanho"
+                : "Corpo da requisição inválido",
+            });
+          }
+          const { prompt, mode, systemInstruction, enableHighThinking } = parsed.data;
 
           const promptValidation = validateContentForPublish(prompt);
           if (!promptValidation.valid) {

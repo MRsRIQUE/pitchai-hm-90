@@ -1,15 +1,17 @@
 import { createFileRoute } from "@tanstack/react-router";
+import { z } from "zod";
 import { GoogleGenAI } from "@google/genai";
 import { buildSystemPrompt, type LiveConfig } from "@/lib/live/config";
 import { guardAiRequest } from "@/lib/live/api-auth.server";
+import { throttle } from "@/lib/live/rate-limit.server";
 import { validateContentForPublish } from "@/lib/live/validation.server";
 
-type Body = {
-  config: LiveConfig;
-  duracaoMin?: number;
-  objetivo?: string;
-  productId?: string;
-};
+const BodySchema = z.object({
+  config: z.record(z.string(), z.unknown()),
+  duracaoMin: z.number().min(1).max(15).optional(),
+  objetivo: z.string().max(200).optional(),
+  productId: z.string().max(120).optional(),
+});
 
 export const Route = createFileRoute("/api/script/generate")({
   server: {
@@ -21,19 +23,33 @@ export const Route = createFileRoute("/api/script/generate")({
         const apiKey = process.env.GEMINI_API_KEY || process.env.GCP_API_KEY;
         if (!apiKey) return new Response("Missing GEMINI_API_KEY", { status: 500 });
 
-        let body: Body;
+        let body: z.infer<typeof BodySchema>;
         try {
-          body = (await request.json()) as Body;
+          const parsed = BodySchema.safeParse(await request.json());
+          if (!parsed.success) return new Response("Invalid body", { status: 400 });
+          body = parsed.data;
         } catch {
           return new Response("Invalid JSON", { status: 400 });
         }
-        if (!body?.config) return new Response("Missing config", { status: 400 });
 
-        const objetivo = (body.objetivo || "pitch do produto ativo").slice(0, 200);
-        const duracao = Math.max(1, Math.min(15, Number(body.duracaoMin) || 3));
-        const systemInstruction = buildSystemPrompt(body.config);
+        const gate = throttle(`script_generate:${guard.userId ?? "anon"}`, {
+          limit: 20,
+          windowMs: 60_000,
+        });
+        if (!gate.ok) {
+          return new Response(JSON.stringify({ error: "rate_limited" }), {
+            status: 429,
+            headers: { "Content-Type": "application/json", "Retry-After": String(gate.retryAfter) },
+          });
+        }
+
+        const objetivo = body.objetivo || "pitch do produto ativo";
+        const duracao = body.duracaoMin ?? 3;
+        const systemInstruction = buildSystemPrompt(body.config as unknown as LiveConfig);
+        const configProdutos = (body.config as { produtos?: { id: string }[] }).produtos ?? [];
         const target = body.productId
-          ? (body.config.produtos.find((p) => p.id === body.productId) ?? null)
+          ? ((configProdutos.find((p) => p.id === body.productId) as
+              LiveConfig["produtos"][number] | undefined) ?? null)
           : null;
         const userPrompt = [
           'Gere um ROTEIRO DE LIVE para o objetivo: "' + objetivo + '".',

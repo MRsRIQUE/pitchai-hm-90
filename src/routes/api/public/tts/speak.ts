@@ -1,5 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
+import { z } from "zod";
 import { guardApiRequest } from "@/lib/live/api-auth.server";
+import { throttle } from "@/lib/live/rate-limit.server";
 import { corsHeaders } from "@/lib/live/cors.server";
 import { validateContentForPublish } from "@/lib/live/validation.server";
 import {
@@ -8,6 +10,12 @@ import {
   ttsAudioResponse,
   ttsErrorResponse,
 } from "@/lib/live/tts.server";
+
+const BodySchema = z.object({
+  text: z.string().max(TTS_MAX_CHARS),
+  voice: z.string().max(80).optional(),
+  speed: z.number().min(0.5).max(2).optional(),
+});
 
 /**
  * Voz da IA consumida pela extensão durante a live.
@@ -37,14 +45,28 @@ export const Route = createFileRoute("/api/public/tts/speak")({
           });
         }
 
-        let body: { text?: string; voice?: string; speed?: number };
-        try {
-          body = await request.json();
-        } catch {
-          return json(400, { error: "invalid_json", message: "Corpo da requisição inválido." });
+        const parsed = BodySchema.safeParse(await request.json().catch(() => null));
+        if (!parsed.success) {
+          return json(400, {
+            error: "invalid_body",
+            message: "Texto, voz ou velocidade inválidos.",
+          });
+        }
+        const body = parsed.data;
+
+        const gate = throttle(`tts_speak:${guard.userId ?? "anon"}`, {
+          limit: 60,
+          windowMs: 60_000,
+        });
+        if (!gate.ok) {
+          return json(429, {
+            error: "rate_limited",
+            message: "Muitas sínteses seguidas. Aguarde um instante.",
+            retryAfter: gate.retryAfter,
+          });
         }
 
-        const rawText = (body.text ?? "").toString().slice(0, TTS_MAX_CHARS);
+        const rawText = body.text;
         const validation = validateContentForPublish(rawText);
         if (!validation.valid) {
           return json(400, { error: "empty_text", message: "Nenhum texto para falar." });
