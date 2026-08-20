@@ -13,43 +13,6 @@
   }
   const API_BASE = resolveApiBase();
 
-  // ---------- Identificador da instalação (trava de licença) ----------
-  // O painel LÊ este id, NUNCA o cria. Quem cria é o content.js, e um criador só
-  // é o que impede o vínculo de nascer trocado: se o painel também criasse, numa
-  // instalação nova os dois correriam, nasceriam dois UUIDs e a última gravação
-  // venceria. Enquanto o id não existir, o cabeçalho simplesmente não vai — e
-  // ausente nunca bloqueia, o servidor trata como instalação ainda não vinculada.
-  // Não "conserte" isto acrescentando um crypto.randomUUID() aqui.
-  const INSTALL_ID_KEY = "pitchai_install_id";
-  let installIdCache = "";
-
-  async function readInstallId() {
-    // O achado fica em cache; a AUSÊNCIA não. O painel costuma abrir antes de o
-    // content script ter criado o id, e guardar o vazio o deixaria sem cabeçalho
-    // pelo resto da sessão.
-    if (installIdCache) return installIdCache;
-    const stored = await new Promise((resolve) => {
-      try {
-        chrome.storage.local.get([INSTALL_ID_KEY], (res) => resolve(res?.[INSTALL_ID_KEY]));
-      } catch {
-        resolve(null);
-      }
-    });
-    if (typeof stored === "string" && SYNC_UUID_RE.test(stored)) {
-      installIdCache = stored.toLowerCase();
-    }
-    return installIdCache;
-  }
-
-  async function installHeaders() {
-    try {
-      const id = await readInstallId();
-      return id ? { "X-PitchAI-Install": id } : {};
-    } catch {
-      return {};
-    }
-  }
-
   const TOKEN_STATUS_KEY = "pitchai.token.status";
   function saveTokenStatus(tokenRemaining, tokenLimit, plan) {
     try {
@@ -73,9 +36,7 @@
   }
 
   async function signRequest(token, endpoint) {
-    // O cabeçalho da instalação acompanha a assinatura, mas fica FORA dela.
-    const install = await installHeaders();
-    if (!token) return install;
+    if (!token) return {};
     const ts = Date.now().toString();
     const nonce = Math.random().toString(36).substring(2, 10);
     try {
@@ -96,7 +57,6 @@
         .map((b) => b.toString(16).padStart(2, "0"))
         .join("");
       return {
-        ...install,
         "X-PitchAI-Signature": sigHex,
         "X-PitchAI-Timestamp": ts,
         "X-PitchAI-Nonce": nonce,
@@ -104,7 +64,7 @@
         Authorization: `Bearer ${token}`,
       };
     } catch {
-      return { ...install, Authorization: `Bearer ${token}` };
+      return { Authorization: `Bearer ${token}` };
     }
   }
 
@@ -1761,7 +1721,7 @@
       try {
         const r = await fetch(`${API_BASE}/api/public/live/config`, {
           method: "POST",
-          headers: { "Content-Type": "application/json", ...(await installHeaders()) },
+          headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ action: "pull", token: cfg.syncToken }),
         });
         const data = await r.json();
@@ -1782,7 +1742,7 @@
         const { syncToken, ...toSend } = cfg;
         const r = await fetch(`${API_BASE}/api/public/live/config`, {
           method: "POST",
-          headers: { "Content-Type": "application/json", ...(await installHeaders()) },
+          headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ action: "push", token: cfg.syncToken, config: toSend }),
         });
         const data = await r.json();

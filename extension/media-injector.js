@@ -39,9 +39,6 @@
   // Quem captura o microfone virtual costuma ser um iframe. Ele avisa o frame
   // de cima, senão o status do topo diria "ninguém está usando o microfone".
   const OWNER_SOURCE = "__pitchai_media_owner__";
-  // Clique/tecla do vendedor repassado do frame de cima para baixo: é o que
-  // libera o AudioContext e o áudio do vídeo no frame que captura a live.
-  const GESTURE_SOURCE = "__pitchai_media_gesture__";
   const OWNER_TTL_MS = 12000;
   const INACTIVE_CODE = "media-inactive"; // o content.js usa para cair no VB-Cable
   const INACTIVE_MSG = "Fonte virtual de áudio inativa: toque a voz pelo dispositivo";
@@ -811,42 +808,27 @@
     }, 2000);
   }
 
-  // Gesto do usuário vale por DOCUMENTO: clicar no topo não destrava o
-  // AudioContext nem tira o mudo do iframe que entregou o microfone virtual — e
-  // é lá que a fala e o ducking acontecem. Sem isso, "clique uma vez na página
-  // do TikTok" destravava o frame errado e a voz caía no dispositivo. O aviso
-  // só anda para BAIXO na árvore de frames, então não há ciclo.
-  function relayGestureToChildren() {
-    for (let index = 0; index < window.frames.length; index += 1) {
-      try {
-        window.frames[index].postMessage({ source: GESTURE_SOURCE }, window.location.origin);
-      } catch {}
-    }
-  }
-
-  async function onUserGesture() {
-    relayGestureToChildren();
-    if (state.audioCtx?.state === "suspended") {
-      try {
-        await state.audioCtx.resume();
-      } catch {}
-    }
-    const video = state.videoEl;
-    if (!state.enabled || !state.videoUrl || !video) return;
-    if (state.mutedFallback && video.muted) {
-      video.muted = false;
-      state.mutedFallback = false;
-    }
-    if (video.paused) {
-      try {
-        await video.play();
-      } catch {}
-    }
-  }
-
   function armPlaybackOnGesture() {
-    document.addEventListener("pointerdown", onUserGesture, true);
-    document.addEventListener("keydown", onUserGesture, true);
+    const resume = async () => {
+      if (state.audioCtx?.state === "suspended") {
+        try {
+          await state.audioCtx.resume();
+        } catch {}
+      }
+      const video = state.videoEl;
+      if (!state.enabled || !state.videoUrl || !video) return;
+      if (state.mutedFallback && video.muted) {
+        video.muted = false;
+        state.mutedFallback = false;
+      }
+      if (video.paused) {
+        try {
+          await video.play();
+        } catch {}
+      }
+    };
+    document.addEventListener("pointerdown", resume, true);
+    document.addEventListener("keydown", resume, true);
   }
 
   function requestedNumber(value) {
@@ -1696,18 +1678,6 @@
     if (data.source === ACK_SOURCE) return;
     if (data.source === RELAY_ACK_SOURCE) {
       handleRelayAck(event, data);
-      return;
-    }
-    if (data.source === GESTURE_SOURCE) {
-      // Só do frame de cima e da mesma origem. Mesmo forjado pela página, não
-      // faz nada além do que um clique dela própria já faria.
-      if (
-        window.top !== window &&
-        event.source === window.parent &&
-        event.origin === window.location.origin
-      ) {
-        onUserGesture();
-      }
       return;
     }
     if (data.source === OWNER_SOURCE) {

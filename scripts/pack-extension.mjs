@@ -18,21 +18,10 @@ const extDir = path.join(rootDir, "extension");
 const outZip = path.join(rootDir, "public", "pitchai-extension.zip");
 
 // Arquivos distribuídos — exatamente os referenciados pelo manifest.json
-// O `key` do manifest fixa o ID da extensão em dnekfenmdekdjljclnljcgkgggpbcngc.
-// Sem ele o Chrome deriva o ID do caminho da pasta: cada zip baixado vira
-// "pitchai-extension (1)", "(2)"… — ID novo, chrome.storage.local zerado e a
-// config antiga indecifrável, porque runtime.id é a semente da cifra. O vendedor
-// recola o sync token a cada atualização. A chave privada correspondente mora em
-// C:/Users/ti/.pitchai-keys/extension-key.pem, fora do checkout.
-// (A explicação vive aqui e não no manifest: JSON não aceita comentário, e o
-// Chrome avisa "Unrecognized manifest key" para qualquer campo fora do esquema.)
 const FILES = [
   "manifest.json",
   "blocklist.js",
   "account-bridge.js",
-  "product-bridge.js",
-  "product-scrape.js",
-  "background.js",
   "content.js",
   "dom-map.js",
   "hook.js",

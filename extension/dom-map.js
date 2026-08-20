@@ -329,49 +329,25 @@
     return regionNodes(region)[0] || null;
   }
 
-  /**
-   * Pool de candidatos: restrito ao(s) setor(es) quando mapeados.
-   *
-   * Alvo `loose` recebe a varredura ampla TAMBÉM — anexada depois do setor,
-   * nunca no lugar dele. Sem isso o `loose` era letra morta: o reject() do scan
-   * deixava passar quem estivesse fora do setor, mas a coleta nunca trazia
-   * ninguém de fora para ser deixado passar. Um "Iniciar LIVE" fora do estúdio
-   * simplesmente não existia para a busca.
-   *
-   * A ordem importa duas vezes: o setor entra primeiro, então continua com a
-   * preferência na pontuação, e um corte pelo MAX_SCAN só pode cortar a parte
-   * ampla — nunca o que veio do setor.
-   */
-  function candidatePool(selector, region, loose = false) {
+  /** Pool de candidatos: restrito ao(s) setor(es) quando mapeados. */
+  function candidatePool(selector, region) {
     const out = [];
-    // Sem o dedup a varredura ampla recolheria o setor inteiro de novo e
-    // gastaria o orçamento do MAX_SCAN duas vezes com os mesmos nós.
-    const seen = new Set();
-    const push = (el) => {
-      if (!seen.has(el)) {
-        seen.add(el);
-        out.push(el);
-      }
-      return out.length < MAX_SCAN;
-    };
     const scopes = regionNodes(region);
-    let scopeNodes = 0;
     if (scopes.length) {
       for (const scope of scopes) {
-        if (!seen.has(scope)) scopeNodes += 1;
-        if (!push(scope)) return out;
+        out.push(scope);
         for (const el of elementsOf(scope, selector)) {
-          if (!push(el)) return out;
+          out.push(el);
+          if (out.length >= MAX_SCAN) return out;
         }
       }
-      // Alvo preso ao setor: achou algo lá dentro e está resolvido. Para ele a
-      // varredura ampla seria trabalho jogado fora — o reject() descarta tudo
-      // que estiver fora do setor, então nenhum candidato novo poderia vencer.
-      if (!loose && out.length > scopeNodes) return out;
+      if (out.length > scopes.length) return out;
     }
     for (const d of allRoots()) {
-      for (const el of elementsOf(d, selector)) {
-        if (!push(el)) return out;
+      const list = elementsOf(d, selector);
+      for (const el of list) {
+        out.push(el);
+        if (out.length >= MAX_SCAN) return out;
       }
     }
     return out;
@@ -727,7 +703,7 @@
       seen.add(hint);
     }
 
-    const pool = candidatePool(def.pool, def.region, def.loose);
+    const pool = candidatePool(def.pool, def.region);
     for (const el of pool) {
       if (seen.has(el)) continue;
       seen.add(el);
