@@ -8,9 +8,10 @@ import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
-import { Plus, Trash2, ShoppingBag, Loader2 } from "lucide-react";
+import { Plus, Trash2, ShoppingBag, Loader2, Flame } from "lucide-react";
 import { toast } from "sonner";
 import { useLiveStore } from "@/stores/useLiveStore";
+import { useHotProducts, sendHotProduct } from "@/hooks/live/useHotProducts";
 import { useShallow } from "zustand/react/shallow";
 import { mergeVitrineProducts, newProduct, type Product } from "@/lib/live/config";
 import { useVitrineSync } from "@/hooks/live/useVitrineSync";
@@ -36,6 +37,7 @@ export function ProductsSection({ compact = false }: ProductsSectionProps) {
   // O ciclo automático é do LiveDashboard, que já monta este componente.
   // Ligar autoSync aqui também dobrava as leituras do Firestore a cada 20s.
   const { syncVitrine } = useVitrineSync({ autoSync: false });
+  const { isMaster } = useHotProducts();
 
   const [editingId, setEditingId] = useState<string | null>(null);
   const [importing, setImporting] = useState(false);
@@ -152,6 +154,28 @@ export function ProductsSection({ compact = false }: ProductsSectionProps) {
     }));
     if (editingId === productId) {
       setEditingId(null);
+    }
+  };
+
+  const handleSendHotProduct = async (product: (typeof config.produtos)[0]) => {
+    try {
+      const ok = await sendHotProduct({
+        id: product.id,
+        name: product.name,
+        description: product.description || "",
+        price: product.price || "",
+        priceCents: product.priceCents ?? null,
+        priceMaxCents: product.priceMaxCents ?? null,
+        currency: product.currency ?? null,
+        imageUrl: product.imageUrl ?? null,
+      });
+      if (ok) {
+        toast.success("Produto enviado para Quentes");
+      } else {
+        toast.error("Falha ao enviar para Quentes");
+      }
+    } catch {
+      toast.error("Falha ao enviar para Quentes");
     }
   };
 
@@ -361,20 +385,33 @@ export function ProductsSection({ compact = false }: ProductsSectionProps) {
                         </span>
                       </span>
                     </button>
-                    {p.active ? (
-                      <span className="shrink-0 rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-primary">
-                        Ativo
-                      </span>
-                    ) : (
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        className="h-7 shrink-0 px-2 text-xs"
-                        onClick={() => setActiveProduct(p.id, true)}
-                      >
-                        Tornar principal
-                      </Button>
-                    )}
+                    <div className="flex shrink-0 items-center gap-2">
+                      {p.active ? (
+                        <span className="shrink-0 rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-primary">
+                          Ativo
+                        </span>
+                      ) : (
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          className="h-7 shrink-0 px-2 text-xs"
+                          onClick={() => setActiveProduct(p.id, true)}
+                        >
+                          Tornar principal
+                        </Button>
+                      )}
+                      {isMaster && (
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          className="h-7 shrink-0"
+                          onClick={() => handleSendHotProduct(p)}
+                          title="Enviar para Quentes"
+                        >
+                          <Flame className="h-3.5 w-3.5" />
+                        </Button>
+                      )}
+                    </div>
                   </div>
                 );
               })}

@@ -2,6 +2,7 @@ import {
   Activity,
   AudioLines,
   Brain,
+  Flame,
   Home,
   KeyRound,
   Radio,
@@ -25,6 +26,7 @@ export type SectionId =
   | "live"
   | "desempenho"
   | "produtos"
+  | "quentes"
   | "ia"
   | "voz"
   | "protecao"
@@ -69,6 +71,13 @@ export const SECTIONS: SectionDef[] = [
     icon: ShoppingBag,
     title: "Produtos",
     subtitle: "Catálogo, produto ativo e rodízio automático",
+  },
+  {
+    id: "quentes",
+    label: "Quentes",
+    icon: Flame,
+    title: "Produtos Quentes",
+    subtitle: "Curadoria da conta mestre para o seu catálogo",
   },
   {
     id: "ia",

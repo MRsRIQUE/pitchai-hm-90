@@ -21,6 +21,7 @@ import { Route as PlanosRouteImport } from './routes/planos'
 import { Route as QuentesRouteImport } from './routes/quentes'
 import { Route as ResetPasswordRouteImport } from './routes/reset-password'
 import { Route as TermosRouteImport } from './routes/termos'
+import { Route as ApiHotProductsRouteImport } from './routes/api/hot-products'
 import { Route as CheckoutReturnRouteImport } from './routes/checkout.return'
 import { Route as ApiAccountEnsureRouteImport } from './routes/api/account/ensure'
 import { Route as ApiAccountSyncTokenRouteImport } from './routes/api/account/sync-token'
@@ -98,6 +99,11 @@ const ResetPasswordRoute = ResetPasswordRouteImport.update({
 const TermosRoute = TermosRouteImport.update({
   id: '/termos',
   path: '/termos',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiHotProductsRoute = ApiHotProductsRouteImport.update({
+  id: '/api/hot-products',
+  path: '/api/hot-products',
   getParentRoute: () => rootRouteImport,
 } as any)
 const CheckoutReturnRoute = CheckoutReturnRouteImport.update({
@@ -206,6 +212,7 @@ export interface FileRoutesByFullPath {
   '/quentes': typeof QuentesRoute
   '/reset-password': typeof ResetPasswordRoute
   '/termos': typeof TermosRoute
+  '/api/hot-products': typeof ApiHotProductsRoute
   '/checkout/return': typeof CheckoutReturnRoute
   '/api/account/ensure': typeof ApiAccountEnsureRoute
   '/api/account/sync-token': typeof ApiAccountSyncTokenRoute
@@ -238,6 +245,7 @@ export interface FileRoutesByTo {
   '/quentes': typeof QuentesRoute
   '/reset-password': typeof ResetPasswordRoute
   '/termos': typeof TermosRoute
+  '/api/hot-products': typeof ApiHotProductsRoute
   '/checkout/return': typeof CheckoutReturnRoute
   '/api/account/ensure': typeof ApiAccountEnsureRoute
   '/api/account/sync-token': typeof ApiAccountSyncTokenRoute
@@ -271,6 +279,7 @@ export interface FileRoutesById {
   '/quentes': typeof QuentesRoute
   '/reset-password': typeof ResetPasswordRoute
   '/termos': typeof TermosRoute
+  '/api/hot-products': typeof ApiHotProductsRoute
   '/checkout/return': typeof CheckoutReturnRoute
   '/api/account/ensure': typeof ApiAccountEnsureRoute
   '/api/account/sync-token': typeof ApiAccountSyncTokenRoute
@@ -305,6 +314,7 @@ export interface FileRouteTypes {
     | '/quentes'
     | '/reset-password'
     | '/termos'
+    | '/api/hot-products'
     | '/checkout/return'
     | '/api/account/ensure'
     | '/api/account/sync-token'
@@ -337,6 +347,7 @@ export interface FileRouteTypes {
     | '/quentes'
     | '/reset-password'
     | '/termos'
+    | '/api/hot-products'
     | '/checkout/return'
     | '/api/account/ensure'
     | '/api/account/sync-token'
@@ -369,6 +380,7 @@ export interface FileRouteTypes {
     | '/quentes'
     | '/reset-password'
     | '/termos'
+    | '/api/hot-products'
     | '/checkout/return'
     | '/api/account/ensure'
     | '/api/account/sync-token'
@@ -402,6 +414,7 @@ export interface RootRouteChildren {
   QuentesRoute: typeof QuentesRoute
   ResetPasswordRoute: typeof ResetPasswordRoute
   TermosRoute: typeof TermosRoute
+  ApiHotProductsRoute: typeof ApiHotProductsRoute
   CheckoutReturnRoute: typeof CheckoutReturnRoute
   ApiAccountEnsureRoute: typeof ApiAccountEnsureRoute
   ApiAccountSyncTokenRoute: typeof ApiAccountSyncTokenRoute
@@ -506,6 +519,13 @@ declare module '@tanstack/react-router' {
       path: '/termos'
       fullPath: '/termos'
       preLoaderRoute: typeof TermosRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/hot-products': {
+      id: '/api/hot-products'
+      path: '/api/hot-products'
+      fullPath: '/api/hot-products'
+      preLoaderRoute: typeof ApiHotProductsRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/checkout/return': {
@@ -650,6 +670,7 @@ const rootRouteChildren: RootRouteChildren = {
   QuentesRoute: QuentesRoute,
   ResetPasswordRoute: ResetPasswordRoute,
   TermosRoute: TermosRoute,
+  ApiHotProductsRoute: ApiHotProductsRoute,
   CheckoutReturnRoute: CheckoutReturnRoute,
   ApiAccountEnsureRoute: ApiAccountEnsureRoute,
   ApiAccountSyncTokenRoute: ApiAccountSyncTokenRoute,
