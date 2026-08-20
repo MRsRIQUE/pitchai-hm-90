@@ -27,6 +27,7 @@ import { Route as ApiAccountEnsureRouteImport } from './routes/api/account/ensur
 import { Route as ApiAccountSyncTokenRouteImport } from './routes/api/account/sync-token'
 import { Route as ApiAdminCheckRouteImport } from './routes/api/admin/check'
 import { Route as ApiAdminCourtesyRouteImport } from './routes/api/admin/courtesy'
+import { Route as ApiBillingPortalRouteImport } from './routes/api/billing/portal'
 import { Route as ApiCheckoutStartRouteImport } from './routes/api/checkout/start'
 import { Route as ApiScriptGenerateRouteImport } from './routes/api/script/generate'
 import { Route as ApiTtsPreviewRouteImport } from './routes/api/tts/preview'
@@ -131,6 +132,11 @@ const ApiAdminCourtesyRoute = ApiAdminCourtesyRouteImport.update({
   path: '/api/admin/courtesy',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiBillingPortalRoute = ApiBillingPortalRouteImport.update({
+  id: '/api/billing/portal',
+  path: '/api/billing/portal',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiCheckoutStartRoute = ApiCheckoutStartRouteImport.update({
   id: '/api/checkout/start',
   path: '/api/checkout/start',
@@ -218,6 +224,7 @@ export interface FileRoutesByFullPath {
   '/api/account/sync-token': typeof ApiAccountSyncTokenRoute
   '/api/admin/check': typeof ApiAdminCheckRoute
   '/api/admin/courtesy': typeof ApiAdminCourtesyRoute
+  '/api/billing/portal': typeof ApiBillingPortalRoute
   '/api/checkout/start': typeof ApiCheckoutStartRoute
   '/api/script/generate': typeof ApiScriptGenerateRoute
   '/api/tts/preview': typeof ApiTtsPreviewRoute
@@ -251,6 +258,7 @@ export interface FileRoutesByTo {
   '/api/account/sync-token': typeof ApiAccountSyncTokenRoute
   '/api/admin/check': typeof ApiAdminCheckRoute
   '/api/admin/courtesy': typeof ApiAdminCourtesyRoute
+  '/api/billing/portal': typeof ApiBillingPortalRoute
   '/api/checkout/start': typeof ApiCheckoutStartRoute
   '/api/script/generate': typeof ApiScriptGenerateRoute
   '/api/tts/preview': typeof ApiTtsPreviewRoute
@@ -285,6 +293,7 @@ export interface FileRoutesById {
   '/api/account/sync-token': typeof ApiAccountSyncTokenRoute
   '/api/admin/check': typeof ApiAdminCheckRoute
   '/api/admin/courtesy': typeof ApiAdminCourtesyRoute
+  '/api/billing/portal': typeof ApiBillingPortalRoute
   '/api/checkout/start': typeof ApiCheckoutStartRoute
   '/api/script/generate': typeof ApiScriptGenerateRoute
   '/api/tts/preview': typeof ApiTtsPreviewRoute
@@ -320,6 +329,7 @@ export interface FileRouteTypes {
     | '/api/account/sync-token'
     | '/api/admin/check'
     | '/api/admin/courtesy'
+    | '/api/billing/portal'
     | '/api/checkout/start'
     | '/api/script/generate'
     | '/api/tts/preview'
@@ -353,6 +363,7 @@ export interface FileRouteTypes {
     | '/api/account/sync-token'
     | '/api/admin/check'
     | '/api/admin/courtesy'
+    | '/api/billing/portal'
     | '/api/checkout/start'
     | '/api/script/generate'
     | '/api/tts/preview'
@@ -386,6 +397,7 @@ export interface FileRouteTypes {
     | '/api/account/sync-token'
     | '/api/admin/check'
     | '/api/admin/courtesy'
+    | '/api/billing/portal'
     | '/api/checkout/start'
     | '/api/script/generate'
     | '/api/tts/preview'
@@ -420,6 +432,7 @@ export interface RootRouteChildren {
   ApiAccountSyncTokenRoute: typeof ApiAccountSyncTokenRoute
   ApiAdminCheckRoute: typeof ApiAdminCheckRoute
   ApiAdminCourtesyRoute: typeof ApiAdminCourtesyRoute
+  ApiBillingPortalRoute: typeof ApiBillingPortalRoute
   ApiCheckoutStartRoute: typeof ApiCheckoutStartRoute
   ApiScriptGenerateRoute: typeof ApiScriptGenerateRoute
   ApiTtsPreviewRoute: typeof ApiTtsPreviewRoute
@@ -563,6 +576,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiAdminCourtesyRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/billing/portal': {
+      id: '/api/billing/portal'
+      path: '/api/billing/portal'
+      fullPath: '/api/billing/portal'
+      preLoaderRoute: typeof ApiBillingPortalRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/checkout/start': {
       id: '/api/checkout/start'
       path: '/api/checkout/start'
@@ -676,6 +696,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiAccountSyncTokenRoute: ApiAccountSyncTokenRoute,
   ApiAdminCheckRoute: ApiAdminCheckRoute,
   ApiAdminCourtesyRoute: ApiAdminCourtesyRoute,
+  ApiBillingPortalRoute: ApiBillingPortalRoute,
   ApiCheckoutStartRoute: ApiCheckoutStartRoute,
   ApiScriptGenerateRoute: ApiScriptGenerateRoute,
   ApiTtsPreviewRoute: ApiTtsPreviewRoute,
