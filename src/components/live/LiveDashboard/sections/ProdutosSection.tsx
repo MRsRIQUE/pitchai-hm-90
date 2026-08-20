@@ -270,10 +270,7 @@ export function ProdutosSection() {
           {/* minmax(0,1fr) + min-w-0 nas colunas: o mínimo padrão do grid é o
               conteúdo, então um nome longo sem quebra (vindo da vitrine) empurra
               a coluna do editor para fora do cartão. */}
-          <div
-            className="app-grid"
-            style={{ gridTemplateColumns: "minmax(0,1fr) minmax(0,1fr)", marginTop: 16 }}
-          >
+          <div className="app-grid app-grid--2" style={{ marginTop: 16 }}>
             {/* Lista de produtos */}
             <div className="min-w-0">
               <div className="app-card-head" style={{ marginBottom: 10 }}>
@@ -305,6 +302,9 @@ export function ProdutosSection() {
                         gap: 8,
                         padding: "8px 10px",
                         cursor: "pointer",
+                        minWidth: 0,
+                        maxWidth: "100%",
+                        overflow: "hidden",
                         borderColor: emEdicao ? "var(--app-accent, #7c3aed)" : undefined,
                       }}
                       onClick={() => setEditingId(p.id)}
@@ -336,13 +336,14 @@ export function ProdutosSection() {
                         </span>
                       </span>
                       {p.active ? (
-                        <span className="app-tag" data-tone="accent">
+                        <span className="app-tag" data-tone="accent" style={{ flexShrink: 0 }}>
                           Principal
                         </span>
                       ) : (
                         <button
                           type="button"
                           className="app-btn app-btn--sm"
+                          style={{ flexShrink: 0 }}
                           onClick={(e) => {
                             e.stopPropagation();
                             setActiveProduct(p.id, true);
@@ -355,6 +356,7 @@ export function ProdutosSection() {
                         <button
                           type="button"
                           className="app-btn app-btn--sm"
+                          style={{ flexShrink: 0 }}
                           title="Enviar para Produtos Quentes"
                           onClick={async (e) => {
                             e.stopPropagation();
