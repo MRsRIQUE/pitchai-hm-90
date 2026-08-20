@@ -630,6 +630,7 @@ html.dark .dash-shell {
   min-width: 0;
 }
 .app-step-title {
+  display: block;
   font-size: 14px;
   font-weight: 600;
   letter-spacing: -0.012em;
@@ -640,6 +641,7 @@ html.dark .dash-shell {
   text-decoration-color: var(--app-line);
 }
 .app-step-desc {
+  display: block;
   margin-top: 2px;
   font-size: 13px;
   color: var(--app-ink-3);
