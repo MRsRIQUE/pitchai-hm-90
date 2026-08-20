@@ -1,9 +1,9 @@
 {
   "manifest_version": 3,
   "name": "Pitch AI",
-  "version": "0.18.21",
+  "version": "0.18.22",
   "description": "Automatize sua LIVE do TikTok Shop: respostas com IA, auto-fixar produto, encerrar por tempo e proteção contra violações.",
-  "permissions": ["storage", "activeTab"],
+  "permissions": ["storage", "activeTab", "microphone"],
   "host_permissions": [
     "https://shop.tiktok.com/*",
     "https://pitchai-hm.vercel.app/*",
