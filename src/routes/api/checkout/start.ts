@@ -122,7 +122,6 @@ export const Route = createFileRoute("/api/checkout/start")({
           return Response.json(
             {
               error: "Não foi possível iniciar o pagamento. Tente novamente em instantes.",
-              debug: debugMsg,
             },
             { status: 500 },
           );

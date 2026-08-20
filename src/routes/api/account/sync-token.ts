@@ -8,6 +8,7 @@ import {
 } from "@/lib/firebase.server";
 import { resolveUserAccess } from "@/lib/live/access.server";
 import { carryDeviceBindingToNewToken } from "@/lib/live/api-auth.server";
+import { throttle } from "@/lib/live/rate-limit.server";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -97,6 +98,14 @@ async function ensureToken(
 async function handle(request: Request, regenerate: boolean) {
   const auth = await authenticate(request);
   if (!auth) return Response.json({ error: "Sessão inválida. Entre novamente." }, { status: 401 });
+
+  const gate = throttle(`sync_token:${auth.user.uid}`, { limit: 20, windowMs: 60_000 });
+  if (!gate.ok) {
+    return Response.json(
+      { error: "Muitas tentativas. Aguarde um instante." },
+      { status: 429, headers: { "Retry-After": String(gate.retryAfter) } },
+    );
+  }
 
   const access = await resolveUserAccess(auth.user.uid, { userToken: auth.token }).catch(
     () => null,

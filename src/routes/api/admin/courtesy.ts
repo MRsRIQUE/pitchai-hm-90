@@ -3,6 +3,7 @@ import { fsQuery } from "@/lib/firebase.server";
 import { adminApiError, requireAdminRequest } from "@/lib/admin/guard";
 import { grantComped, revokeComped, validateGrantCompedInput } from "@/lib/admin/comped";
 import { COURTESY_DEFAULT_PLAN } from "@/lib/live/plans";
+import { throttle } from "@/lib/live/rate-limit.server";
 
 export const Route = createFileRoute("/api/admin/courtesy")({
   server: {
@@ -10,6 +11,13 @@ export const Route = createFileRoute("/api/admin/courtesy")({
       GET: async ({ request }) => {
         try {
           const admin = await requireAdminRequest(request);
+          const gate = throttle(`admin_courtesy:${admin.uid}`, { limit: 60, windowMs: 60_000 });
+          if (!gate.ok) {
+            return Response.json(
+              { error: "Muitas consultas. Aguarde um instante." },
+              { status: 429, headers: { "Retry-After": String(gate.retryAfter) } },
+            );
+          }
           const docs = await fsQuery("comped_access", {
             limit: 200,
             mode: "server",
@@ -35,6 +43,16 @@ export const Route = createFileRoute("/api/admin/courtesy")({
       POST: async ({ request }) => {
         try {
           const admin = await requireAdminRequest(request);
+          const gate = throttle(`admin_courtesy_post:${admin.uid}`, {
+            limit: 30,
+            windowMs: 60_000,
+          });
+          if (!gate.ok) {
+            return Response.json(
+              { error: "Muitas operações. Aguarde um instante." },
+              { status: 429, headers: { "Retry-After": String(gate.retryAfter) } },
+            );
+          }
           const body = await request.json().catch(() => ({}));
           const validated = validateGrantCompedInput(body);
           if (!validated.ok) {
@@ -61,6 +79,16 @@ export const Route = createFileRoute("/api/admin/courtesy")({
       DELETE: async ({ request }) => {
         try {
           const admin = await requireAdminRequest(request);
+          const gate = throttle(`admin_courtesy_del:${admin.uid}`, {
+            limit: 30,
+            windowMs: 60_000,
+          });
+          if (!gate.ok) {
+            return Response.json(
+              { error: "Muitas operações. Aguarde um instante." },
+              { status: 429, headers: { "Retry-After": String(gate.retryAfter) } },
+            );
+          }
           const body = await request.json().catch(() => ({}));
           const result = await revokeComped(String(body.userId || ""), admin.uid, {
             mode: "server",

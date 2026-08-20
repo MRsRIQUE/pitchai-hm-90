@@ -21,13 +21,16 @@ import { Route as PlanosRouteImport } from './routes/planos'
 import { Route as QuentesRouteImport } from './routes/quentes'
 import { Route as ResetPasswordRouteImport } from './routes/reset-password'
 import { Route as TermosRouteImport } from './routes/termos'
+import { Route as ApiHotProductsRouteImport } from './routes/api/hot-products'
 import { Route as CheckoutReturnRouteImport } from './routes/checkout.return'
 import { Route as ApiAccountDeviceBindingRouteImport } from './routes/api/account/device-binding'
 import { Route as ApiAccountEnsureRouteImport } from './routes/api/account/ensure'
 import { Route as ApiAccountSyncTokenRouteImport } from './routes/api/account/sync-token'
 import { Route as ApiAdminCheckRouteImport } from './routes/api/admin/check'
 import { Route as ApiAdminCourtesyRouteImport } from './routes/api/admin/courtesy'
+import { Route as ApiBillingPortalRouteImport } from './routes/api/billing/portal'
 import { Route as ApiCheckoutStartRouteImport } from './routes/api/checkout/start'
+import { Route as ApiCheckoutStatusRouteImport } from './routes/api/checkout/status'
 import { Route as ApiScriptGenerateRouteImport } from './routes/api/script/generate'
 import { Route as ApiTtsPreviewRouteImport } from './routes/api/tts/preview'
 import { Route as ApiPublicChatReplyRouteImport } from './routes/api/public/chat/reply'
@@ -101,6 +104,11 @@ const TermosRoute = TermosRouteImport.update({
   path: '/termos',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiHotProductsRoute = ApiHotProductsRouteImport.update({
+  id: '/api/hot-products',
+  path: '/api/hot-products',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const CheckoutReturnRoute = CheckoutReturnRouteImport.update({
   id: '/checkout/return',
   path: '/checkout/return',
@@ -131,9 +139,19 @@ const ApiAdminCourtesyRoute = ApiAdminCourtesyRouteImport.update({
   path: '/api/admin/courtesy',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiBillingPortalRoute = ApiBillingPortalRouteImport.update({
+  id: '/api/billing/portal',
+  path: '/api/billing/portal',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiCheckoutStartRoute = ApiCheckoutStartRouteImport.update({
   id: '/api/checkout/start',
   path: '/api/checkout/start',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiCheckoutStatusRoute = ApiCheckoutStatusRouteImport.update({
+  id: '/api/checkout/status',
+  path: '/api/checkout/status',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ApiScriptGenerateRoute = ApiScriptGenerateRouteImport.update({
@@ -212,13 +230,16 @@ export interface FileRoutesByFullPath {
   '/quentes': typeof QuentesRoute
   '/reset-password': typeof ResetPasswordRoute
   '/termos': typeof TermosRoute
+  '/api/hot-products': typeof ApiHotProductsRoute
   '/checkout/return': typeof CheckoutReturnRoute
   '/api/account/device-binding': typeof ApiAccountDeviceBindingRoute
   '/api/account/ensure': typeof ApiAccountEnsureRoute
   '/api/account/sync-token': typeof ApiAccountSyncTokenRoute
   '/api/admin/check': typeof ApiAdminCheckRoute
   '/api/admin/courtesy': typeof ApiAdminCourtesyRoute
+  '/api/billing/portal': typeof ApiBillingPortalRoute
   '/api/checkout/start': typeof ApiCheckoutStartRoute
+  '/api/checkout/status': typeof ApiCheckoutStatusRoute
   '/api/script/generate': typeof ApiScriptGenerateRoute
   '/api/tts/preview': typeof ApiTtsPreviewRoute
   '/api/public/chat/reply': typeof ApiPublicChatReplyRoute
@@ -245,13 +266,16 @@ export interface FileRoutesByTo {
   '/quentes': typeof QuentesRoute
   '/reset-password': typeof ResetPasswordRoute
   '/termos': typeof TermosRoute
+  '/api/hot-products': typeof ApiHotProductsRoute
   '/checkout/return': typeof CheckoutReturnRoute
   '/api/account/device-binding': typeof ApiAccountDeviceBindingRoute
   '/api/account/ensure': typeof ApiAccountEnsureRoute
   '/api/account/sync-token': typeof ApiAccountSyncTokenRoute
   '/api/admin/check': typeof ApiAdminCheckRoute
   '/api/admin/courtesy': typeof ApiAdminCourtesyRoute
+  '/api/billing/portal': typeof ApiBillingPortalRoute
   '/api/checkout/start': typeof ApiCheckoutStartRoute
+  '/api/checkout/status': typeof ApiCheckoutStatusRoute
   '/api/script/generate': typeof ApiScriptGenerateRoute
   '/api/tts/preview': typeof ApiTtsPreviewRoute
   '/api/public/chat/reply': typeof ApiPublicChatReplyRoute
@@ -279,13 +303,16 @@ export interface FileRoutesById {
   '/quentes': typeof QuentesRoute
   '/reset-password': typeof ResetPasswordRoute
   '/termos': typeof TermosRoute
+  '/api/hot-products': typeof ApiHotProductsRoute
   '/checkout/return': typeof CheckoutReturnRoute
   '/api/account/device-binding': typeof ApiAccountDeviceBindingRoute
   '/api/account/ensure': typeof ApiAccountEnsureRoute
   '/api/account/sync-token': typeof ApiAccountSyncTokenRoute
   '/api/admin/check': typeof ApiAdminCheckRoute
   '/api/admin/courtesy': typeof ApiAdminCourtesyRoute
+  '/api/billing/portal': typeof ApiBillingPortalRoute
   '/api/checkout/start': typeof ApiCheckoutStartRoute
+  '/api/checkout/status': typeof ApiCheckoutStatusRoute
   '/api/script/generate': typeof ApiScriptGenerateRoute
   '/api/tts/preview': typeof ApiTtsPreviewRoute
   '/api/public/chat/reply': typeof ApiPublicChatReplyRoute
@@ -314,13 +341,16 @@ export interface FileRouteTypes {
     | '/quentes'
     | '/reset-password'
     | '/termos'
+    | '/api/hot-products'
     | '/checkout/return'
     | '/api/account/device-binding'
     | '/api/account/ensure'
     | '/api/account/sync-token'
     | '/api/admin/check'
     | '/api/admin/courtesy'
+    | '/api/billing/portal'
     | '/api/checkout/start'
+    | '/api/checkout/status'
     | '/api/script/generate'
     | '/api/tts/preview'
     | '/api/public/chat/reply'
@@ -347,13 +377,16 @@ export interface FileRouteTypes {
     | '/quentes'
     | '/reset-password'
     | '/termos'
+    | '/api/hot-products'
     | '/checkout/return'
     | '/api/account/device-binding'
     | '/api/account/ensure'
     | '/api/account/sync-token'
     | '/api/admin/check'
     | '/api/admin/courtesy'
+    | '/api/billing/portal'
     | '/api/checkout/start'
+    | '/api/checkout/status'
     | '/api/script/generate'
     | '/api/tts/preview'
     | '/api/public/chat/reply'
@@ -380,13 +413,16 @@ export interface FileRouteTypes {
     | '/quentes'
     | '/reset-password'
     | '/termos'
+    | '/api/hot-products'
     | '/checkout/return'
     | '/api/account/device-binding'
     | '/api/account/ensure'
     | '/api/account/sync-token'
     | '/api/admin/check'
     | '/api/admin/courtesy'
+    | '/api/billing/portal'
     | '/api/checkout/start'
+    | '/api/checkout/status'
     | '/api/script/generate'
     | '/api/tts/preview'
     | '/api/public/chat/reply'
@@ -414,13 +450,16 @@ export interface RootRouteChildren {
   QuentesRoute: typeof QuentesRoute
   ResetPasswordRoute: typeof ResetPasswordRoute
   TermosRoute: typeof TermosRoute
+  ApiHotProductsRoute: typeof ApiHotProductsRoute
   CheckoutReturnRoute: typeof CheckoutReturnRoute
   ApiAccountDeviceBindingRoute: typeof ApiAccountDeviceBindingRoute
   ApiAccountEnsureRoute: typeof ApiAccountEnsureRoute
   ApiAccountSyncTokenRoute: typeof ApiAccountSyncTokenRoute
   ApiAdminCheckRoute: typeof ApiAdminCheckRoute
   ApiAdminCourtesyRoute: typeof ApiAdminCourtesyRoute
+  ApiBillingPortalRoute: typeof ApiBillingPortalRoute
   ApiCheckoutStartRoute: typeof ApiCheckoutStartRoute
+  ApiCheckoutStatusRoute: typeof ApiCheckoutStatusRoute
   ApiScriptGenerateRoute: typeof ApiScriptGenerateRoute
   ApiTtsPreviewRoute: typeof ApiTtsPreviewRoute
   ApiPublicChatReplyRoute: typeof ApiPublicChatReplyRoute
@@ -521,6 +560,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof TermosRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/hot-products': {
+      id: '/api/hot-products'
+      path: '/api/hot-products'
+      fullPath: '/api/hot-products'
+      preLoaderRoute: typeof ApiHotProductsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/checkout/return': {
       id: '/checkout/return'
       path: '/checkout/return'
@@ -563,11 +609,25 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiAdminCourtesyRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/billing/portal': {
+      id: '/api/billing/portal'
+      path: '/api/billing/portal'
+      fullPath: '/api/billing/portal'
+      preLoaderRoute: typeof ApiBillingPortalRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/checkout/start': {
       id: '/api/checkout/start'
       path: '/api/checkout/start'
       fullPath: '/api/checkout/start'
       preLoaderRoute: typeof ApiCheckoutStartRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/checkout/status': {
+      id: '/api/checkout/status'
+      path: '/api/checkout/status'
+      fullPath: '/api/checkout/status'
+      preLoaderRoute: typeof ApiCheckoutStatusRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/script/generate': {
@@ -670,13 +730,16 @@ const rootRouteChildren: RootRouteChildren = {
   QuentesRoute: QuentesRoute,
   ResetPasswordRoute: ResetPasswordRoute,
   TermosRoute: TermosRoute,
+  ApiHotProductsRoute: ApiHotProductsRoute,
   CheckoutReturnRoute: CheckoutReturnRoute,
   ApiAccountDeviceBindingRoute: ApiAccountDeviceBindingRoute,
   ApiAccountEnsureRoute: ApiAccountEnsureRoute,
   ApiAccountSyncTokenRoute: ApiAccountSyncTokenRoute,
   ApiAdminCheckRoute: ApiAdminCheckRoute,
   ApiAdminCourtesyRoute: ApiAdminCourtesyRoute,
+  ApiBillingPortalRoute: ApiBillingPortalRoute,
   ApiCheckoutStartRoute: ApiCheckoutStartRoute,
+  ApiCheckoutStatusRoute: ApiCheckoutStatusRoute,
   ApiScriptGenerateRoute: ApiScriptGenerateRoute,
   ApiTtsPreviewRoute: ApiTtsPreviewRoute,
   ApiPublicChatReplyRoute: ApiPublicChatReplyRoute,

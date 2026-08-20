@@ -1,11 +1,21 @@
 import { createFileRoute } from "@tanstack/react-router";
+import { z } from "zod";
 import { GoogleGenAI } from "@google/genai";
 import { corsHeaders } from "@/lib/live/cors.server";
 import { guardAiRequest, recordAiUsageTokens } from "@/lib/live/api-auth.server";
+import { throttle } from "@/lib/live/rate-limit.server";
 import { AI_MODELS } from "@/lib/live/ai-models";
 
 // 10MB base64 (~7.5MB binario) — limite suficiente para transcrever curtos clips ao vivo.
 const MAX_AUDIO_BASE64_LENGTH = 10 * 1024 * 1024;
+
+const BodySchema = z.object({
+  audioBase64: z.string().min(1).max(MAX_AUDIO_BASE64_LENGTH),
+  mimeType: z
+    .string()
+    .regex(/^audio\/[a-z0-9.+-]+$/i)
+    .default("audio/webm"),
+});
 
 export const Route = createFileRoute("/api/public/gemini/transcribe")({
   server: {
@@ -35,6 +45,23 @@ export const Route = createFileRoute("/api/public/gemini/transcribe")({
           });
         }
 
+        const gate = throttle(`ai_transcribe:${guard.userId ?? "anon"}`, {
+          limit: 30,
+          windowMs: 60_000,
+        });
+        if (!gate.ok)
+          return new Response(
+            JSON.stringify({ error: "rate_limited", retryAfter: gate.retryAfter }),
+            {
+              status: 429,
+              headers: {
+                ...CORS,
+                "Content-Type": "application/json",
+                "Retry-After": String(gate.retryAfter),
+              },
+            },
+          );
+
         const apiKey = process.env.GEMINI_API_KEY || process.env.GCP_API_KEY;
         if (!apiKey) {
           return json(500, {
@@ -44,21 +71,15 @@ export const Route = createFileRoute("/api/public/gemini/transcribe")({
         }
 
         try {
-          const body = await request.json();
-          const { audioBase64, mimeType = "audio/webm" } = body as {
-            audioBase64: string;
-            mimeType?: string;
-          };
-
-          if (!audioBase64) {
-            return json(400, { error: "missing_audio", message: "audioBase64 is required" });
-          }
-          if (audioBase64.length > MAX_AUDIO_BASE64_LENGTH) {
-            return json(413, {
-              error: "audio_too_large",
-              message: "Audio payload exceeds size limit",
+          const parsed = BodySchema.safeParse(await request.json().catch(() => null));
+          if (!parsed.success) {
+            const tooLarge = parsed.error.issues.some((i) => i.code === "too_big");
+            return json(tooLarge ? 413 : 400, {
+              error: tooLarge ? "audio_too_large" : "invalid_body",
+              message: tooLarge ? "Audio payload exceeds size limit" : "audioBase64 é obrigatório",
             });
           }
+          const { audioBase64, mimeType } = parsed.data;
 
           const ai = new GoogleGenAI({
             apiKey,

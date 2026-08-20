@@ -89,113 +89,121 @@ export const Route = createFileRoute("/api/public/live/session")({
         }
         const uid = access.userId;
 
-        if (body.action === "start") {
-          const sessionId = crypto.randomUUID();
-          await fsSet(
-            `users/${uid}/sessions/${sessionId}`,
-            {
-              user_id: uid,
-              started_at: new Date().toISOString(),
-              ended_at: null,
-              messages_answered: 0,
-              messages_ignored: 0,
-              messages_blocked: 0,
-              products_pitched: [],
-              tokens_in: 0,
-              tokens_out: 0,
-              tts_seconds: 0,
-              estimated_cost_cents: 0,
-              sales_snapshot: [],
-              live_metrics: null,
-              violation_count: 0,
-              notes: null,
-            },
-            { mode: "server" },
-          );
-          return j(200, { ok: true, session_id: sessionId });
-        }
-
-        if (!body.session_id) return j(400, { error: "missing_session_id" });
-
-        // Confirma que a sessão pertence a este usuário
-        const sess = await fsGet(`users/${uid}/sessions/${body.session_id}`, {
-          mode: "server",
-        });
-        if (!sess) return j(401, { error: "invalid_session" });
-        const data = sess.data as any;
-
-        if (body.action === "end") {
-          await fsSet(
-            `users/${uid}/sessions/${body.session_id}`,
-            {
-              ended_at: new Date().toISOString(),
-              sales_snapshot: body.sales_snapshot ?? data.sales_snapshot ?? [],
-              notes: body.notes ?? data.notes ?? null,
-            },
-            { mode: "server" },
-          );
-          return j(200, { ok: true });
-        }
-
-        if (body.action === "event") {
-          const patch: Record<string, unknown> = {};
-          if (body.kind === "answered") patch.messages_answered = (data.messages_answered ?? 0) + 1;
-          else if (body.kind === "ignored")
-            patch.messages_ignored = (data.messages_ignored ?? 0) + 1;
-          else if (body.kind === "blocked")
-            patch.messages_blocked = (data.messages_blocked ?? 0) + 1;
-          else if (body.kind === "product" && body.product?.name) {
-            const list = Array.isArray(data.products_pitched) ? data.products_pitched : [];
-            const exists = list.some((p: any) => p?.name === body.product?.name);
-            patch.products_pitched = exists
-              ? list
-              : [
-                  ...list,
-                  {
-                    name: body.product.name,
-                    id: body.product.id ?? null,
-                    at: new Date().toISOString(),
-                  },
-                ];
-          } else if (body.kind === "tokens") {
-            patch.tokens_in = (data.tokens_in ?? 0) + (body.tokens_in ?? 0);
-            patch.tokens_out = (data.tokens_out ?? 0) + (body.tokens_out ?? 0);
-            patch.estimated_cost_cents =
-              (data.estimated_cost_cents ?? 0) + (body.estimated_cost_cents ?? 0);
-          } else if (body.kind === "tts") {
-            patch.tts_seconds = (data.tts_seconds ?? 0) + (body.tts_seconds ?? 0);
-            patch.estimated_cost_cents =
-              (data.estimated_cost_cents ?? 0) + (body.estimated_cost_cents ?? 0);
-          } else if (body.kind === "sale") {
-            const prev = Array.isArray(data.sales_snapshot) ? data.sales_snapshot : [];
-            patch.sales_snapshot = [
-              ...prev.slice(-199),
-              { text: String(body.sale?.text ?? "").slice(0, 200), at: new Date().toISOString() },
-            ];
-          } else if (body.kind === "metrics" && body.metrics) {
-            const clean = Object.fromEntries(
-              Object.entries(body.metrics).filter(
-                ([, value]) => typeof value === "string" && value.trim(),
-              ),
+        try {
+          if (body.action === "start") {
+            const sessionId = crypto.randomUUID();
+            await fsSet(
+              `users/${uid}/sessions/${sessionId}`,
+              {
+                user_id: uid,
+                started_at: new Date().toISOString(),
+                ended_at: null,
+                messages_answered: 0,
+                messages_ignored: 0,
+                messages_blocked: 0,
+                products_pitched: [],
+                tokens_in: 0,
+                tokens_out: 0,
+                tts_seconds: 0,
+                estimated_cost_cents: 0,
+                sales_snapshot: [],
+                live_metrics: null,
+                violation_count: 0,
+                notes: null,
+              },
+              { mode: "server" },
             );
-            if (!Object.keys(clean).length) return j(400, { error: "empty_metrics" });
-            patch.live_metrics = {
-              ...(data.live_metrics && typeof data.live_metrics === "object"
-                ? data.live_metrics
-                : {}),
-              ...clean,
-              captured_at: new Date().toISOString(),
-            };
-          } else if (body.kind === "violation") {
-            patch.violation_count = (data.violation_count ?? 0) + 1;
-          } else {
-            return j(400, { error: "unknown_kind" });
+            return j(200, { ok: true, session_id: sessionId });
           }
-          await fsSet(`users/${uid}/sessions/${body.session_id}`, patch, { mode: "server" });
-          return j(200, { ok: true });
-        }
 
-        return j(400, { error: "unknown_action" });
+          if (!body.session_id) return j(400, { error: "missing_session_id" });
+
+          // Confirma que a sessão pertence a este usuário
+          const sess = await fsGet(`users/${uid}/sessions/${body.session_id}`, {
+            mode: "server",
+          });
+          if (!sess) return j(401, { error: "invalid_session" });
+          const data = sess.data as any;
+
+          if (body.action === "end") {
+            await fsSet(
+              `users/${uid}/sessions/${body.session_id}`,
+              {
+                ended_at: new Date().toISOString(),
+                sales_snapshot: body.sales_snapshot ?? data.sales_snapshot ?? [],
+                notes: body.notes ?? data.notes ?? null,
+              },
+              { mode: "server" },
+            );
+            return j(200, { ok: true });
+          }
+
+          if (body.action === "event") {
+            const patch: Record<string, unknown> = {};
+            if (body.kind === "answered")
+              patch.messages_answered = (data.messages_answered ?? 0) + 1;
+            else if (body.kind === "ignored")
+              patch.messages_ignored = (data.messages_ignored ?? 0) + 1;
+            else if (body.kind === "blocked")
+              patch.messages_blocked = (data.messages_blocked ?? 0) + 1;
+            else if (body.kind === "product" && body.product?.name) {
+              const list = Array.isArray(data.products_pitched) ? data.products_pitched : [];
+              const exists = list.some((p: any) => p?.name === body.product?.name);
+              patch.products_pitched = exists
+                ? list
+                : [
+                    ...list,
+                    {
+                      name: body.product.name,
+                      id: body.product.id ?? null,
+                      at: new Date().toISOString(),
+                    },
+                  ];
+            } else if (body.kind === "tokens") {
+              patch.tokens_in = (data.tokens_in ?? 0) + (body.tokens_in ?? 0);
+              patch.tokens_out = (data.tokens_out ?? 0) + (body.tokens_out ?? 0);
+              patch.estimated_cost_cents =
+                (data.estimated_cost_cents ?? 0) + (body.estimated_cost_cents ?? 0);
+            } else if (body.kind === "tts") {
+              patch.tts_seconds = (data.tts_seconds ?? 0) + (body.tts_seconds ?? 0);
+              patch.estimated_cost_cents =
+                (data.estimated_cost_cents ?? 0) + (body.estimated_cost_cents ?? 0);
+            } else if (body.kind === "sale") {
+              const prev = Array.isArray(data.sales_snapshot) ? data.sales_snapshot : [];
+              patch.sales_snapshot = [
+                ...prev.slice(-199),
+                { text: String(body.sale?.text ?? "").slice(0, 200), at: new Date().toISOString() },
+              ];
+            } else if (body.kind === "metrics" && body.metrics) {
+              const clean = Object.fromEntries(
+                Object.entries(body.metrics).filter(
+                  ([, value]) => typeof value === "string" && value.trim(),
+                ),
+              );
+              if (!Object.keys(clean).length) return j(400, { error: "empty_metrics" });
+              patch.live_metrics = {
+                ...(data.live_metrics && typeof data.live_metrics === "object"
+                  ? data.live_metrics
+                  : {}),
+                ...clean,
+                captured_at: new Date().toISOString(),
+              };
+            } else if (body.kind === "violation") {
+              patch.violation_count = (data.violation_count ?? 0) + 1;
+            } else {
+              return j(400, { error: "unknown_kind" });
+            }
+            await fsSet(`users/${uid}/sessions/${body.session_id}`, patch, { mode: "server" });
+            return j(200, { ok: true });
+          }
+
+          return j(400, { error: "unknown_action" });
+        } catch (error) {
+          // Erro de Firestore não deve virar 500 cru do framework: a extensão
+          // reage melhor a um JSON com status explícito (e o log fica limpo).
+          console.error("[live/session] falhou:", error);
+          return j(500, { error: "session_write_failed" });
+        }
       },
     },
   },

@@ -63,6 +63,11 @@ function PlanosPage() {
   const { isComped, compedGrantedUntil, userId, userEmail, plan, isPaidActive } =
     useUserSubscription();
 
+  // Cancelamento do checkout: o Stripe devolve para /planos?checkout=cancelado.
+  const checkoutCancelado =
+    typeof window !== "undefined" &&
+    new URLSearchParams(window.location.search).get("checkout") === "cancelado";
+
   // Plano comercial ativo (pago ou cortesia) identificado no catálogo, com
   // posição derivada da ordem de PITCHAI_PLANS: mensal < trimestral < anual.
   const activePlanId = isPaidActive ? canonicalPlanId(plan) : null;
@@ -82,6 +87,23 @@ function PlanosPage() {
     <SitePageFrame>
       <div className="wrap">
         <SubscriptionNotice />
+        {checkoutCancelado && (
+          <div
+            role="status"
+            style={{
+              border: "1px solid rgba(245, 158, 11, 0.4)",
+              background: "rgba(245, 158, 11, 0.08)",
+              color: "inherit",
+              borderRadius: 12,
+              padding: "12px 16px",
+              marginBottom: 16,
+              fontSize: 14,
+            }}
+          >
+            Checkout cancelado — nenhuma cobrança foi feita. Você pode escolher outro plano quando
+            quiser.
+          </div>
+        )}
         <header className="sec-head">
           <div className="eyebrow">Planos</div>
           <h1>
@@ -143,7 +165,9 @@ function PlanosPage() {
                 {(p.badge || isCurrent || isUpgradeTarget) && (
                   <span
                     className="plan-badge"
-                    style={isCurrent || isUpgradeTarget ? { background: "var(--accent)" } : undefined}
+                    style={
+                      isCurrent || isUpgradeTarget ? { background: "var(--accent)" } : undefined
+                    }
                   >
                     {isCurrent ? "Assinado" : isUpgradeTarget ? "Faça upgrade" : p.badge}
                   </span>
@@ -200,7 +224,10 @@ function PlanosPage() {
                   </Link>
                 )}
                 {isCurrent && isTopPlan && (
-                  <p className="plan-note" style={{ marginBottom: 0, marginTop: 12, textAlign: "center" }}>
+                  <p
+                    className="plan-note"
+                    style={{ marginBottom: 0, marginTop: 12, textAlign: "center" }}
+                  >
                     <strong>Plano máximo</strong> — você já está no topo do Pitch AI.
                   </p>
                 )}

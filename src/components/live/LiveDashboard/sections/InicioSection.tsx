@@ -178,34 +178,56 @@ export function InicioSection({
           </div>
         ) : (
           <div className="app-card">
-            {/* app-segment é inline-flex de propósito; com muitos produtos a linha
-                precisa quebrar, e o estado "escolhido" continua vindo do CSS. */}
-            <div className="app-segment" style={{ flexWrap: "wrap", maxWidth: "100%" }}>
+            {/* Lista de produtos no mesmo padrão do "passo a passo": uma linha
+                por produto, com o escolhido destacado. O antigo segment de
+                botões lado a lado quebrava com nomes longos do TikTok. */}
+            <div className="app-steps">
               {config.produtos.map((p) => (
                 <button
                   key={p.id}
                   type="button"
+                  className="app-step"
+                  data-state={p.active ? "current" : "todo"}
                   aria-pressed={p.active}
                   onClick={() => ativarProduto(p.id)}
                   title={p.name}
-                  // O CSS do segmento não quebra linha; nome de produto do TikTok
-                  // costuma ser longo e sem isto ele empurra o cartão para fora.
-                  style={{
-                    maxWidth: "min(260px, 100%)",
-                    overflow: "hidden",
-                    textOverflow: "ellipsis",
-                  }}
                 >
-                  {p.name}
-                  {formatarPreco(p) ? ` · ${formatarPreco(p)}` : ""}
+                  <span className="app-step-num">
+                    {p.active ? <Check aria-hidden="true" /> : <Package aria-hidden="true" />}
+                  </span>
+                  <span className="app-step-body">
+                    <span
+                      className="app-step-title"
+                      style={{
+                        whiteSpace: "normal",
+                        overflowWrap: "anywhere",
+                        textAlign: "left",
+                      }}
+                    >
+                      {p.name}
+                    </span>
+                    {p.active && p.description ? (
+                      <span
+                        className="app-step-desc"
+                        style={{
+                          display: "-webkit-box",
+                          WebkitLineClamp: 2,
+                          WebkitBoxOrient: "vertical",
+                          overflow: "hidden",
+                        }}
+                      >
+                        {p.description}
+                      </span>
+                    ) : null}
+                  </span>
+                  {formatarPreco(p) ? (
+                    <span className="app-tag" data-tone={p.active ? "accent" : undefined}>
+                      {formatarPreco(p)}
+                    </span>
+                  ) : null}
                 </button>
               ))}
             </div>
-            {produtoAtivo?.description ? (
-              <p className="app-card-desc" style={{ marginTop: 12 }}>
-                {produtoAtivo.description}
-              </p>
-            ) : null}
           </div>
         )}
       </div>
