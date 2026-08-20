@@ -5840,6 +5840,22 @@
     return false;
   }
 
+  /**
+   * Por que o controle de LIVE não pode ser clicado agora — null se pode.
+   *
+   * clickLiveControl devolve só `false`, e a trava de licença é a PRIMEIRA
+   * coisa que ele checa. Sem distinguir, os quatro pontos que reportam falha
+   * culpam o DOM ("botão Iniciar LIVE não encontrado") quando a causa real é
+   * `extSecurity` ainda travado — e ele nasce travado, com
+   * reason "verification_pending". Numa instalação nova (storage vazio, sync
+   * token ainda não colado) a mensagem manda todo mundo caçar seletor que está
+   * certo. É por isso que esse bug "voltou" tantas vezes.
+   */
+  function liveControlBlockReason() {
+    if (!extSecurity.isLocked) return null;
+    return extSecurity.message || "licença não confirmada";
+  }
+
   async function clickLiveControl(target, rx) {
     if (extSecurity.isLocked) return false;
     try {
@@ -5943,10 +5959,15 @@
       auto.endingAt = 0;
       if (auto.banner) auto.banner.remove();
       auto.banner = null;
-      publishLiveState({ error: "Não encontrei o botão Encerrar LIVE" });
+      const bloqueio = liveControlBlockReason();
+      publishLiveState({
+        error: bloqueio || "Não encontrei o botão Encerrar LIVE",
+      });
       activity.log({
         type: "live",
-        text: `Tentativa ${auto.liveEndAttempts}/3: botão Encerrar LIVE não encontrado.`,
+        text: bloqueio
+          ? `Tentativa ${auto.liveEndAttempts}/3 não saiu: ${bloqueio}`
+          : `Tentativa ${auto.liveEndAttempts}/3: botão Encerrar LIVE não encontrado.`,
         ts: Date.now(),
       });
       if (auto.liveEndAttempts >= 3) {
@@ -6010,7 +6031,9 @@
           type: "live",
           text: started
             ? "Comando automático para iniciar a LIVE enviado."
-            : `Tentativa ${auto.scheduledStartAttempts}/3: botão Iniciar LIVE não encontrado.`,
+            : liveControlBlockReason()
+              ? `Tentativa ${auto.scheduledStartAttempts}/3 não saiu: ${liveControlBlockReason()}`
+              : `Tentativa ${auto.scheduledStartAttempts}/3: botão Iniciar LIVE não encontrado.`,
           ts: Date.now(),
         });
         publishLiveState({ startAttempted: true, startClicked: started });
@@ -6309,12 +6332,16 @@
       "live:start": async () => {
         const state = await detectLiveState();
         if (state.active) return "A LIVE já está ativa.";
+        const bloqueio = liveControlBlockReason();
+        if (bloqueio) throw new Error(bloqueio);
         if (!(await clickStartLive())) throw new Error("botão Iniciar LIVE não encontrado");
         return "Comando para iniciar a LIVE enviado ao TikTok.";
       },
       "live:end": async () => {
         const state = await detectLiveState();
         if (!state.active) throw new Error("nenhuma LIVE ativa foi detectada");
+        const bloqueio = liveControlBlockReason();
+        if (bloqueio) throw new Error(bloqueio);
         if (!(await finishLive("comando do painel"))) {
           throw new Error("botão Encerrar LIVE não encontrado");
         }
