@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA0NRpd8lX4AqphU7uRTifthrZAQbbXiNtfzfa83/cyLLYz8zuUnsx/5JFKQqYQV1NkH88BJGtOX9pu/TKpbyutqXZdveK3zOHmrEFnP77yqPZuFxIgHFvmxCx3hLcYw1O4OiJ2tVt87u/U4bTZmkkZx8fEhRM7QZidt+AnUbkb14wC9pLQ1Gbyw0cdKdYjtNqwTCtbhvvsC16DrRkhVdGrFHMEw83kBDr9GJM1aGoE2/2UP24AfvnKGpbubM75/VlnXRqoAkVZRpzN6qU9MAoHDWZ/94wOBpZ0q++KxL/CaQMXgpRI8BEfuHIpisEbaIo2WQIYG7ulQdzv3IdGqUkKQIDAQAB",
   "name": "Pitch AI",
-  "version": "0.18.23",
+  "version": "0.18.24",
   "description": "Automatize sua LIVE do TikTok Shop: respostas com IA, auto-fixar produto, encerrar por tempo e proteção contra violações.",
   "permissions": ["storage", "activeTab"],
   "host_permissions": [
