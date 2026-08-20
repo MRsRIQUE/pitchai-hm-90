@@ -94,6 +94,17 @@
       return;
     }
 
+    if (st.vinculo === "desconhecido") {
+      // A licença não foi confirmada. Afirmar "nenhum navegador vinculado" seria
+      // inventar: o servidor não respondeu sobre o vínculo.
+      stateEl.textContent = "Vínculo não confirmado";
+      detailEl.textContent = st.motivoTexto
+        ? `A licença ainda não foi confirmada, então não dá para saber o vínculo. ${st.motivoTexto}`
+        : "A licença ainda não foi confirmada, então não dá para saber o vínculo. Confira o Sync token acima.";
+      btn.hidden = true;
+      return;
+    }
+
     stateEl.textContent = "Nenhum navegador vinculado";
     detailEl.textContent =
       "O primeiro navegador que abrir a extensão com o seu código passa a ser o vinculado.";

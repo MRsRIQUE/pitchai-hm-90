@@ -59,3 +59,17 @@ describe("vínculo de navegador (1 extensão por conta)", () => {
     expect(panel).not.toMatch(/fetch\([^)]*device-binding/);
   });
 });
+
+describe("o painel não inventa resposta que o servidor não deu", () => {
+  it("licença não confirmada vira 'não sei', não 'nenhum vínculo'", () => {
+    expect(content).toContain('"desconhecido"');
+    expect(panel).toContain("Vínculo não confirmado");
+  });
+
+  it("o botão do card pode mesmo ser escondido", () => {
+    // `hidden` sozinho não esconde .pnl-btn: a regra de autor declara display e
+    // ganha do [hidden] da folha do navegador.
+    const css = readFileSync(fileURLToPath(new URL("../panel.css", import.meta.url)), "utf8");
+    expect(css).toMatch(/\.pnl-btn\[hidden\]\s*\{\s*display:\s*none/);
+  });
+});

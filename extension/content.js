@@ -519,14 +519,18 @@
       chrome.storage.local.set({
         [DEVICE_STATUS_STORAGE_KEY]: {
           installId: installIdCache || "",
-          // "esta" = a licença está vinculada a este navegador; "outra" = está
-          // com outro; "nenhuma" = ainda não deu para saber.
+          // "esta" = vinculada a este navegador; "outra" = está com outro;
+          // "desconhecido" = a licença não foi confirmada, então NÃO dá para
+          // afirmar que não há vínculo — dizer "nenhum navegador vinculado" aqui
+          // seria inventar uma resposta que o servidor não deu.
           vinculo:
             extSecurity.reason === DEVICE_MISMATCH
               ? "outra"
               : extSecurity.isLocked
-                ? "nenhuma"
+                ? "desconhecido"
                 : "esta",
+          motivo: extSecurity.isLocked ? extSecurity.reason || "" : "",
+          motivoTexto: extSecurity.isLocked ? extSecurity.message || "" : "",
           boundAt: extSecurity.boundAt || null,
           canReleaseAt: extSecurity.canReleaseAt || null,
           message: extSecurity.reason === DEVICE_MISMATCH ? extSecurity.message || "" : "",

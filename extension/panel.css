@@ -782,6 +782,13 @@ textarea {
 }
 
 /* ---------- Buttons ---------- */
+/* O atributo `hidden` sozinho não esconde nada aqui: a regra .pnl-btn abaixo
+   declara display, e display de autor ganha do [hidden] da folha do navegador.
+   Mesmo motivo das outras regras [hidden] deste arquivo. */
+.pnl-btn[hidden] {
+  display: none;
+}
+
 .pnl-btn {
   cursor: pointer;
   background: var(--surface-2);

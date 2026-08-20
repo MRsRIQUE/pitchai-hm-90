@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import { onAuthStateChanged } from "firebase/auth";
 import { AlertTriangle, Loader2, MonitorSmartphone, Unlink } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { getFirebaseAuth } from "@/lib/firebase";
@@ -47,7 +48,11 @@ export function DeviceBindingPanel() {
   const load = useCallback(async () => {
     const user = getFirebaseAuth().currentUser;
     if (!user) {
+      // Ainda não logado NESTE instante — o onAuthStateChanged abaixo chama de
+      // novo quando o usuário aparecer. Sair daqui com loading:false e state:null
+      // fazia o card inteiro desaparecer da tela para sempre.
       setLoading(false);
+      setState(null);
       return;
     }
     try {
@@ -69,9 +74,10 @@ export function DeviceBindingPanel() {
     }
   }, []);
 
-  useEffect(() => {
-    void load();
-  }, [load]);
+  // O Firebase restaura a sessão de forma assíncrona: no primeiro render o
+  // currentUser costuma ser null mesmo com o vendedor logado. Sem escutar, o
+  // card só apareceria depois de um F5 com sorte de timing.
+  useEffect(() => onAuthStateChanged(getFirebaseAuth(), () => void load()), [load]);
 
   // A extensão manda o vendedor para cá com ?desvincular=1 quando recusa a
   // instalação. Chegando por esse caminho, a confirmação já abre aberta.
@@ -125,7 +131,20 @@ export function DeviceBindingPanel() {
     );
   }
 
-  if (!state) return null;
+  // Sem estado o card não some: sumir em silêncio é indistinguível de "não
+  // existe trava", e foi exatamente o que aconteceu — o vendedor abria a conta
+  // e não via nada sobre vínculo nenhum.
+  if (!state) {
+    return (
+      <div className="rounded-lg border bg-muted/30 p-3 text-xs text-muted-foreground">
+        <p className="font-bold text-foreground">Navegador vinculado</p>
+        <p className="mt-1">
+          Sua conta usa a extensão em um navegador por vez. Entre na sua conta para ver e trocar o
+          navegador vinculado.
+        </p>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-3 rounded-lg border bg-muted/30 p-3">
