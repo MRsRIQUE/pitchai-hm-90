@@ -125,6 +125,18 @@ html.light .marketing-page :is(a, button)[class*="bg-primary"] {
 html.light .marketing-page [class*="text-[#00E676]"] {
   color: #0f7b4f !important;
 }
+html.light .marketing-page [class*="text-[#F59E0B]"] {
+  color: #b45309 !important;
+}
+html.light .marketing-page [class*="text-[#f97316]"] {
+  color: #c2410c !important;
+}
+html.light .marketing-page [class*="text-[#c4b5fd]"] {
+  color: #5b21b6 !important;
+}
+html.light .marketing-page [class*="text-red-400"] {
+  color: #b91c1c !important;
+}
 html.light .marketing-page [class*="text-purple-200"],
 html.light .marketing-page [class*="text-purple-300"],
 html.light .marketing-page [class*="text-purple-400"] {
