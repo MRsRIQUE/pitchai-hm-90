@@ -46,6 +46,9 @@ class FakeElement {
     return this.own + this.children.map((c) => c.textContent).join(" ");
   }
   get isConnected(): boolean {
+    // O alias é o próprio caminhar da árvore: `n` reaponta a cada volta,
+    // então não dá para usar `this` direto aqui.
+    // eslint-disable-next-line @typescript-eslint/no-this-alias
     let n: FakeElement | null = this;
     while (n.parentElement) n = n.parentElement;
     return n.tagName === "HTML";
@@ -71,6 +74,9 @@ class FakeElement {
     return false;
   }
   closest(sel: string): FakeElement | null {
+    // O alias é o próprio caminhar da árvore: `n` reaponta a cada volta,
+    // então não dá para usar `this` direto aqui.
+    // eslint-disable-next-line @typescript-eslint/no-this-alias
     let n: FakeElement | null = this;
     while (n) {
       if (matches(n, sel)) return n;
