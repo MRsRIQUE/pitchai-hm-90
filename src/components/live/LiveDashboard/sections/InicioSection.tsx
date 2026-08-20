@@ -193,11 +193,7 @@ export function InicioSection({
                   title={p.name}
                 >
                   <span className="app-step-num">
-                    {p.active ? (
-                      <Check aria-hidden="true" />
-                    ) : (
-                      <Package aria-hidden="true" />
-                    )}
+                    {p.active ? <Check aria-hidden="true" /> : <Package aria-hidden="true" />}
                   </span>
                   <span className="app-step-body">
                     <span
