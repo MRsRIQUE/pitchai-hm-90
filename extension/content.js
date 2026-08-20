@@ -268,8 +268,71 @@
   const API_BASE = resolveApiBase();
 
   // Assinatura criptográfica HMAC para proteger requisições contra adulteração
+  // ---------- Identidade da instalação (1 extensão por conta) ----------
+  // O content.js é o ÚNICO criador do id. Se o painel também criasse, numa
+  // instalação nova os dois correriam, nasceriam dois UUIDs e a última gravação
+  // venceria — o vínculo nasceria apontando para um id que ninguém mais manda.
+  // O painel só lê (readInstallId lá).
+  const INSTALL_ID_KEY = "pitchai_install_id";
+  const INSTALL_UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  let installIdCache = "";
+
+  function storageGet(key) {
+    return new Promise((resolve) => {
+      try {
+        chrome.storage.local.get([key], (res) => resolve(res?.[key]));
+      } catch {
+        resolve(null);
+      }
+    });
+  }
+
+  /**
+   * Id desta instalação, criando na primeira vez. O cache guarda só o ACHADO:
+   * se a gravação falhar, a próxima chamada tenta de novo em vez de fixar um id
+   * que não sobreviveu ao storage.
+   */
+  async function ensureInstallId() {
+    if (installIdCache) return installIdCache;
+    const stored = await storageGet(INSTALL_ID_KEY);
+    if (typeof stored === "string" && INSTALL_UUID_RE.test(stored)) {
+      installIdCache = stored.toLowerCase();
+      return installIdCache;
+    }
+    let fresh = "";
+    try {
+      fresh = String(crypto.randomUUID()).toLowerCase();
+    } catch {
+      return "";
+    }
+    try {
+      await chrome.storage.local.set({ [INSTALL_ID_KEY]: fresh });
+    } catch {
+      return "";
+    }
+    installIdCache = fresh;
+    return installIdCache;
+  }
+
+  /**
+   * Cabeçalho da instalação. Ausente NUNCA bloqueia: o servidor trata a falta
+   * como "instalação ainda não identificada" e libera, porque a extensão é
+   * distribuída em .zip e a versão antiga convive para sempre.
+   */
+  async function installHeaders() {
+    try {
+      const id = await ensureInstallId();
+      return id ? { "X-PitchAI-Install": id } : {};
+    } catch {
+      return {};
+    }
+  }
+
   async function signRequest(token, endpoint) {
-    if (!token) return {};
+    // O cabeçalho da instalação acompanha a chamada mas fica FORA da assinatura:
+    // o HMAC do servidor é sobre `ts:nonce:endpoint` e nada mais.
+    const install = await installHeaders();
+    if (!token) return install;
     const ts = Date.now().toString();
     const nonce = Math.random().toString(36).substring(2, 10);
     try {
@@ -290,6 +353,7 @@
         .map((b) => b.toString(16).padStart(2, "0"))
         .join("");
       return {
+        ...install,
         "X-PitchAI-Signature": sigHex,
         "X-PitchAI-Timestamp": ts,
         "X-PitchAI-Nonce": nonce,
@@ -297,7 +361,7 @@
         Authorization: `Bearer ${token}`,
       };
     } catch {
-      return { Authorization: `Bearer ${token}` };
+      return { ...install, Authorization: `Bearer ${token}` };
     }
   }
 
@@ -434,9 +498,43 @@
     upgrade: null,
     bannerEl: null,
     lowTokenWarned: false,
+    // Vínculo de navegador: os três vêm do verify e são só do servidor.
+    boundAt: null,
+    canReleaseAt: null,
   };
 
   const TOKEN_USAGE_STORAGE_KEY = "pitchai.token.status";
+
+  // O painel não consegue perguntar ao servidor por conta própria (a rota de
+  // conta usa cookie do site, que o iframe da extensão não tem). Então quem
+  // sabe do vínculo é o content.js, e ele publica — mesmo caminho que o uso de
+  // tokens já usa.
+  const DEVICE_MISMATCH = "device_mismatch";
+  // Rede de segurança: servidor antigo ainda não manda actionUrl.
+  const DEVICE_RELEASE_PATH = "/app?desvincular=1";
+  const DEVICE_STATUS_STORAGE_KEY = "pitchai.device.status";
+
+  function publishDeviceBinding() {
+    try {
+      chrome.storage.local.set({
+        [DEVICE_STATUS_STORAGE_KEY]: {
+          installId: installIdCache || "",
+          // "esta" = a licença está vinculada a este navegador; "outra" = está
+          // com outro; "nenhuma" = ainda não deu para saber.
+          vinculo:
+            extSecurity.reason === DEVICE_MISMATCH
+              ? "outra"
+              : extSecurity.isLocked
+                ? "nenhuma"
+                : "esta",
+          boundAt: extSecurity.boundAt || null,
+          canReleaseAt: extSecurity.canReleaseAt || null,
+          message: extSecurity.reason === DEVICE_MISMATCH ? extSecurity.message || "" : "",
+          at: Date.now(),
+        },
+      });
+    } catch {}
+  }
 
   function publishTokenUsage() {
     try {
@@ -480,6 +578,25 @@
         body: JSON.stringify({ token: syncToken }),
       });
       const data = await res.json().catch(() => ({}));
+      // A recusa por navegador chega em HTTP 200 com valid:true e locked:true.
+      // Precisa vir ANTES do teste de valid/locked, senão cai no ramo genérico
+      // e o vendedor lê "código inválido" com o código certo na mão.
+      if (data.reason === DEVICE_MISMATCH) {
+        extSecurity.isLocked = true;
+        extSecurity.aiLocked = false;
+        extSecurity.reason = DEVICE_MISMATCH;
+        // A mensagem é SEMPRE a do servidor: ela trata o caso da reinstalação e
+        // traz a hora exata da próxima liberação. Texto nosso aqui mentiria a data.
+        extSecurity.message = data.message || "Esta licença está ativa em outro navegador.";
+        extSecurity.boundAt = data.boundAt || null;
+        extSecurity.canReleaseAt = data.canReleaseAt || null;
+        extSecurity.plan = data.plan || extSecurity.plan;
+        extSecurity.upgrade = null;
+        _lockOkCache.at = 0;
+        updateLockUI();
+        publishDeviceBinding();
+        return false;
+      }
       if (res.ok && data.valid && !data.locked) {
         extSecurity.isLocked = false;
         extSecurity.aiLocked = Boolean(data.aiLocked || data.reason === "quota_exceeded");
@@ -491,9 +608,13 @@
         extSecurity.tokenRemaining = data.tokenRemaining ?? 0;
         extSecurity.tokenLimit = data.tokenLimit ?? 0;
         extSecurity.upgrade = data.upgrade || null;
+        // Passou pelo verify: este navegador É o vinculado (ou não há vínculo).
+        extSecurity.boundAt = data.boundAt || null;
+        extSecurity.canReleaseAt = null;
         _lockOkCache.at = Date.now();
         updateLockUI();
         publishTokenUsage();
+        publishDeviceBinding();
         return true;
       } else {
         extSecurity.isLocked = true;
@@ -509,6 +630,7 @@
         extSecurity.upgrade = data.upgrade || null;
         updateLockUI();
         publishTokenUsage();
+        publishDeviceBinding();
         return false;
       }
     } catch {
@@ -520,6 +642,7 @@
         "Não foi possível confirmar sua licença. Verifique a internet e tente novamente.";
       updateLockUI();
       publishTokenUsage();
+      publishDeviceBinding();
       return false;
     }
   }
@@ -547,15 +670,28 @@
       }
       const text = document.getElementById("pitchai-lock-text");
       if (text)
-        text.textContent = `🔒 EXTENSÃO TRAVADA · ${extSecurity.message || "Insira seu Sync token válido."}`;
+        text.textContent =
+          extSecurity.reason === DEVICE_MISMATCH
+            ? `🔗 LICENÇA EM OUTRO NAVEGADOR · ${extSecurity.message}`
+            : `🔒 EXTENSÃO TRAVADA · ${extSecurity.message || "Insira seu Sync token válido."}`;
       const btn = document.getElementById("pitchai-lock-action");
       if (btn) {
         const isQuota = extSecurity.reason === "quota_exceeded";
-        btn.textContent = isQuota
-          ? extSecurity.upgrade?.cta || "Ver plano com mais tokens ↗"
-          : "Desbloquear no Pitch AI ↗";
+        const isDevice = extSecurity.reason === DEVICE_MISMATCH;
+        // Recusa por navegador não é falta de plano: mandar para "Desbloquear"
+        // faria o vendedor procurar assinatura que ele já tem. O destino é a
+        // tela de Conta, onde fica o botão de desvincular.
+        btn.textContent = isDevice
+          ? "Desvincular navegador ↗"
+          : isQuota
+            ? extSecurity.upgrade?.cta || "Ver plano com mais tokens ↗"
+            : "Desbloquear no Pitch AI ↗";
         btn.onclick = () => {
-          const target = isQuota ? extSecurity.upgrade?.url || "/planos" : "/app";
+          const target = isDevice
+            ? DEVICE_RELEASE_PATH
+            : isQuota
+              ? extSecurity.upgrade?.url || "/planos"
+              : "/app";
           window.open(new URL(target, API_BASE).href, "_blank");
         };
       }
@@ -2931,6 +3067,7 @@
       saveStoredPitchBanks();
       if (data.tokenRemaining !== undefined) extSecurity.tokenRemaining = data.tokenRemaining;
       publishTokenUsage();
+      publishDeviceBinding();
       activity.log({
         type: "pitch",
         text: `Banco econômico preparado: ${lines.length} variações para ${product.name}.`,
@@ -3403,6 +3540,7 @@
         extSecurity.tokenLimit = data.tokenLimit ?? extSecurity.tokenLimit;
         extSecurity.upgrade = data.upgrade || extSecurity.upgrade;
         publishTokenUsage();
+        publishDeviceBinding();
         if (data.ignore) {
           activity.markStatus(item.id, "ignored", data.reason || "off_topic");
           sessionEvent({ kind: "ignored" });
