@@ -40,7 +40,12 @@ export const Route = createFileRoute("/api/checkout/status")({
             : ("sandbox" as const);
           const stripe = createStripeClient(stripeEnv);
           const session = await stripe.checkout.sessions.retrieve(sessionId);
-          // Só devolve o essencial — payment_status e o dono da sessão.
+          // Só devolve o status ao dono da sessão: o session_id não é segredo
+          // (viaja na URL), então sem este bloqueio qualquer usuário logado
+          // poderia sondar sessões alheias.
+          if (session.client_reference_id && session.client_reference_id !== user.uid) {
+            return Response.json({ error: "Sessão de outro usuário." }, { status: 403 });
+          }
           return Response.json({
             status: session.status,
             paymentStatus: session.payment_status,

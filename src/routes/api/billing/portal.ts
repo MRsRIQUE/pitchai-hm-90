@@ -43,8 +43,17 @@ export const Route = createFileRoute("/api/billing/portal")({
 
           const body = await request.json().catch(() => ({}));
           const origin = new URL(request.url).origin;
+          // Comparação exata de origin: startsWith aceitaria
+          // "https://pitchai-hm.vercel.app.evil.com" como return_url válido.
           const returnUrl =
-            typeof body?.returnUrl === "string" && body.returnUrl.startsWith(origin)
+            typeof body?.returnUrl === "string" &&
+            (() => {
+              try {
+                return new URL(body.returnUrl).origin === origin;
+              } catch {
+                return false;
+              }
+            })()
               ? body.returnUrl
               : `${origin}/app?section=conta`;
 

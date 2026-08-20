@@ -1,5 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { fsSet, verifyFirebaseIdToken } from "@/lib/firebase.server";
+import { throttle } from "@/lib/live/rate-limit.server";
 
 export const Route = createFileRoute("/api/account/ensure")({
   server: {
@@ -12,6 +13,13 @@ export const Route = createFileRoute("/api/account/ensure")({
         const user = await verifyFirebaseIdToken(token).catch(() => null);
         if (!user?.email) {
           return Response.json({ error: "A conta precisa ter um e-mail válido." }, { status: 400 });
+        }
+        const gate = throttle(`account_ensure:${user.uid}`, { limit: 30, windowMs: 60_000 });
+        if (!gate.ok) {
+          return Response.json(
+            { error: "Muitas tentativas. Aguarde um instante." },
+            { status: 429, headers: { "Retry-After": String(gate.retryAfter) } },
+          );
         }
         try {
           await fsSet(

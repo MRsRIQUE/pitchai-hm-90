@@ -1,15 +1,23 @@
 import { createFileRoute } from "@tanstack/react-router";
+import { z } from "zod";
 import { GoogleGenAI } from "@google/genai";
 import { guardApiRequest, recordAiUsageTokens } from "@/lib/live/api-auth.server";
+import { throttle } from "@/lib/live/rate-limit.server";
 import { AI_MODELS } from "@/lib/live/ai-models";
 import { corsHeaders } from "@/lib/live/cors.server";
 import { validateContentForPublish } from "@/lib/live/validation.server";
 
-type PitchBankBody = {
-  count?: number;
-  product?: { name?: string; price?: string; description?: string };
-  systemPrompt?: string;
-};
+const BodySchema = z.object({
+  count: z.number().int().min(10).max(15).optional(),
+  product: z
+    .object({
+      name: z.string().max(240),
+      price: z.string().max(80).optional(),
+      description: z.string().max(1200).optional(),
+    })
+    .optional(),
+  systemPrompt: z.string().max(5000).optional(),
+});
 
 function parsePitches(raw: string, count: number): string[] {
   let candidates: unknown[] = [];
@@ -61,9 +69,23 @@ export const Route = createFileRoute("/api/public/pitch/bank")({
         const guard = await guardApiRequest(request, "chat_reply");
         if (!guard.ok) return json(guard.status ?? 500, { error: guard.message });
 
-        let body: PitchBankBody;
+        const gate = throttle(`pitch_bank:${guard.userId ?? "anon"}`, {
+          limit: 20,
+          windowMs: 60_000,
+        });
+        if (!gate.ok) {
+          return json(429, {
+            error: "rate_limited",
+            message: "Muitas gerações seguidas. Aguarde um instante.",
+            retryAfter: gate.retryAfter,
+          });
+        }
+
+        let body: z.infer<typeof BodySchema>;
         try {
-          body = (await request.json()) as PitchBankBody;
+          const parsed = BodySchema.safeParse(await request.json());
+          if (!parsed.success) return json(400, { error: "Corpo inválido." });
+          body = parsed.data;
         } catch {
           return json(400, { error: "Corpo inválido." });
         }
@@ -73,7 +95,7 @@ export const Route = createFileRoute("/api/public/pitch/bank")({
           .slice(0, 240);
         if (!productName) return json(400, { error: "Produto não informado." });
 
-        const count = Math.max(10, Math.min(15, Math.round(Number(body.count) || 12)));
+        const count = Math.round(body.count ?? 12);
         const systemInstruction = String(body.systemPrompt ?? "")
           .trim()
           .slice(0, 5000);
