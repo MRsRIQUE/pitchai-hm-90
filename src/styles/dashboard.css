@@ -1,8 +1,8 @@
 /* ============================================================
-   DASHBOARD â€” casca dos painÃ©is (/app e /admin)
-   Mesma paleta e mesma tipografia da landing, em layout de aplicaÃ§Ã£o:
-   sidebar fixa escura + Ã¡rea de trabalho clara.
-   Tudo escopado sob `.dash-shell` para nÃ£o vazar para o resto do app.
+   DASHBOARD — casca dos painéis (/app e /admin)
+   Mesma paleta e mesma tipografia da landing, em layout de aplicação:
+   sidebar fixa escura + área de trabalho clara.
+   Tudo escopado sob `.dash-shell` para não vazar para o resto do app.
    ============================================================ */
 .dash-shell {
   --app-bg: #fbfbfa;
@@ -28,7 +28,7 @@
   --app-sidebar-ink-2: rgba(250, 250, 250, 0.58);
   --app-sidebar-line: rgba(250, 250, 250, 0.1);
   --app-grid-line: rgba(12, 12, 13, 0.045);
-  /* glass: superfÃ­cies translÃºcidas que deixam a malha quadriculada
+  /* glass: superfícies translúcidas que deixam a malha quadriculada
      aparecer por baixo dos cards */
   --app-glass: rgba(255, 255, 255, 0.72);
   --app-glass-2: rgba(255, 255, 255, 0.5);
@@ -90,22 +90,22 @@ html.dark .dash-shell {
 
 /* ------------------------------------------------------------
    PONTE COM OS COMPONENTES EXISTENTES
-   O painel Ã© montado com componentes antigos (Card, Button, Input do shadcn e
+   O painel é montado com componentes antigos (Card, Button, Input do shadcn e
    os cards do LiveDashboard), desenhados para a paleta escura do app. Em vez
-   de reescrever vinte arquivos, redefinimos aqui os tokens que eles jÃ¡ leem:
-   `bg-card` Ã© `var(--card)`, `text-muted-foreground` Ã© `var(--muted-foreground)`,
+   de reescrever vinte arquivos, redefinimos aqui os tokens que eles já leem:
+   `bg-card` é `var(--card)`, `text-muted-foreground` é `var(--muted-foreground)`,
    e assim por diante. Apontando esses tokens para a paleta do painel, todo
-   componente shadcn passa a acompanhar â€” inclusive no escuro, porque os
-   `--app-*` jÃ¡ trocam sozinhos.
+   componente shadcn passa a acompanhar — inclusive no escuro, porque os
+   `--app-*` já trocam sozinhos.
    As cores de marca e de estado (primary, secondary, success, destructive)
-   ficam de fora de propÃ³sito: sÃ£o decisÃ£o de identidade, nÃ£o de superfÃ­cie.
+   ficam de fora de propósito: são decisão de identidade, não de superfície.
    ------------------------------------------------------------ */
 .dash-shell {
   --background: var(--app-bg);
   --foreground: var(--app-ink);
-  --card: var(--app-surface);
+  --card: var(--app-glass);
   --card-foreground: var(--app-ink);
-  --elevated: var(--app-surface-2);
+  --elevated: var(--app-glass-2);
   --popover: var(--app-surface);
   --popover-foreground: var(--app-ink);
   --muted: var(--app-surface-2);
@@ -257,7 +257,7 @@ html.dark .dash-shell {
   white-space: nowrap;
 }
 
-/* pastilha Ã  direita do item: contador, "novo", "!" */
+/* pastilha à direita do item: contador, "novo", "!" */
 .app-nav-badge {
   flex: none;
   min-width: 20px;
@@ -356,7 +356,7 @@ html.dark .dash-shell {
 }
 
 /* ------------------------------------------------------------
-   BOTÃ•ES
+   BOTÕES
    ------------------------------------------------------------ */
 .app-btn {
   display: inline-flex;
@@ -421,7 +421,7 @@ html.dark .dash-shell {
 }
 
 /* ------------------------------------------------------------
-   CARTÃ•ES E BLOCOS
+   CARTÕES E BLOCOS
    ------------------------------------------------------------ */
 .app-card {
   background: var(--app-glass);
@@ -473,7 +473,7 @@ html.dark .dash-shell {
   grid-template-columns: repeat(5, minmax(0, 1fr));
 }
 
-/* cartÃ£o de nÃºmero: rÃ³tulo pequeno em cima, valor grande embaixo */
+/* cartão de número: rótulo pequeno em cima, valor grande embaixo */
 .app-stat {
   background: var(--app-glass-2);
   border: 1px solid var(--app-line);
@@ -506,8 +506,8 @@ html.dark .dash-shell {
   font-size: 12.5px;
   color: var(--app-ink-3);
 }
-/* o nÃºmero em si ganha cor quando o prÃ³prio valor Ã© o alerta â€” custo no
-   vermelho, margem no verde. O rÃ³tulo continua neutro. */
+/* o número em si ganha cor quando o próprio valor é o alerta — custo no
+   vermelho, margem no verde. O rótulo continua neutro. */
 .app-stat-value[data-tone="ok"] {
   color: var(--app-ok);
 }
@@ -571,8 +571,8 @@ html.dark .dash-shell {
   transition: width 0.4s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
-/* barra de dois segmentos (tokens de entrada vs saÃ­da): os dois preenchimentos
-   dividem a mesma trilha, entÃ£o cada um leva sua prÃ³pria largura em % */
+/* barra de dois segmentos (tokens de entrada vs saída): os dois preenchimentos
+   dividem a mesma trilha, então cada um leva sua própria largura em % */
 .app-progress--split {
   display: flex;
 }
@@ -666,7 +666,7 @@ html.dark .dash-shell {
 }
 
 /* ------------------------------------------------------------
-   TÃTULOS DE SEÃ‡ÃƒO
+   TÍTULOS DE SEÇÃO
    ------------------------------------------------------------ */
 .app-section {
   margin-bottom: 28px;
@@ -692,8 +692,8 @@ html.dark .dash-shell {
 
 /* ------------------------------------------------------------
    TABELAS
-   O admin Ã© ferramenta de trabalho: a tabela Ã© densa de propÃ³sito e o
-   scroll horizontal fica no wrapper, nunca no corpo da pÃ¡gina.
+   O admin é ferramenta de trabalho: a tabela é densa de propósito e o
+   scroll horizontal fica no wrapper, nunca no corpo da página.
    ------------------------------------------------------------ */
 .app-main-wrap--wide {
   max-width: 1440px;
@@ -753,7 +753,7 @@ html.dark .dash-shell {
 .app-table tr[data-tone="ok"] td {
   background: var(--app-ok-bg);
 }
-/* nÃºmeros alinham Ã  direita e usam largura fixa por dÃ­gito, senÃ£o a coluna danÃ§a */
+/* números alinham à direita e usam largura fixa por dígito, senão a coluna dança */
 .app-table .num {
   text-align: right;
   font-variant-numeric: tabular-nums;
@@ -767,7 +767,7 @@ html.dark .dash-shell {
 }
 
 /* ------------------------------------------------------------
-   FORMULÃRIOS
+   FORMULÁRIOS
    ------------------------------------------------------------ */
 .app-input,
 .app-select,
@@ -835,7 +835,7 @@ html.dark .dash-shell {
   color: var(--app-ink-3);
 }
 
-/* barra de busca e filtros acima de uma tabela; a Ãºltima aÃ§Ã£o encosta Ã  direita */
+/* barra de busca e filtros acima de uma tabela; a última ação encosta à direita */
 .app-toolbar {
   display: flex;
   align-items: center;
@@ -855,7 +855,7 @@ html.dark .dash-shell {
   gap: 8px;
 }
 
-/* grupo de botÃµes exclusivos entre si */
+/* grupo de botões exclusivos entre si */
 .app-segment {
   display: inline-flex;
   padding: 3px;
@@ -940,7 +940,7 @@ html.dark .dash-shell {
   margin-bottom: 4px;
 }
 
-/* bolinha de status; sÃ³ pulsa quando a conexÃ£o estÃ¡ de fato viva */
+/* bolinha de status; só pulsa quando a conexão está de fato viva */
 .app-dot {
   display: inline-block;
   width: 8px;
@@ -988,19 +988,19 @@ html.dark .dash-shell {
 }
 
 /* ------------------------------------------------------------
-   PONTE â€” CORES FIXAS DO TEMA ESCURO
-   O que sobra depois dos tokens: componentes que escreveram a cor na mÃ£o
-   (`text-white`, `bg-black/40`, `text-slate-300`). Mesma tÃ©cnica que o
-   `marketing-theme.css` jÃ¡ usa para as telas antigas.
+   PONTE — CORES FIXAS DO TEMA ESCURO
+   O que sobra depois dos tokens: componentes que escreveram a cor na mão
+   (`text-white`, `bg-black/40`, `text-slate-300`). Mesma técnica que o
+   `marketing-theme.css` já usa para as telas antigas.
 
-   Duas restriÃ§Ãµes que fazem a regra ser correta e nÃ£o sÃ³ conveniente:
-   - sÃ³ sob `html.light`, porque no escuro essas cores estÃ£o certas;
-   - sÃ³ dentro de `.app-main` e `.app-topbar`. A sidebar Ã© escura, e lÃ¡ o
-     `text-white` da logo Ã© o valor desejado â€” incluir `.dash-shell` inteiro
-     apagaria a marca contra o prÃ³prio fundo.
+   Duas restrições que fazem a regra ser correta e não só conveniente:
+   - só sob `html.light`, porque no escuro essas cores estão certas;
+   - só dentro de `.app-main` e `.app-topbar`. A sidebar é escura, e lá o
+     `text-white` da logo é o valor desejado — incluir `.dash-shell` inteiro
+     apagaria a marca contra o próprio fundo.
 
-   Isto Ã© ponte, nÃ£o destino: conforme cada componente for migrado para os
-   utilitÃ¡rios `app-*`, o seletor correspondente aqui pode sair.
+   Isto é ponte, não destino: conforme cada componente for migrado para os
+   utilitários `app-*`, o seletor correspondente aqui pode sair.
    ------------------------------------------------------------ */
 html.light .dash-shell :is(.app-main, .app-topbar) [class*="bg-white/"],
 html.light .dash-shell :is(.app-main, .app-topbar) [class*="bg-black/"],
@@ -1017,13 +1017,13 @@ html.light .dash-shell :is(.app-main, .app-topbar) [class~="text-white"],
 html.light .dash-shell :is(.app-main, .app-topbar) [class*="text-white/"] {
   color: var(--app-ink-2) !important;
 }
-/* tÃ­tulo mantÃ©m o contraste cheio; corpo fica um tom abaixo */
+/* título mantém o contraste cheio; corpo fica um tom abaixo */
 html.light .dash-shell :is(.app-main, .app-topbar) :is(h1, h2, h3, h4)[class~="text-white"],
 html.light .dash-shell :is(.app-main, .app-topbar) :is(h1, h2, h3, h4)[class*="text-white/"] {
   color: var(--app-ink) !important;
 }
 
-/* cinzas claros â†’ tinta terciÃ¡ria */
+/* cinzas claros → tinta terciária */
 html.light .dash-shell :is(.app-main, .app-topbar) [class*="text-slate-2"],
 html.light .dash-shell :is(.app-main, .app-topbar) [class*="text-slate-3"],
 html.light .dash-shell :is(.app-main, .app-topbar) [class*="text-slate-4"],
@@ -1064,7 +1064,7 @@ html.light .dash-shell :is(.app-main, .app-topbar) [class*="text-rose-4"] {
 }
 
 /* ------------------------------------------------------------
-   MOBILE â€” a sidebar vira gaveta
+   MOBILE — a sidebar vira gaveta
    ------------------------------------------------------------ */
 .app-scrim {
   display: none;
