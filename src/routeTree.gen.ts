@@ -29,6 +29,7 @@ import { Route as ApiAdminCheckRouteImport } from './routes/api/admin/check'
 import { Route as ApiAdminCourtesyRouteImport } from './routes/api/admin/courtesy'
 import { Route as ApiBillingPortalRouteImport } from './routes/api/billing/portal'
 import { Route as ApiCheckoutStartRouteImport } from './routes/api/checkout/start'
+import { Route as ApiCheckoutStatusRouteImport } from './routes/api/checkout/status'
 import { Route as ApiScriptGenerateRouteImport } from './routes/api/script/generate'
 import { Route as ApiTtsPreviewRouteImport } from './routes/api/tts/preview'
 import { Route as ApiPublicChatReplyRouteImport } from './routes/api/public/chat/reply'
@@ -142,6 +143,11 @@ const ApiCheckoutStartRoute = ApiCheckoutStartRouteImport.update({
   path: '/api/checkout/start',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiCheckoutStatusRoute = ApiCheckoutStatusRouteImport.update({
+  id: '/api/checkout/status',
+  path: '/api/checkout/status',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiScriptGenerateRoute = ApiScriptGenerateRouteImport.update({
   id: '/api/script/generate',
   path: '/api/script/generate',
@@ -226,6 +232,7 @@ export interface FileRoutesByFullPath {
   '/api/admin/courtesy': typeof ApiAdminCourtesyRoute
   '/api/billing/portal': typeof ApiBillingPortalRoute
   '/api/checkout/start': typeof ApiCheckoutStartRoute
+  '/api/checkout/status': typeof ApiCheckoutStatusRoute
   '/api/script/generate': typeof ApiScriptGenerateRoute
   '/api/tts/preview': typeof ApiTtsPreviewRoute
   '/api/public/chat/reply': typeof ApiPublicChatReplyRoute
@@ -260,6 +267,7 @@ export interface FileRoutesByTo {
   '/api/admin/courtesy': typeof ApiAdminCourtesyRoute
   '/api/billing/portal': typeof ApiBillingPortalRoute
   '/api/checkout/start': typeof ApiCheckoutStartRoute
+  '/api/checkout/status': typeof ApiCheckoutStatusRoute
   '/api/script/generate': typeof ApiScriptGenerateRoute
   '/api/tts/preview': typeof ApiTtsPreviewRoute
   '/api/public/chat/reply': typeof ApiPublicChatReplyRoute
@@ -295,6 +303,7 @@ export interface FileRoutesById {
   '/api/admin/courtesy': typeof ApiAdminCourtesyRoute
   '/api/billing/portal': typeof ApiBillingPortalRoute
   '/api/checkout/start': typeof ApiCheckoutStartRoute
+  '/api/checkout/status': typeof ApiCheckoutStatusRoute
   '/api/script/generate': typeof ApiScriptGenerateRoute
   '/api/tts/preview': typeof ApiTtsPreviewRoute
   '/api/public/chat/reply': typeof ApiPublicChatReplyRoute
@@ -331,6 +340,7 @@ export interface FileRouteTypes {
     | '/api/admin/courtesy'
     | '/api/billing/portal'
     | '/api/checkout/start'
+    | '/api/checkout/status'
     | '/api/script/generate'
     | '/api/tts/preview'
     | '/api/public/chat/reply'
@@ -365,6 +375,7 @@ export interface FileRouteTypes {
     | '/api/admin/courtesy'
     | '/api/billing/portal'
     | '/api/checkout/start'
+    | '/api/checkout/status'
     | '/api/script/generate'
     | '/api/tts/preview'
     | '/api/public/chat/reply'
@@ -399,6 +410,7 @@ export interface FileRouteTypes {
     | '/api/admin/courtesy'
     | '/api/billing/portal'
     | '/api/checkout/start'
+    | '/api/checkout/status'
     | '/api/script/generate'
     | '/api/tts/preview'
     | '/api/public/chat/reply'
@@ -434,6 +446,7 @@ export interface RootRouteChildren {
   ApiAdminCourtesyRoute: typeof ApiAdminCourtesyRoute
   ApiBillingPortalRoute: typeof ApiBillingPortalRoute
   ApiCheckoutStartRoute: typeof ApiCheckoutStartRoute
+  ApiCheckoutStatusRoute: typeof ApiCheckoutStatusRoute
   ApiScriptGenerateRoute: typeof ApiScriptGenerateRoute
   ApiTtsPreviewRoute: typeof ApiTtsPreviewRoute
   ApiPublicChatReplyRoute: typeof ApiPublicChatReplyRoute
@@ -590,6 +603,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiCheckoutStartRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/checkout/status': {
+      id: '/api/checkout/status'
+      path: '/api/checkout/status'
+      fullPath: '/api/checkout/status'
+      preLoaderRoute: typeof ApiCheckoutStatusRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/script/generate': {
       id: '/api/script/generate'
       path: '/api/script/generate'
@@ -698,6 +718,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiAdminCourtesyRoute: ApiAdminCourtesyRoute,
   ApiBillingPortalRoute: ApiBillingPortalRoute,
   ApiCheckoutStartRoute: ApiCheckoutStartRoute,
+  ApiCheckoutStatusRoute: ApiCheckoutStatusRoute,
   ApiScriptGenerateRoute: ApiScriptGenerateRoute,
   ApiTtsPreviewRoute: ApiTtsPreviewRoute,
   ApiPublicChatReplyRoute: ApiPublicChatReplyRoute,

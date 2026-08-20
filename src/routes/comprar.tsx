@@ -18,7 +18,6 @@ function ComprarPage() {
   const { plan: planId } = useSearch({ from: "/comprar" });
   const navigate = useNavigate();
   const [error, setError] = useState<string | null>(null);
-  const [debugMsg, setDebugMsg] = useState<string | null>(null);
   const plan = findPitchaiPlan(planId || "");
 
   useEffect(() => {
@@ -55,7 +54,6 @@ function ComprarPage() {
         window.location.assign(payload.checkoutUrl);
       } catch (cause) {
         setError(cause instanceof Error ? cause.message : "Não foi possível abrir o checkout.");
-        setDebugMsg((cause as { debug?: string })?.debug ?? null);
       }
     });
     return () => {
@@ -85,11 +83,6 @@ function ComprarPage() {
           <>
             <h1 className="marketing-title text-2xl">Não foi possível continuar</h1>
             <p className="mt-3 text-sm text-red-400">{error}</p>
-            {debugMsg && (
-              <p className="mt-2 rounded-lg bg-black/30 p-2 text-left text-[11px] break-all text-amber-300">
-                {debugMsg}
-              </p>
-            )}
             <Link to="/planos" className="mt-5 inline-block text-purple-400 underline">
               Voltar aos planos
             </Link>
