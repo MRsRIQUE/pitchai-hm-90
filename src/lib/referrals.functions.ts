@@ -9,6 +9,7 @@ import {
 import {
   isReferralSource,
   normalizeReferralCode,
+  REFERRAL_TERMS_VERSION,
   type ReferralSource,
 } from "@/lib/referrals.shared";
 
@@ -49,7 +50,7 @@ export const getMyReferralSummary = createServerFn({ method: "GET" })
   .handler(async ({ context }): Promise<ReferralSummary> => {
     const userId = context.userId;
     const firestore = { mode: "server" as const, userToken: context.firebaseToken };
-    const code = await ensureReferralCode(userId, context.firebaseToken);
+    const code = await ensureReferralCode(userId);
     const referralDoc = await fsGet(`users/${userId}/referral/main`, firestore);
 
     // Todo vínculo é gravado como "claimed" no momento do uso; não há outro
@@ -122,9 +123,14 @@ export const getMyReferralSummary = createServerFn({ method: "GET" })
 
 export const activateReferralProgram = createServerFn({ method: "POST" })
   .middleware([requireFirebaseAuth])
+  .validator((data: { termsAccepted: boolean; termsVersion: string }) => {
+    if (data?.termsAccepted !== true || data?.termsVersion !== REFERRAL_TERMS_VERSION) {
+      throw new Error("Aceite dos termos do programa é obrigatório.");
+    }
+    return { termsAccepted: true as const, termsVersion: REFERRAL_TERMS_VERSION };
+  })
   .handler(async ({ context }): Promise<{ ok: true; activatedAt: string }> => {
-    const firestore = { mode: "server" as const, userToken: context.firebaseToken };
-    const code = await ensureReferralCode(context.userId, context.firebaseToken);
+    const code = await ensureReferralCode(context.userId);
     const activatedAt = new Date().toISOString();
 
     // Confere a posse do código antes de ativá-lo com a service account, que
@@ -140,18 +146,29 @@ export const activateReferralProgram = createServerFn({ method: "POST" })
     // tentar de novo — em vez de ficar com a conta marcada como ativa e um link
     // que não vincula ninguém.
     //
-    // Sem `userToken` de propósito: a regra de update de referral_codes exige
-    // isServer(), condição que o token do usuário não satisfaz (isServer() é a
-    // conta técnica legada). Quem ativa é o servidor, com a service account.
+    // Sem `userToken` de propósito: somente o backend pode alterar o estado do
+    // programa. A service account também evita que o cliente forje o aceite.
     await fsSet(
       `referral_codes/${code}`,
-      { uid: context.userId, active: true, activatedAt },
+      {
+        uid: context.userId,
+        active: true,
+        activatedAt,
+        termsAcceptedAt: activatedAt,
+        termsVersion: REFERRAL_TERMS_VERSION,
+      },
       { mode: "server" },
     );
     await fsSet(
       `users/${context.userId}/referral/main`,
-      { code, active: true, activatedAt },
-      firestore,
+      {
+        code,
+        active: true,
+        activatedAt,
+        termsAcceptedAt: activatedAt,
+        termsVersion: REFERRAL_TERMS_VERSION,
+      },
+      { mode: "server" },
     );
     return { ok: true, activatedAt };
   });

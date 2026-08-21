@@ -7,6 +7,7 @@ import { onAuthStateChanged } from "firebase/auth";
 import { getFirebaseAuth } from "@/lib/firebase";
 import { requireAuthBeforeLoad } from "@/lib/auth-guard";
 import { activateReferralProgram, getMyReferralSummary } from "@/lib/referrals.functions";
+import { REFERRAL_TERMS_VERSION } from "@/lib/referrals.shared";
 import { SitePageFrame } from "@/components/live/SitePageFrame";
 import { copyToClipboard } from "@/lib/clipboard";
 
@@ -63,7 +64,10 @@ function IndiquePage() {
   });
   const { data, isLoading, error } = query;
   const activation = useMutation({
-    mutationFn: () => activateProgram({}),
+    mutationFn: () =>
+      activateProgram({
+        data: { termsAccepted: true, termsVersion: REFERRAL_TERMS_VERSION },
+      }),
     onSuccess: () => {
       void query.refetch();
       toast.success("Programa de afiliados ativado!");

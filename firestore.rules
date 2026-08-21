@@ -134,15 +134,10 @@ service cloud.firestore {
         allow read, write: if (isOwnerOf(uid) && hasAccessRecord(uid)) || isServer();
       }
 
-      // Código de indicação do usuário — o dono cria; o código é imutável.
+      // Espelho privado do programa — o dono lê; somente o backend altera.
       match /referral/{refId} {
-        allow read: if isOwnerOf(uid) || isServer();
-        allow create: if isOwnerOf(uid)
-          && request.resource.data.code is string
-          && get(/databases/$(database)/documents/referral_codes/$(request.resource.data.code)).data.uid == uid;
-        allow update: if isOwnerOf(uid)
-          && request.resource.data.code == resource.data.code;
-        allow delete: if isServer();
+        allow read: if isOwnerOf(uid) || isPrivileged();
+        allow write: if isPrivileged();
       }
 
       // Vínculos indicador -> indicado — escritos pelo servidor.
@@ -212,13 +207,7 @@ service cloud.firestore {
     match /referral_codes/{code} {
       allow get: if true;
       allow list: if isPrivileged();
-      allow create: if isServer()
-        || (isSignedIn()
-          && request.resource.data.uid == request.auth.uid
-          && request.resource.data.active == false
-          && request.resource.data.diff({}).affectedKeys()
-            .hasOnly(['uid', 'active', 'createdAt']));
-      allow update, delete: if isPrivileged();
+      allow write: if isPrivileged();
     }
 
     // Mapeia o Promotion Code da Stripe ao afiliado. O checkout consulta esse

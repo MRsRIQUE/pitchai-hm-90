@@ -1,66 +1,74 @@
-import { fsGet, fsSet, fsCreate, type FirestoreAuthMode } from "@/lib/firebase.server";
-import { normalizeReferralCode, type ReferralSource } from "@/lib/referrals.shared";
+import { fsCreate, fsCreateIfAbsent, fsGet, fsSet } from "@/lib/firebase.server";
+import { codeFromUserId, normalizeReferralCode, type ReferralSource } from "@/lib/referrals.shared";
 
 export const REFERRAL_RATE = 0.6;
 export { normalizeReferralCode as normalizeCode } from "@/lib/referrals.shared";
 
-/** Código curto e estável derivado do id do usuário. */
-export function codeFromUserId(userId: string): string {
-  // Firebase UIDs não são hexadecimais. O parseInt anterior gerava "NAN"
-  // para grande parte das contas Google e fazia usuários colidirem no mesmo
-  // código. FNV-1a aceita o UID alfanumérico completo e permanece estável.
-  let hash = 0x811c9dc5;
-  for (let index = 0; index < userId.length; index++) {
-    hash ^= userId.charCodeAt(index);
-    hash = Math.imul(hash, 0x01000193);
-  }
-  return (hash >>> 0).toString(36).toUpperCase().padStart(8, "0").slice(-8);
-}
+export { codeFromUserId } from "@/lib/referrals.shared";
 
 /**
  * Garante que o usuário tenha um código de indicação no Firestore.
  * Armazenado em referral_codes/{code} (público) e users/{uid}/referral.
  */
-type ReferralAuth = { mode: FirestoreAuthMode; userToken: string };
+export async function ensureReferralCode(userId: string): Promise<string> {
+  const firestore = { mode: "server" as const };
+  const userDoc = await fsGet(`users/${userId}/referral/main`, firestore);
+  const savedCode = normalizeReferralCode(String(userDoc?.data?.code || ""));
+  const candidates = Array.from(
+    new Set([
+      ...(savedCode ? [savedCode] : []),
+      ...Array.from({ length: 9 }, (_, attempt) =>
+        codeFromUserId(attempt === 0 ? userId : `${userId}:${attempt}`),
+      ),
+    ]),
+  );
+  const now = new Date().toISOString();
+  let code = "";
+  let codeData: Record<string, unknown> | null = null;
 
-export async function ensureReferralCode(userId: string, userToken: string): Promise<string> {
-  const auth: ReferralAuth = { mode: "server", userToken };
-  const userDoc = await fsGet(`users/${userId}/referral/main`, auth);
-  const existing = userDoc?.data?.code as string | undefined;
-  if (existing) return existing;
-
-  let code = codeFromUserId(userId);
-  let codeAlreadyOwned = false;
-  let codeAvailable = false;
-  for (let attempt = 0; attempt < 8; attempt++) {
-    const clash = await fsGet(`referral_codes/${code}`, { mode: "public" });
-    if (!clash) {
-      codeAvailable = true;
+  for (const candidate of candidates) {
+    const current = await fsGet(`referral_codes/${candidate}`, firestore);
+    if (current?.data?.uid === userId) {
+      code = candidate;
+      codeData = current.data;
       break;
     }
-    if (clash.data.uid === userId) {
-      codeAlreadyOwned = true;
+    if (current) continue;
+
+    const created = await fsCreateIfAbsent(
+      `referral_codes/${candidate}`,
+      { uid: userId, active: false, createdAt: now },
+      firestore,
+    );
+    if (created) {
+      code = candidate;
+      codeData = { uid: userId, active: false, createdAt: now };
       break;
     }
-    code = codeFromUserId(`${userId}:${attempt + 1}`);
+
+    // Outro cadastro pode ter reservado o mesmo candidato entre o GET e o
+    // CREATE. Se foi esta própria conta, reutiliza; se não, tenta o próximo.
+    const winner = await fsGet(`referral_codes/${candidate}`, firestore);
+    if (winner?.data?.uid === userId) {
+      code = candidate;
+      codeData = winner.data;
+      break;
+    }
   }
-  if (!codeAvailable && !codeAlreadyOwned) {
+  if (!code || !codeData) {
     throw new Error("Não foi possível reservar um código de indicação único.");
   }
-  if (!codeAlreadyOwned) {
-    await fsSet(
-      `referral_codes/${code}`,
-      { uid: userId, active: false, createdAt: new Date().toISOString() },
-      auth,
-    );
-  }
-  // `active: false` explícito. Sem ele o campo ficava ausente e quem lê o resumo
-  // era obrigado a adivinhar o que "ausente" significa — foi assim que a página
-  // passou a exibir o programa como ativo para quem nunca ativou.
+
+  const active = codeData.active === true;
   await fsSet(
     `users/${userId}/referral/main`,
-    { code, active: false, createdAt: new Date().toISOString() },
-    auth,
+    {
+      code,
+      active,
+      createdAt: String(userDoc?.data?.createdAt || codeData.createdAt || now),
+      ...(active && codeData.activatedAt ? { activatedAt: String(codeData.activatedAt) } : {}),
+    },
+    firestore,
   );
   return code;
 }
