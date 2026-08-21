@@ -178,8 +178,11 @@ service cloud.firestore {
           && claimId == request.auth.uid
           && request.resource.data.refereeUid == request.auth.uid
           && request.resource.data.referrerUid != request.auth.uid
+          && request.resource.data.status == 'claimed'
           && get(/databases/$(database)/documents/referral_codes/$(request.resource.data.code)).data.uid
-            == request.resource.data.referrerUid);
+            == request.resource.data.referrerUid
+          && get(/databases/$(database)/documents/referral_codes/$(request.resource.data.code)).data.active
+            == true);
       allow update, delete: if isServer();
     }
 
@@ -208,9 +211,20 @@ service cloud.firestore {
     // Código de indicação — público (é a chave de busca do convite).
     match /referral_codes/{code} {
       allow get: if true;
+      allow list: if isPrivileged();
       allow create: if isServer()
-        || (isSignedIn() && request.resource.data.uid == request.auth.uid);
-      allow update, delete: if isServer();
+        || (isSignedIn()
+          && request.resource.data.uid == request.auth.uid
+          && request.resource.data.active == false
+          && request.resource.data.diff({}).affectedKeys()
+            .hasOnly(['uid', 'active', 'createdAt']));
+      allow update, delete: if isPrivileged();
+    }
+
+    // Mapeia o Promotion Code da Stripe ao afiliado. O checkout consulta esse
+    // registro no servidor; somente administradores podem gerenciá-lo.
+    match /affiliate_coupon_codes/{promotionCodeId} {
+      allow read, write: if isPrivileged();
     }
 
     // ------------------------------------------------------------------

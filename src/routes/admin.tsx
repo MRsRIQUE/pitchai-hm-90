@@ -12,6 +12,7 @@ import { ADMIN_SECTIONS, type AdminSectionId } from "@/components/admin/sections
 import { OverviewSection } from "@/components/admin/OverviewSection";
 import { RankingSection } from "@/components/admin/RankingSection";
 import { IndicacoesSection } from "@/components/admin/IndicacoesSection";
+import { CuponsSection } from "@/components/admin/CuponsSection";
 import { PlanosSection } from "@/components/admin/PlanosSection";
 import { CustosSection } from "@/components/admin/CustosSection";
 import { UsuariosTab } from "@/components/live/AdminUsuariosTab";
@@ -184,6 +185,7 @@ function Dashboard({ email }: { email: string }) {
       {active === "overview" && <OverviewSection onNavigate={setActive} />}
       {active === "ranking" && <RankingSection />}
       {active === "indicacoes" && <IndicacoesSection />}
+      {active === "cupons" && <CuponsSection />}
       {active === "usuarios" && <UsuariosTab />}
       {active === "usage_firestore" && <AdminFirestoreUsageTab />}
       {active === "planos" && <PlanosSection />}

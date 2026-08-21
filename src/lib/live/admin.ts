@@ -14,6 +14,7 @@ import { DEFAULT_PLAN_QUOTAS, PLAN_QUOTA_SCHEMA_VERSION, type PlanQuota } from "
 import { createStripeClient, type StripeEnv } from "@/lib/stripe.server";
 import { AdminError } from "@/lib/admin/errors";
 import { fsDeleteMany } from "@/lib/admin/firestore";
+import { normalizeReferralCode } from "@/lib/referrals.shared";
 import type Stripe from "stripe";
 
 export { DEFAULT_PLAN_QUOTAS, type PlanQuota } from "@/lib/live/quotas";
@@ -106,6 +107,35 @@ export type StripeAdminSnapshot = {
   subscriptions: StripeAdminSubscription[];
   recentInvoices: StripeAdminInvoice[];
   fetchedAt: string;
+};
+
+export type AdminPromotionCode = {
+  id: string;
+  couponId: string;
+  code: string;
+  active: boolean;
+  percentOff: number;
+  duration: "once" | "forever" | "repeating";
+  durationInMonths: number | null;
+  timesRedeemed: number;
+  maxRedemptions: number | null;
+  expiresAt: string | null;
+  firstTimeOnly: boolean;
+  affiliateUid: string;
+  affiliateCode: string;
+  affiliateName: string;
+  createdAt: string;
+  environment: StripeEnv;
+};
+
+export type CreateAdminPromotionCode = {
+  code: string;
+  percentOff: number;
+  duration: "once" | "forever";
+  affiliateCode: string;
+  firstTimeOnly?: boolean;
+  maxRedemptions?: number | null;
+  expiresAt?: string | null;
 };
 
 /** Falha de leitura do Firestore nunca derruba o fluxo: vira "não é admin". */
@@ -626,6 +656,220 @@ export async function fetchStripeAdminSnapshot(): Promise<StripeAdminSnapshot> {
   return getStripeAdminSnapshot({});
 }
 
+async function listAllPromotionCodes(stripe: Stripe): Promise<Stripe.PromotionCode[]> {
+  const result: Stripe.PromotionCode[] = [];
+  let startingAfter: string | undefined;
+  do {
+    const page = await stripe.promotionCodes.list({
+      limit: 100,
+      expand: ["data.promotion.coupon"],
+      ...(startingAfter ? { starting_after: startingAfter } : {}),
+    });
+    result.push(...page.data);
+    startingAfter = page.has_more ? page.data.at(-1)?.id : undefined;
+    if (page.has_more && !startingAfter) throw new Error("Stripe retornou paginação inválida");
+  } while (startingAfter);
+  return result;
+}
+
+function mapPromotionCode(
+  promotionCode: Stripe.PromotionCode,
+  environment: StripeEnv,
+): AdminPromotionCode | null {
+  const metadata = promotionCode.metadata ?? {};
+  if (metadata.managedBy !== "pitchai-admin") return null;
+  const coupon =
+    typeof promotionCode.promotion.coupon === "object" ? promotionCode.promotion.coupon : null;
+  if (!coupon) return null;
+  return {
+    id: promotionCode.id,
+    couponId: coupon.id,
+    code: promotionCode.code,
+    active: promotionCode.active,
+    percentOff: Number(coupon.percent_off || metadata.discountPercent || 0),
+    duration: coupon.duration,
+    durationInMonths: coupon.duration_in_months ?? null,
+    timesRedeemed: promotionCode.times_redeemed,
+    maxRedemptions: promotionCode.max_redemptions,
+    expiresAt: promotionCode.expires_at
+      ? new Date(promotionCode.expires_at * 1000).toISOString()
+      : null,
+    firstTimeOnly: promotionCode.restrictions.first_time_transaction,
+    affiliateUid: String(metadata.affiliateUid || ""),
+    affiliateCode: String(metadata.affiliateCode || ""),
+    affiliateName: String(metadata.affiliateName || "Afiliado"),
+    createdAt: new Date(promotionCode.created * 1000).toISOString(),
+    environment,
+  };
+}
+
+const getPromotionCodesAdmin = createServerFn({ method: "GET" })
+  .middleware([requireFirebaseAuth])
+  .handler(async ({ context }): Promise<AdminPromotionCode[]> => {
+    await ensureAdmin(context);
+    const environment = stripeEnvironment();
+    const stripe = createStripeClient(environment);
+    const codes = await listAllPromotionCodes(stripe);
+    return codes
+      .map((code) => mapPromotionCode(code, environment))
+      .filter((code): code is AdminPromotionCode => code !== null)
+      .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  });
+
+export async function fetchPromotionCodesAdmin(): Promise<AdminPromotionCode[]> {
+  return getPromotionCodesAdmin({});
+}
+
+function promotionCodeInput(data: CreateAdminPromotionCode): CreateAdminPromotionCode {
+  const code = String(data?.code || "")
+    .trim()
+    .toUpperCase();
+  const affiliateCode = normalizeReferralCode(data?.affiliateCode || "");
+  const percentOff = Number(data?.percentOff);
+  const duration = data?.duration === "once" ? "once" : "forever";
+  const maxRedemptions =
+    data?.maxRedemptions == null || data.maxRedemptions === 0
+      ? null
+      : Math.floor(Number(data.maxRedemptions));
+  const expiresAt = data?.expiresAt ? new Date(data.expiresAt).toISOString() : null;
+  if (!/^[A-Z0-9-]{3,32}$/.test(code)) {
+    throw new Error("O cupom deve ter entre 3 e 32 letras, números ou hífens");
+  }
+  if (!affiliateCode) throw new Error("Selecione um afiliado");
+  if (!Number.isFinite(percentOff) || percentOff <= 0 || percentOff > 100) {
+    throw new Error("O desconto deve ser maior que 0 e menor ou igual a 100%");
+  }
+  if (maxRedemptions !== null && maxRedemptions < 1) {
+    throw new Error("O limite de usos deve ser positivo");
+  }
+  if (expiresAt && Date.parse(expiresAt) <= Date.now()) {
+    throw new Error("A validade precisa estar no futuro");
+  }
+  return {
+    code,
+    affiliateCode,
+    percentOff,
+    duration,
+    firstTimeOnly: data.firstTimeOnly === true,
+    maxRedemptions,
+    expiresAt,
+  };
+}
+
+const createPromotionCodeAdminFn = createServerFn({ method: "POST" })
+  .middleware([requireFirebaseAuth])
+  .validator(promotionCodeInput)
+  .handler(async ({ data, context }): Promise<AdminPromotionCode> => {
+    await ensureAdmin(context);
+    const environment = stripeEnvironment();
+    const stripe = createStripeClient(environment);
+    const affiliate = await fsGet(`referral_codes/${data.affiliateCode}`, { mode: "server" });
+    const affiliateUid = String(affiliate?.data?.uid || "");
+    if (!affiliateUid || affiliate?.data?.active !== true) {
+      throw new Error("O código do afiliado não existe ou está pausado");
+    }
+    const profile = await fsGet(`users/${affiliateUid}`, { mode: "server" });
+    const affiliateName = String(
+      profile?.data?.displayName ||
+        profile?.data?.name ||
+        profile?.data?.email ||
+        data.affiliateCode,
+    ).slice(0, 120);
+    const duplicate = await stripe.promotionCodes.list({ code: data.code, active: true, limit: 1 });
+    if (duplicate.data.length) throw new Error("Já existe um cupom ativo com esse código");
+
+    const metadata: Record<string, string> = {
+      managedBy: "pitchai-admin",
+      affiliateUid,
+      affiliateCode: data.affiliateCode,
+      affiliateName,
+      discountPercent: String(data.percentOff),
+    };
+    const coupon = await stripe.coupons.create({
+      name: `${data.code} · ${data.percentOff}%`,
+      percent_off: data.percentOff,
+      duration: data.duration,
+      metadata,
+    });
+
+    let promotionCode: Stripe.PromotionCode | null = null;
+    try {
+      promotionCode = await stripe.promotionCodes.create({
+        code: data.code,
+        active: true,
+        promotion: { type: "coupon", coupon: coupon.id },
+        metadata,
+        ...(data.expiresAt ? { expires_at: Math.floor(Date.parse(data.expiresAt) / 1000) } : {}),
+        ...(data.maxRedemptions ? { max_redemptions: data.maxRedemptions } : {}),
+        restrictions: { first_time_transaction: data.firstTimeOnly === true },
+        expand: ["promotion.coupon"],
+      });
+      await fsSet(
+        `affiliate_coupon_codes/${promotionCode.id}`,
+        {
+          promotionCodeId: promotionCode.id,
+          couponId: coupon.id,
+          code: data.code,
+          affiliateUid,
+          affiliateCode: data.affiliateCode,
+          affiliateName,
+          percentOff: data.percentOff,
+          active: true,
+          environment,
+          createdAt: new Date().toISOString(),
+          createdBy: context.userId,
+        },
+        { mode: "server" },
+      );
+    } catch (error) {
+      if (promotionCode) {
+        await stripe.promotionCodes
+          .update(promotionCode.id, { active: false })
+          .catch(() => undefined);
+      }
+      await stripe.coupons.del(coupon.id).catch(() => undefined);
+      throw error;
+    }
+
+    const mapped = mapPromotionCode(promotionCode, environment);
+    if (!mapped) throw new Error("A Stripe criou o cupom sem os metadados esperados");
+    return mapped;
+  });
+
+export async function createPromotionCodeAdmin(
+  data: CreateAdminPromotionCode,
+): Promise<AdminPromotionCode> {
+  return createPromotionCodeAdminFn({ data });
+}
+
+const setPromotionCodeActiveAdminFn = createServerFn({ method: "POST" })
+  .middleware([requireFirebaseAuth])
+  .validator((data: { id: string; active: boolean }) => {
+    if (!/^promo_[A-Za-z0-9]+$/.test(data?.id || "") || typeof data?.active !== "boolean") {
+      throw new Error("Cupom inválido");
+    }
+    return data;
+  })
+  .handler(async ({ data, context }) => {
+    await ensureAdmin(context);
+    const stripe = createStripeClient(stripeEnvironment());
+    const current = await stripe.promotionCodes.retrieve(data.id);
+    if (current.metadata?.managedBy !== "pitchai-admin") {
+      throw new Error("Esse cupom não é gerenciado pelo Pitch AI");
+    }
+    await stripe.promotionCodes.update(data.id, { active: data.active });
+    await fsSet(
+      `affiliate_coupon_codes/${data.id}`,
+      { active: data.active, updatedAt: new Date().toISOString(), updatedBy: context.userId },
+      { mode: "server" },
+    );
+    return { ok: true };
+  });
+
+export async function setPromotionCodeActiveAdmin(id: string, active: boolean): Promise<void> {
+  await setPromotionCodeActiveAdminFn({ data: { id, active } });
+}
+
 const updatePlanFn = createServerFn({ method: "POST" })
   .middleware([requireFirebaseAuth])
   .validator((data: { id: string; patch: Record<string, unknown> }) => {
@@ -719,6 +963,35 @@ export type AdminCommission = {
   status: string;
   created_at: string;
   paid_at: string | null;
+  referral_code: string | null;
+  attribution_source: string;
+};
+
+export type AdminAffiliate = {
+  code: string;
+  uid: string;
+  name: string;
+  email: string;
+  active: boolean;
+  created_at: string | null;
+  activated_at: string | null;
+  referrals: number;
+  subscribers: number;
+  conversion_rate: number;
+  pending_cents: number;
+  paid_cents: number;
+  cancelled_cents: number;
+  last_referral_at: string | null;
+  sources: Record<string, number>;
+};
+
+export type AdminAffiliateDashboard = {
+  affiliates: AdminAffiliate[];
+  totalReferrals: number;
+  totalSubscribers: number;
+  totalPendingCents: number;
+  totalPaidCents: number;
+  conversionRate: number;
 };
 
 function mapCommission(d: { id: string; data: Record<string, unknown> }): AdminCommission {
@@ -732,7 +1005,136 @@ function mapCommission(d: { id: string; data: Record<string, unknown> }): AdminC
     status: (d.data.status as string) ?? "pendente",
     created_at: (d.data.createdAt as string) ?? (d.data.created_at as string) ?? "",
     paid_at: (d.data.paidAt as string) ?? (d.data.paid_at as string) ?? null,
+    referral_code: (d.data.referralCode as string) ?? null,
+    attribution_source: (d.data.attributionSource as string) ?? "unknown",
   };
+}
+
+const getAffiliateDashboard = createServerFn({ method: "GET" })
+  .middleware([requireFirebaseAuth])
+  .handler(async ({ context }): Promise<AdminAffiliateDashboard> => {
+    await ensureAdmin(context);
+    const firestore = { mode: "server" as const };
+    const [codes, claims, commissions] = await Promise.all([
+      fsQuery("referral_codes", firestore),
+      fsQuery("referral_claims", firestore),
+      fsQuery("referral_commissions", firestore),
+    ]);
+    const ownerIds = Array.from(
+      new Set(codes.map((code) => String(code.data.uid || "")).filter(Boolean)),
+    );
+    const profiles = await fsGetMany(
+      ownerIds.map((uid) => `users/${uid}`),
+      firestore,
+    );
+    const profileByUid = new Map(profiles.map((profile) => [profile.id, profile.data]));
+
+    const affiliates = codes
+      .map((codeDoc): AdminAffiliate | null => {
+        const uid = String(codeDoc.data.uid || "");
+        if (!uid) return null;
+        const profile = profileByUid.get(uid);
+        const affiliateClaims = claims.filter(
+          (claim) => claim.data.referrerUid === uid && claim.data.code === codeDoc.id,
+        );
+        const affiliateCommissions = commissions.filter(
+          (commission) => commission.data.referrerUid === uid,
+        );
+        const subscribers = new Set(
+          affiliateCommissions
+            .map((commission) => String(commission.data.refereeUid || ""))
+            .filter(Boolean),
+        ).size;
+        const sumStatus = (status: string) =>
+          affiliateCommissions
+            .filter((commission) => commission.data.status === status)
+            .reduce((sum, commission) => sum + Number(commission.data.amount_cents || 0), 0);
+        const sources = affiliateClaims.reduce<Record<string, number>>((result, claim) => {
+          const source = String(claim.data.source || "unknown");
+          result[source] = (result[source] || 0) + 1;
+          return result;
+        }, {});
+        const lastReferralAt = affiliateClaims
+          .map((claim) => String(claim.data.createdAt || ""))
+          .filter(Boolean)
+          .sort()
+          .at(-1);
+
+        return {
+          code: codeDoc.id,
+          uid,
+          name: String(profile?.displayName || profile?.name || "Afiliado sem nome"),
+          email: String(profile?.email || ""),
+          active: codeDoc.data.active === true,
+          created_at: (codeDoc.data.createdAt as string) ?? null,
+          activated_at: (codeDoc.data.activatedAt as string) ?? null,
+          referrals: affiliateClaims.length,
+          subscribers,
+          conversion_rate: affiliateClaims.length
+            ? (subscribers / affiliateClaims.length) * 100
+            : 0,
+          pending_cents: sumStatus("pendente"),
+          paid_cents: sumStatus("pago"),
+          cancelled_cents: sumStatus("cancelado"),
+          last_referral_at: lastReferralAt || null,
+          sources,
+        };
+      })
+      .filter((affiliate): affiliate is AdminAffiliate => affiliate !== null)
+      .sort((a, b) => b.referrals - a.referrals || a.code.localeCompare(b.code));
+
+    const totalSubscribers = new Set(
+      commissions.map((commission) => String(commission.data.refereeUid || "")).filter(Boolean),
+    ).size;
+    const totalReferrals = claims.length;
+    return {
+      affiliates,
+      totalReferrals,
+      totalSubscribers,
+      totalPendingCents: commissions
+        .filter((commission) => commission.data.status === "pendente")
+        .reduce((sum, commission) => sum + Number(commission.data.amount_cents || 0), 0),
+      totalPaidCents: commissions
+        .filter((commission) => commission.data.status === "pago")
+        .reduce((sum, commission) => sum + Number(commission.data.amount_cents || 0), 0),
+      conversionRate: totalReferrals ? (totalSubscribers / totalReferrals) * 100 : 0,
+    };
+  });
+
+export async function fetchAffiliateDashboard(): Promise<AdminAffiliateDashboard> {
+  return getAffiliateDashboard({});
+}
+
+const setAffiliateActiveFn = createServerFn({ method: "POST" })
+  .middleware([requireFirebaseAuth])
+  .validator((data: { code: string; active: boolean }) => {
+    const code = normalizeReferralCode(data?.code || "");
+    if (!code || typeof data?.active !== "boolean") throw new Error("Invalid affiliate payload");
+    return { code, active: data.active };
+  })
+  .handler(async ({ data, context }) => {
+    await ensureAdmin(context);
+    const firestore = adminFirestoreOptions(context);
+    const codeDoc = await fsGet(`referral_codes/${data.code}`, firestore);
+    const uid = String(codeDoc?.data?.uid || "");
+    if (!uid) throw new Error("Código de afiliado não encontrado");
+    const now = new Date().toISOString();
+    const privilegedFirestore = { mode: "server" as const };
+    await fsSet(
+      `referral_codes/${data.code}`,
+      { active: data.active, updatedAt: now },
+      privilegedFirestore,
+    );
+    await fsSet(
+      `users/${uid}/referral/main`,
+      { active: data.active, updatedAt: now },
+      privilegedFirestore,
+    );
+    return { ok: true };
+  });
+
+export async function setAffiliateActive(code: string, active: boolean) {
+  await setAffiliateActiveFn({ data: { code, active } });
 }
 
 const getCommissions = createServerFn({ method: "GET" })

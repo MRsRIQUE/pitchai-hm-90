@@ -4,6 +4,7 @@ import { Loader2 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { getFirebaseAuth } from "@/lib/firebase";
 import { findPitchaiPlan } from "@/lib/live/plans";
+import { REFERRAL_STORAGE_KEY, normalizeReferralCode } from "@/lib/referrals.shared";
 
 type Search = { plan?: string };
 
@@ -42,10 +43,16 @@ function ComprarPage() {
       window.clearTimeout(fallback);
       try {
         const token = await user.getIdToken();
+        let sellerCode = "";
+        try {
+          sellerCode = normalizeReferralCode(localStorage.getItem(REFERRAL_STORAGE_KEY) || "");
+        } catch {
+          // O checkout segue normalmente quando o storage estiver indisponível.
+        }
         const response = await fetch("/api/checkout/start", {
           method: "POST",
           headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-          body: JSON.stringify({ plan: plan.priceId }),
+          body: JSON.stringify({ plan: plan.priceId, sellerCode: sellerCode || undefined }),
         });
         const payload = await response.json().catch(() => null);
         if (!response.ok || !payload?.checkoutUrl) {

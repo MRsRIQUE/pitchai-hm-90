@@ -6,6 +6,11 @@ import {
   resolveReferralCode,
   createReferralLink,
 } from "@/lib/referrals.server";
+import {
+  isReferralSource,
+  normalizeReferralCode,
+  type ReferralSource,
+} from "@/lib/referrals.shared";
 
 export type ReferralCommission = {
   id: string;
@@ -17,6 +22,14 @@ export type ReferralCommission = {
   paid_at: string | null;
 };
 
+export type ReferralLead = {
+  id: string;
+  code: string;
+  source: ReferralSource | "unknown";
+  status: "lead" | "assinante";
+  created_at: string;
+};
+
 export type ReferralSummary = {
   code: string;
   active: boolean;
@@ -25,6 +38,9 @@ export type ReferralSummary = {
   totalAssinantes: number;
   totalPendenteCents: number;
   totalPagoCents: number;
+  totalCanceladoCents: number;
+  conversionRate: number;
+  leads: ReferralLead[];
   commissions: ReferralCommission[];
 };
 
@@ -48,11 +64,10 @@ export const getMyReferralSummary = createServerFn({ method: "GET" })
     const commissions = await fsQuery("referral_commissions", {
       where: [{ field: "referrerUid", op: "EQUAL", value: userId }],
       orderBy: { field: "createdAt", direction: "DESCENDING" },
-      limit: 200,
       ...firestore,
     });
 
-    const mappedCommissions: ReferralCommission[] = commissions.map((c) => ({
+    const allMappedCommissions: ReferralCommission[] = commissions.map((c) => ({
       id: c.id,
       plan: (c.data.plan as string) ?? null,
       base_cents: (c.data.base_cents as number) ?? 0,
@@ -61,6 +76,24 @@ export const getMyReferralSummary = createServerFn({ method: "GET" })
       created_at: (c.data.createdAt as string) ?? (c.data.created_at as string) ?? "",
       paid_at: (c.data.paidAt as string) ?? (c.data.paid_at as string) ?? null,
     }));
+    const mappedCommissions = allMappedCommissions.slice(0, 200);
+    const subscriberIds = new Set(
+      commissions.map((c) => c.data.refereeUid as string).filter(Boolean),
+    );
+    const leads: ReferralLead[] = claims
+      .map((claim) => ({
+        id: claim.id,
+        code: (claim.data.code as string) ?? code,
+        source: isReferralSource(claim.data.source)
+          ? (claim.data.source as ReferralSource)
+          : ("unknown" as const),
+        status: subscriberIds.has(String(claim.data.refereeUid || claim.id))
+          ? ("assinante" as const)
+          : ("lead" as const),
+        created_at: (claim.data.createdAt as string) ?? "",
+      }))
+      .sort((a, b) => b.created_at.localeCompare(a.created_at));
+    const totalAssinantes = subscriberIds.size;
 
     return {
       code,
@@ -71,14 +104,18 @@ export const getMyReferralSummary = createServerFn({ method: "GET" })
       activatedAt: (referralDoc?.data?.activatedAt as string) ?? null,
       totalIndicados: claims.length,
       // Um indicado só vira assinante quando há uma comissão registrada para ele.
-      totalAssinantes: new Set(commissions.map((c) => c.data.refereeUid as string).filter(Boolean))
-        .size,
-      totalPendenteCents: mappedCommissions
+      totalAssinantes,
+      totalPendenteCents: allMappedCommissions
         .filter((c) => c.status === "pendente")
         .reduce((s, c) => s + c.amount_cents, 0),
-      totalPagoCents: mappedCommissions
+      totalPagoCents: allMappedCommissions
         .filter((c) => c.status === "pago")
         .reduce((s, c) => s + c.amount_cents, 0),
+      totalCanceladoCents: allMappedCommissions
+        .filter((c) => c.status === "cancelado")
+        .reduce((s, c) => s + c.amount_cents, 0),
+      conversionRate: claims.length ? (totalAssinantes / claims.length) * 100 : 0,
+      leads,
       commissions: mappedCommissions,
     };
   });
@@ -121,14 +158,17 @@ export const activateReferralProgram = createServerFn({ method: "POST" })
 
 export const claimReferral = createServerFn({ method: "POST" })
   .middleware([requireFirebaseAuth])
-  .validator((data: { code: string }) => {
+  .validator((data: { code: string; source?: ReferralSource; landingPath?: string | null }) => {
     if (!data?.code || typeof data.code !== "string") throw new Error("Código inválido");
-    return { code: data.code.slice(0, 32) };
+    return {
+      code: data.code.slice(0, 32),
+      source: isReferralSource(data.source) ? data.source : ("link" as const),
+      landingPath: typeof data.landingPath === "string" ? data.landingPath.slice(0, 240) : null,
+    };
   })
   .handler(async ({ data, context }): Promise<{ ok: boolean; reason?: string }> => {
     const userId = context.userId;
-    const { normalizeCode } = await import("@/lib/referrals.server");
-    const code = normalizeCode(data.code);
+    const code = normalizeReferralCode(data.code);
     if (!code) return { ok: false, reason: "invalid" };
 
     const existing = await fsGet(`referral_claims/${userId}`, {
@@ -144,6 +184,10 @@ export const claimReferral = createServerFn({ method: "POST" })
     if (ownerUid && ownerUid === userId) return { ok: false, reason: "self" };
     if (!ownerUid) return { ok: false, reason: "notfound" };
 
-    await createReferralLink(ownerUid, userId, code, context.firebaseToken);
+    await createReferralLink(ownerUid, userId, code, {
+      userToken: context.firebaseToken,
+      source: data.source,
+      landingPath: data.landingPath,
+    });
     return { ok: true };
   });

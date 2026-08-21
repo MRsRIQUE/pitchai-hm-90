@@ -4,6 +4,7 @@ import {
   Flame,
   LayoutDashboard,
   Receipt,
+  TicketPercent,
   UserCog,
   Users,
 } from "lucide-react";
@@ -14,7 +15,14 @@ import type { AppSection } from "@/components/app/AppShell";
  * das antigas abas horizontais, então links e memória muscular continuam valendo.
  */
 export type AdminSectionId =
-  "overview" | "ranking" | "indicacoes" | "usuarios" | "usage_firestore" | "planos" | "custos";
+  | "overview"
+  | "ranking"
+  | "indicacoes"
+  | "cupons"
+  | "usuarios"
+  | "usage_firestore"
+  | "planos"
+  | "custos";
 
 export const ADMIN_SECTIONS: (AppSection & { id: AdminSectionId })[] = [
   {
@@ -37,6 +45,13 @@ export const ADMIN_SECTIONS: (AppSection & { id: AdminSectionId })[] = [
     icon: Users,
     title: "Programa de afiliados",
     subtitle: "Comissões e pagamentos aos indicadores.",
+  },
+  {
+    id: "cupons",
+    label: "Cupons de afiliados",
+    icon: TicketPercent,
+    title: "Cupons e códigos promocionais",
+    subtitle: "Crie descontos na Stripe vinculados a cada afiliado.",
   },
   {
     id: "usuarios",

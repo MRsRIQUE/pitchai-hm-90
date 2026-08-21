@@ -1,8 +1,10 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { fsCreate, fsSet, verifyFirebaseIdToken } from "@/lib/firebase.server";
+import { fsCreate, fsGet, fsSet, verifyFirebaseIdToken } from "@/lib/firebase.server";
 import { findPitchaiPlan } from "@/lib/live/plans";
 import { throttle } from "@/lib/live/rate-limit.server";
 import { createStripeClient, getStripeErrorMessage, type StripeEnv } from "@/lib/stripe.server";
+import { createReferralLink, resolveReferralCode } from "@/lib/referrals.server";
+import { normalizeReferralCode } from "@/lib/referrals.shared";
 
 // Cada POST aceito cria um documento no Firestore e um customer/sessão no
 // Stripe, então o endpoint precisa de teto próprio. O limite por IP corta o
@@ -21,6 +23,45 @@ function tooManyRequests(retryAfter: number): Response {
     { error: "Muitas tentativas de pagamento. Aguarde alguns minutos e tente novamente." },
     { status: 429, headers: { "retry-after": String(retryAfter) } },
   );
+}
+
+type CheckoutAttribution = {
+  sellerCode: string;
+  referrerUid: string;
+  source: string;
+};
+
+async function checkoutAttribution(
+  userId: string,
+  requestedCode: unknown,
+): Promise<CheckoutAttribution | null> {
+  let claim = await fsGet(`referral_claims/${userId}`, { mode: "server" });
+  const code = normalizeReferralCode(typeof requestedCode === "string" ? requestedCode : "");
+
+  if (!claim && code) {
+    const ownerUid = await resolveReferralCode(code);
+    if (ownerUid && ownerUid !== userId) {
+      try {
+        await createReferralLink(ownerUid, userId, code, {
+          source: "checkout",
+          landingPath: "/comprar",
+        });
+      } catch {
+        // ReferralCapture e checkout podem vincular ao mesmo tempo. O documento
+        // usa o UID do comprador como ID, então reler resolve a corrida sem trocar
+        // a primeira atribuição registrada.
+        console.warn("[checkout/start] não foi possível criar a atribuição; relendo vínculo");
+      }
+      claim = await fsGet(`referral_claims/${userId}`, { mode: "server" });
+    }
+  }
+
+  if (!claim?.data?.referrerUid || !claim.data.code) return null;
+  return {
+    sellerCode: String(claim.data.code),
+    referrerUid: String(claim.data.referrerUid),
+    source: String(claim.data.source || "unknown"),
+  };
 }
 
 export const Route = createFileRoute("/api/checkout/start")({
@@ -48,6 +89,14 @@ export const Route = createFileRoute("/api/checkout/start")({
         const email = user.email.trim().toLowerCase();
         const now = new Date().toISOString();
         try {
+          const attribution = await checkoutAttribution(user.uid, body.sellerCode);
+          const referralMetadata: Record<string, string> = attribution
+            ? {
+                sellerCode: attribution.sellerCode,
+                referrerUid: attribution.referrerUid,
+                attributionSource: attribution.source,
+              }
+            : {};
           // Garante que o webhook encontre a conta antes que o checkout seja aberto.
           await fsSet(
             `users/${user.uid}`,
@@ -63,6 +112,7 @@ export const Route = createFileRoute("/api/checkout/start")({
               amountCents: plan.amountCents,
               months: plan.months,
               status: "created",
+              ...referralMetadata,
               createdAt: now,
             },
             undefined,
@@ -90,12 +140,16 @@ export const Route = createFileRoute("/api/checkout/start")({
           const customer = existingCustomers.data[0]
             ? await stripe.customers.update(existingCustomers.data[0].id, {
                 name: user.displayName || undefined,
-                metadata: { ...existingCustomers.data[0].metadata, userId: user.uid },
+                metadata: {
+                  ...existingCustomers.data[0].metadata,
+                  userId: user.uid,
+                  ...referralMetadata,
+                },
               })
             : await stripe.customers.create({
                 email,
                 name: user.displayName || undefined,
-                metadata: { userId: user.uid },
+                metadata: { userId: user.uid, ...referralMetadata },
               });
 
           const origin = new URL(request.url).origin;
@@ -108,8 +162,10 @@ export const Route = createFileRoute("/api/checkout/start")({
             allow_promotion_codes: true,
             billing_address_collection: "auto",
             client_reference_id: user.uid,
-            metadata: { userId: user.uid, plan: plan.priceId },
-            subscription_data: { metadata: { userId: user.uid, plan: plan.priceId } },
+            metadata: { userId: user.uid, plan: plan.priceId, ...referralMetadata },
+            subscription_data: {
+              metadata: { userId: user.uid, plan: plan.priceId, ...referralMetadata },
+            },
           });
           if (!session.url) throw new Error("Stripe não retornou a URL do checkout.");
           return Response.json({ checkoutUrl: session.url });

@@ -1,7 +1,8 @@
 import { fsGet, fsSet, fsCreate, type FirestoreAuthMode } from "@/lib/firebase.server";
+import { normalizeReferralCode, type ReferralSource } from "@/lib/referrals.shared";
 
 export const REFERRAL_RATE = 0.6;
-export const REFERRAL_STORAGE_KEY = "pitchai:ref";
+export { normalizeReferralCode as normalizeCode } from "@/lib/referrals.shared";
 
 /** Código curto e estável derivado do id do usuário. */
 export function codeFromUserId(userId: string): string {
@@ -14,14 +15,6 @@ export function codeFromUserId(userId: string): string {
     hash = Math.imul(hash, 0x01000193);
   }
   return (hash >>> 0).toString(36).toUpperCase().padStart(8, "0").slice(-8);
-}
-
-export function normalizeCode(raw: string): string {
-  return raw
-    .trim()
-    .toUpperCase()
-    .replace(/[^A-Z0-9]/g, "")
-    .slice(0, 16);
 }
 
 /**
@@ -55,7 +48,11 @@ export async function ensureReferralCode(userId: string, userToken: string): Pro
     throw new Error("Não foi possível reservar um código de indicação único.");
   }
   if (!codeAlreadyOwned) {
-    await fsSet(`referral_codes/${code}`, { uid: userId, active: false }, auth);
+    await fsSet(
+      `referral_codes/${code}`,
+      { uid: userId, active: false, createdAt: new Date().toISOString() },
+      auth,
+    );
   }
   // `active: false` explícito. Sem ele o campo ficava ausente e quem lê o resumo
   // era obrigado a adivinhar o que "ausente" significa — foi assim que a página
@@ -74,7 +71,9 @@ export async function ensureReferralCode(userId: string, userToken: string): Pro
  * o libera.
  */
 export async function resolveReferralCode(code: string): Promise<string | null> {
-  const doc = await fsGet(`referral_codes/${code}`, { mode: "public" });
+  const normalized = normalizeReferralCode(code);
+  if (!normalized) return null;
+  const doc = await fsGet(`referral_codes/${normalized}`, { mode: "public" });
   if (doc?.data?.active !== true) return null;
   return (doc?.data?.uid as string) ?? null;
 }
@@ -84,8 +83,13 @@ export async function createReferralLink(
   referrerUid: string,
   refereeUid: string,
   code: string,
-  userToken: string,
+  options: {
+    userToken?: string;
+    source?: ReferralSource;
+    landingPath?: string | null;
+  } = {},
 ): Promise<void> {
+  const now = new Date().toISOString();
   await fsCreate(
     "referral_claims",
     {
@@ -93,9 +97,12 @@ export async function createReferralLink(
       refereeUid,
       code,
       status: "claimed",
-      createdAt: new Date().toISOString(),
+      source: options.source ?? "link",
+      landingPath: options.landingPath?.slice(0, 240) || null,
+      createdAt: now,
+      updatedAt: now,
     },
     refereeUid,
-    { mode: "server", userToken },
+    { mode: "server", userToken: options.userToken },
   );
 }

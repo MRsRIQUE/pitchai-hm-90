@@ -591,7 +591,10 @@ export type ReferralClaim = {
   refereeUid: string;
   code: string;
   status: string;
+  source?: "link" | "seller_code" | "checkout";
+  landingPath?: string | null;
   createdAt: string;
+  updatedAt?: string;
 };
 
 // sync_tokens/{token} — mapeia token -> usuário

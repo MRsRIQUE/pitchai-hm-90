@@ -38,6 +38,13 @@ function brl(cents: number) {
   });
 }
 
+function sourceLabel(source: string) {
+  if (source === "seller_code") return "Código digitado";
+  if (source === "checkout") return "Checkout";
+  if (source === "link") return "Link compartilhado";
+  return "Origem antiga";
+}
+
 function IndiquePage() {
   const [authed, setAuthed] = useState<boolean | null>(null);
   useEffect(() => {
@@ -80,7 +87,7 @@ function IndiquePage() {
   }
 
   const origin = typeof window !== "undefined" ? window.location.origin : "";
-  const link = data ? `${origin}/?ref=${data.code}` : "";
+  const link = data ? `${origin}/?seller=${data.code}` : "";
 
   return (
     <Shell>
@@ -134,7 +141,7 @@ function IndiquePage() {
 
       {data?.active && (
         <div className="card rf-link-card">
-          <h3>Seu link de indicação</h3>
+          <h3>Seu link e código de vendedor</h3>
           <div className="rf-actions">
             <input
               readOnly
@@ -186,7 +193,7 @@ function IndiquePage() {
             </a>
           </div>
           <p className="rf-code">
-            Seu código: <b>{data.code}</b>
+            Código promocional do vendedor: <b>{data.code}</b>
           </p>
         </div>
       )}
@@ -196,9 +203,62 @@ function IndiquePage() {
           <div className="stats-grid">
             <Stat label="Indicados" value={String(data.totalIndicados)} />
             <Stat label="Viraram assinantes" value={String(data.totalAssinantes)} />
+            <Stat
+              label="Conversão"
+              value={`${data.conversionRate.toLocaleString("pt-BR", { maximumFractionDigits: 1 })}%`}
+            />
             <Stat label="A receber" value={brl(data.totalPendenteCents)} />
             <Stat label="Já pago" value={brl(data.totalPagoCents)} />
+            <Stat label="Cancelado" value={brl(data.totalCanceladoCents)} />
           </div>
+
+          <section className="card rf-table-card">
+            <div className="rf-head">
+              <div>
+                <h2>Funil das indicações</h2>
+                <p className="site-page-note">
+                  Veja como cada pessoa chegou e se já virou assinante. Os dados pessoais do
+                  indicado permanecem protegidos.
+                </p>
+              </div>
+            </div>
+            {data.leads.length === 0 ? (
+              <p className="site-page-note">Nenhuma indicação vinculada ainda.</p>
+            ) : (
+              <div className="rf-scroll">
+                <table className="rf-table">
+                  <thead>
+                    <tr>
+                      <th>Data</th>
+                      <th>Origem</th>
+                      <th>Código</th>
+                      <th className="num">Etapa</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {data.leads.slice(0, 100).map((lead) => (
+                      <tr key={lead.id}>
+                        <td>
+                          {lead.created_at
+                            ? new Date(lead.created_at).toLocaleDateString("pt-BR")
+                            : "—"}
+                        </td>
+                        <td>{sourceLabel(lead.source)}</td>
+                        <td className="rf-plan">{lead.code}</td>
+                        <td className="num">
+                          <span
+                            className={`rf-status${lead.status === "assinante" ? " is-pago" : ""}`}
+                          >
+                            {lead.status}
+                          </span>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </section>
 
           <section className="card rf-table-card">
             <div className="rf-head">

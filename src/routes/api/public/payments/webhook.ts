@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { z } from "zod";
-import { type StripeEnv, verifyWebhook } from "@/lib/stripe.server";
+import { createStripeClient, type StripeEnv, verifyWebhook } from "@/lib/stripe.server";
 import { entitlementPlanId, findPitchaiPlan } from "@/lib/live/plans";
 import {
   fsCreateIfAbsent,
@@ -41,7 +41,52 @@ const subscriptionSchema = z.object({
     .optional(),
 });
 
+const expandableIdSchema = z.union([z.string(), z.object({ id: z.string() })]);
+
+const checkoutSessionSchema = z.object({
+  id: z.string(),
+  client_reference_id: z.string().nullable().optional(),
+  customer: expandableIdSchema.nullable().optional(),
+  subscription: expandableIdSchema.nullable().optional(),
+  invoice: expandableIdSchema.nullable().optional(),
+  metadata: z.record(z.string()).nullable().optional(),
+  discounts: z
+    .array(
+      z.object({
+        promotion_code: expandableIdSchema.nullable().optional(),
+      }),
+    )
+    .nullable()
+    .optional(),
+});
+
+const invoiceSchema = z.object({
+  id: z.string(),
+  status: z.string().nullable().optional(),
+  amount_paid: z.number(),
+  parent: z
+    .object({
+      subscription_details: z
+        .object({
+          subscription: expandableIdSchema.nullable().optional(),
+          metadata: z.record(z.string()).nullable().optional(),
+        })
+        .nullable()
+        .optional(),
+    })
+    .nullable()
+    .optional(),
+  // Compatibilidade com eventos emitidos antes da migração para `parent`.
+  subscription: expandableIdSchema.nullable().optional(),
+  metadata: z.record(z.string()).nullable().optional(),
+});
+
 type StripeSubscription = z.infer<typeof subscriptionSchema>;
+type StripeInvoice = z.infer<typeof invoiceSchema>;
+
+function expandableId(value: z.infer<typeof expandableIdSchema> | null | undefined) {
+  return typeof value === "string" ? value : value?.id;
+}
 
 function planFromSub(sub: StripeSubscription): string {
   const item = sub.items?.data?.[0];
@@ -82,27 +127,17 @@ async function upsertSellerSub(sub: StripeSubscription, env: StripeEnv) {
   );
 
   console.log(`[stripe-webhook] ${env} user=${userId} plan=${plan} status=${status}`);
-
-  if (["active", "trialing"].includes(String(status)) && plan !== "free") {
-    await registerReferralCommission({
-      userId,
-      subscriptionId: sub.id,
-      plan,
-      baseCents: (item?.price?.unit_amount ?? 0) * (item?.quantity ?? 1),
-      periodEnd: periodEnd ?? null,
-    });
-  }
 }
 
 /** 60% para quem indicou — uma comissão por ciclo de cobrança. */
 async function registerReferralCommission(args: {
   userId: string;
   subscriptionId: string;
+  invoiceId: string;
   plan: string;
   baseCents: number;
-  periodEnd: number | null;
 }) {
-  const { userId, subscriptionId, plan, baseCents, periodEnd } = args;
+  const { userId, subscriptionId, invoiceId, plan, baseCents } = args;
   if (!baseCents) return;
 
   const claims = await fsQuery("referral_claims", {
@@ -110,34 +145,19 @@ async function registerReferralCommission(args: {
     limit: 1,
     mode: "server",
   });
-  const referrerId = claims[0]?.data?.referrerUid as string | undefined;
+  const claim = claims[0];
+  const referrerId = claim?.data?.referrerUid as string | undefined;
   if (!referrerId) return;
 
   const rate = 0.6;
-  // ID determinístico por ciclo de cobrança. O `Date.now()` que ficava aqui
-  // gerava um ID novo a cada reenvio do Stripe e lançava uma segunda comissão
-  // de 60% sobre a mesma cobrança. Sem ciclo conhecido, o lançamento é
-  // provisório ("init") e é substituído quando o ciclo chega.
-  const provisionalId = `${subscriptionId}:init`;
-  const invoiceId = periodEnd ? `${subscriptionId}:${periodEnd}` : provisionalId;
-
   try {
-    if (periodEnd) {
-      // Remove o provisório do mesmo ciclo inicial para não pagar duas vezes —
-      // só enquanto ninguém tiver liquidado a comissão.
-      const provisional = await fsGet(`referral_commissions/${provisionalId}`, {
-        mode: "server",
-      }).catch(() => null);
-      if (provisional?.data?.status === "pendente") {
-        await fsDelete(`referral_commissions/${provisionalId}`, { mode: "server" });
-      }
-    }
-
     const created = await fsCreateIfAbsent(
       `referral_commissions/${invoiceId}`,
       {
         referrerUid: referrerId,
         refereeUid: userId,
+        referralCode: (claim?.data?.code as string) ?? null,
+        attributionSource: (claim?.data?.source as string) ?? "unknown",
         subscription_id: subscriptionId,
         invoice_id: invoiceId,
         plan,
@@ -157,6 +177,131 @@ async function registerReferralCommission(args: {
     }
   } catch (error) {
     console.error("[stripe-webhook] commission error:", error);
+  }
+}
+
+async function registerPaidInvoice(rawInvoice: unknown, env: StripeEnv) {
+  const parsed = invoiceSchema.safeParse(rawInvoice);
+  if (!parsed.success) {
+    console.error("[stripe-webhook] payload de fatura inválido:", parsed.error.issues);
+    throw new Error("Invalid invoice payload");
+  }
+  const invoice: StripeInvoice = parsed.data;
+  if (invoice.status && invoice.status !== "paid") return;
+
+  const subscriptionId =
+    expandableId(invoice.parent?.subscription_details?.subscription) ||
+    expandableId(invoice.subscription);
+  if (!subscriptionId) return;
+
+  const stripe = createStripeClient(env);
+  const rawSubscription = await stripe.subscriptions.retrieve(subscriptionId);
+  const subscription = subscriptionSchema.safeParse(rawSubscription);
+  if (!subscription.success) {
+    console.error("[stripe-webhook] assinatura da fatura inválida:", subscription.error.issues);
+    throw new Error("Invalid invoice subscription");
+  }
+  const metadata = {
+    ...(invoice.parent?.subscription_details?.metadata ?? {}),
+    ...(subscription.data.metadata ?? {}),
+  };
+  const userId = metadata.userId;
+  if (!userId) {
+    console.warn("[stripe-webhook] fatura sem userId", invoice.id);
+    return;
+  }
+  const plan = planFromSub(subscription.data);
+  if (plan === "free") return;
+  await registerReferralCommission({
+    userId,
+    subscriptionId,
+    invoiceId: invoice.id,
+    plan,
+    // A comissão incide no valor realmente pago, já com cupom e descontos.
+    baseCents: invoice.amount_paid,
+  });
+}
+
+async function registerCouponAttribution(
+  session: z.infer<typeof checkoutSessionSchema>,
+  env: StripeEnv,
+) {
+  const promotionCodeId = expandableId(session.discounts?.[0]?.promotion_code);
+  if (!promotionCodeId) return;
+
+  const mapping = await fsGet(`affiliate_coupon_codes/${promotionCodeId}`, { mode: "server" });
+  const affiliateUid = String(mapping?.data?.affiliateUid || "");
+  const affiliateCode = String(mapping?.data?.affiliateCode || "");
+  // O evento pode chegar logo depois de o admin pausar o cupom. A Stripe só
+  // aceita códigos ativos no pagamento, então preservamos a venda histórica
+  // sempre que o mapeamento existir, mesmo que ele já esteja pausado agora.
+  if (!affiliateUid || !affiliateCode) return;
+
+  const userId = session.metadata?.userId || session.client_reference_id || "";
+  if (!userId || userId === affiliateUid) return;
+  const now = new Date().toISOString();
+  const created = await fsCreateIfAbsent(
+    `referral_claims/${userId}`,
+    {
+      referrerUid: affiliateUid,
+      refereeUid: userId,
+      code: affiliateCode,
+      source: "checkout",
+      status: "claimed",
+      promotionCodeId,
+      couponCode: String(mapping?.data?.code || ""),
+      createdAt: now,
+      updatedAt: now,
+    },
+    { mode: "server" },
+  );
+  const savedClaim = created
+    ? { referrerUid: affiliateUid, code: affiliateCode, source: "checkout" }
+    : (await fsGet(`referral_claims/${userId}`, { mode: "server" }))?.data;
+  const attributedUid = String(savedClaim?.referrerUid || "");
+  const attributedCode = String(savedClaim?.code || "");
+  if (!attributedUid || !attributedCode) return;
+
+  const stripe = createStripeClient(env);
+  const attribution = {
+    sellerCode: attributedCode,
+    referrerUid: attributedUid,
+    attributionSource: String(savedClaim?.source || "checkout"),
+    promotionCodeId,
+    couponCode: String(mapping?.data?.code || ""),
+    promotionAffiliateCode: affiliateCode,
+  };
+  const subscriptionId = expandableId(session.subscription);
+  if (subscriptionId) {
+    const subscription = await stripe.subscriptions.retrieve(subscriptionId);
+    await stripe.subscriptions.update(subscriptionId, {
+      metadata: { ...subscription.metadata, userId, ...attribution },
+    });
+  }
+  const customerId = expandableId(session.customer);
+  if (customerId) {
+    const customer = await stripe.customers.retrieve(customerId);
+    if (!customer.deleted) {
+      await stripe.customers.update(customerId, {
+        metadata: { ...customer.metadata, userId, ...attribution },
+      });
+    }
+  }
+}
+
+async function handleCheckoutCompleted(rawSession: unknown, env: StripeEnv) {
+  const parsed = checkoutSessionSchema.safeParse(rawSession);
+  if (!parsed.success) {
+    console.error("[stripe-webhook] sessão de checkout inválida:", parsed.error.issues);
+    throw new Error("Invalid checkout session payload");
+  }
+  await registerCouponAttribution(parsed.data, env);
+
+  // Cobre a corrida em que `invoice.paid` chega antes da atribuição do cupom.
+  const invoiceId = expandableId(parsed.data.invoice);
+  if (invoiceId) {
+    const invoice = await createStripeClient(env).invoices.retrieve(invoiceId);
+    await registerPaidInvoice(invoice, env);
   }
 }
 
@@ -238,6 +383,14 @@ async function handleWebhook(req: Request, env: StripeEnv) {
 
 async function dispatchEvent(event: StripeEvent, env: StripeEnv) {
   switch (event.type) {
+    case "checkout.session.completed": {
+      await handleCheckoutCompleted(event.data.object, env);
+      break;
+    }
+    case "invoice.paid": {
+      await registerPaidInvoice(event.data.object, env);
+      break;
+    }
     case "customer.subscription.created":
     case "customer.subscription.updated": {
       const parsed = subscriptionSchema.safeParse(event.data.object);

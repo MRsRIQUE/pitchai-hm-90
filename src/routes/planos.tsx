@@ -7,6 +7,7 @@ import { SitePageFrame } from "@/components/live/SitePageFrame";
 import { FlameWrap } from "@/components/ui/flame-wrap";
 import { useUserSubscription } from "@/hooks/useUserSubscription";
 import { SubscriptionNotice } from "@/components/live/SubscriptionNotice";
+import { SellerCodeField } from "@/components/SellerCodeField";
 import {
   PITCHAI_PLANS,
   PLAN_FEATURES,
@@ -148,6 +149,8 @@ function PlanosPage() {
             </div>
           )}
         </header>
+
+        <SellerCodeField />
 
         <div className="plans">
           {PITCHAI_PLANS.map((p) => {
