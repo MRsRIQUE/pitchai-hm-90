@@ -7,6 +7,8 @@ const content = readFileSync(raiz("extension/content.js"), "utf8");
 const panel = readFileSync(raiz("extension/panel.js"), "utf8");
 const dashboard = readFileSync(raiz("src/components/live/LiveDashboard/index.tsx"), "utf8");
 const auth = readFileSync(raiz("src/lib/live/api-auth.server.ts"), "utf8");
+const verify = readFileSync(raiz("src/routes/api/public/live/verify.ts"), "utf8");
+const accountBridge = readFileSync(raiz("extension/account-bridge.js"), "utf8");
 
 describe("fluxo do vínculo ponta a ponta", () => {
   it("?desvincular=1 abre a seção Conta, onde o painel de vínculo mora", () => {
@@ -35,6 +37,16 @@ describe("fluxo do vínculo ponta a ponta", () => {
     expect(auth).toContain("async function describeBinding");
     expect(auth).toContain("deviceIsThis");
     expect(auth).toContain("deviceKnown");
+  });
+
+  it("a rota entrega a requisição com X-PitchAI-Install até a descrição do vínculo", () => {
+    expect(verify).toContain("getSyncTokenStatus(token, request)");
+    expect(auth).toContain("extractInstallId(request ?? ambientRequest())");
+  });
+
+  it("a ponte do site também envia a identidade antes de salvar o código", () => {
+    expect(accountBridge).toContain('type: "PITCHAI_GET_INSTALL_ID"');
+    expect(accountBridge).toContain('"X-PitchAI-Install"');
   });
 
   it("a extensão mostra o vínculo do servidor em vez de inferir de 'passei'", () => {

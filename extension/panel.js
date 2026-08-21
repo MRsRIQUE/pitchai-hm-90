@@ -25,7 +25,7 @@
       });
     } catch {}
   }
-  // Estado do vínculo publicado pelo content.js (ele é quem fala com o verify).
+  // Estado do vínculo publicado por quem acabou de falar com o verify.
   const DEVICE_STATUS_KEY = "pitchai.device.status";
 
   function loadDeviceStatus() {
@@ -125,10 +125,8 @@
   }
 
   // ---------- Identidade da instalação (1 extensão por conta) ----------
-  // O painel LÊ este id, NUNCA o cria. Quem cria é o content.js, e ter um único
-  // criador é o que impede o vínculo de nascer trocado: se os dois criassem,
-  // numa instalação nova nasceriam dois UUIDs e a última gravação venceria.
-  // Não "conserte" isto acrescentando um crypto.randomUUID() aqui.
+  // O painel LÊ este id, NUNCA o cria. Desde a v0.19 o único criador é o
+  // service worker; isso também funciona antes de abrir uma página do TikTok.
   const INSTALL_ID_KEY = "pitchai_install_id";
   let installIdCache = "";
 
@@ -137,6 +135,14 @@
     // content script ter criado o id, e guardar o vazio o deixaria sem cabeçalho
     // pelo resto da sessão.
     if (installIdCache) return installIdCache;
+    try {
+      const resposta = await chrome.runtime.sendMessage({ type: "PITCHAI_GET_INSTALL_ID" });
+      const id = String(resposta?.installId || "").toLowerCase();
+      if (SYNC_UUID_RE.test(id)) {
+        installIdCache = id;
+        return installIdCache;
+      }
+    } catch {}
     const stored = await new Promise((resolve) => {
       try {
         chrome.storage.local.get([INSTALL_ID_KEY], (res) => resolve(res?.[INSTALL_ID_KEY]));
@@ -157,6 +163,34 @@
     } catch {
       return {};
     }
+  }
+
+  async function publishDeviceBindingFromVerify(data) {
+    const installId = await readInstallId();
+    const conhecido = data?.deviceKnown === true;
+    const mismatch = data?.reason === "device_mismatch";
+    const vinculo = mismatch
+      ? "outra"
+      : conhecido && data?.deviceIsThis === true
+        ? "esta"
+        : conhecido
+          ? "nenhuma"
+          : "desconhecido";
+    try {
+      await chrome.storage.local.set({
+        [DEVICE_STATUS_KEY]: {
+          installId,
+          vinculo,
+          motivo: data?.reason || "",
+          motivoTexto: data?.message || "O servidor não informou o vínculo desta instalação.",
+          modo: data?.deviceBindingMode || "",
+          boundAt: data?.boundAt || null,
+          canReleaseAt: data?.canReleaseAt || null,
+          message: mismatch ? data?.message || "" : "",
+          at: Date.now(),
+        },
+      });
+    } catch {}
   }
 
   async function signRequest(token, endpoint) {
@@ -1786,6 +1820,7 @@
           body: JSON.stringify({ token: t }),
         });
         const data = await res.json().catch(() => ({}));
+        await publishDeviceBindingFromVerify(data);
         if (res.ok && data.valid && !data.locked && !data.aiLocked) {
           const tokenBalance = Number(data.tokenRemaining ?? 0).toLocaleString("pt-BR");
           credsEl.textContent = `Conectado · Plano ${(data.plan || "free").toUpperCase()} · ${tokenBalance} tokens disponíveis`;

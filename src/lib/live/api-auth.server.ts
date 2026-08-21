@@ -1075,7 +1075,7 @@ export async function getSyncTokenStatus(token: string, request?: Request) {
     };
   }
 
-  const binding = await describeBinding(userId, extractInstallId(ambientRequest()));
+  const binding = await describeBinding(userId, extractInstallId(request ?? ambientRequest()));
 
   return {
     ok: true,

@@ -5,17 +5,28 @@ import { describe, expect, it } from "vitest";
 const content = readFileSync(fileURLToPath(new URL("../content.js", import.meta.url)), "utf8");
 const panel = readFileSync(fileURLToPath(new URL("../panel.js", import.meta.url)), "utf8");
 const panelHtml = readFileSync(fileURLToPath(new URL("../panel.html", import.meta.url)), "utf8");
+const background = readFileSync(
+  fileURLToPath(new URL("../background.js", import.meta.url)),
+  "utf8",
+);
+const accountBridge = readFileSync(
+  fileURLToPath(new URL("../account-bridge.js", import.meta.url)),
+  "utf8",
+);
 
 describe("vínculo de navegador (1 extensão por conta)", () => {
-  it("só o content.js cria o id da instalação", () => {
-    // Se o painel também criasse, numa instalação nova os dois correriam,
-    // nasceriam dois UUIDs e a última gravação venceria — o vínculo apontaria
-    // para um id que ninguém mais manda.
-    expect(content).toContain("crypto.randomUUID()");
-    const criacaoNoPainel = panel
-      .split("\n")
-      .filter((l) => l.includes("randomUUID") && l.includes("INSTALL"));
-    expect(criacaoNoPainel).toHaveLength(0);
+  it("o service worker cria o id e as três superfícies pedem o mesmo valor", () => {
+    expect(background).toContain("async function garantirInstallId");
+    expect(background).toContain("crypto.randomUUID()");
+    for (const src of [content, panel, accountBridge]) {
+      expect(src).toContain('type: "PITCHAI_GET_INSTALL_ID"');
+    }
+    for (const src of [panel, accountBridge]) {
+      const criacaoDeInstallId = src
+        .split("\n")
+        .filter((linha) => linha.includes("randomUUID") && linha.includes("INSTALL"));
+      expect(criacaoDeInstallId).toHaveLength(0);
+    }
     expect(panel).toContain("async function readInstallId");
     expect(panel).not.toContain("async function ensureInstallId");
   });
@@ -26,6 +37,7 @@ describe("vínculo de navegador (1 extensão por conta)", () => {
       // Fora da assinatura: o HMAC do servidor é sobre ts:nonce:endpoint.
       expect(src).toContain("`${ts}:${nonce}:${endpoint}`");
     }
+    expect(accountBridge).toContain('"X-PitchAI-Install"');
   });
 
   it("a falta do identificador nunca bloqueia", () => {
@@ -57,6 +69,16 @@ describe("vínculo de navegador (1 extensão por conta)", () => {
     // Desvincular exige login na tela de Conta: se o painel pudesse fazer
     // sozinho, bastaria abrir a extensão para roubar o vínculo de quem tem o código.
     expect(panel).not.toMatch(/fetch\([^)]*device-binding/);
+  });
+
+  it("os controles da LIVE revalidam a licença antes de procurar o botão", () => {
+    const inicio = content.indexOf('"live:start": async () =>');
+    const fim = content.indexOf('"live:end": async () =>');
+    const blocoStart = content.slice(inicio, fim);
+    expect(blocoStart).toContain("checkExtensionLock(current.syncToken)");
+    expect(blocoStart.indexOf("checkExtensionLock")).toBeLessThan(
+      blocoStart.indexOf("detectLiveState"),
+    );
   });
 });
 

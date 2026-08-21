@@ -52,7 +52,10 @@ export const Route = createFileRoute("/api/public/live/verify")({
         }
 
         try {
-          const status = await getSyncTokenStatus(token);
+          // O vínculo depende do X-PitchAI-Install desta requisição. Passar o
+          // Request explicitamente evita perder o header em runtimes onde o
+          // contexto assíncrono global não está disponível.
+          const status = await getSyncTokenStatus(token, request);
           return j(200, status);
         } catch (error) {
           // Configuração de servidor quebrada não pode responder 200 com

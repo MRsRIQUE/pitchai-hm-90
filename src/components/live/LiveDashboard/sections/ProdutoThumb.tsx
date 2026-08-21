@@ -10,7 +10,15 @@ import { iniciaisDoProduto, urlDaImagem } from "./produto";
  * responde 403 para hotlink com frequência, e sem o `onError` a UI ficaria com
  * o ícone de imagem quebrada do navegador no lugar do produto.
  */
-export function ProdutoThumb({ produto, tamanho = 40 }: { produto: Product; tamanho?: number }) {
+export function ProdutoThumb({
+  produto,
+  tamanho = 40,
+  preencher = false,
+}: {
+  produto: Product;
+  tamanho?: number;
+  preencher?: boolean;
+}) {
   const url = urlDaImagem(produto);
   const [falhou, setFalhou] = useState(false);
 
@@ -20,8 +28,8 @@ export function ProdutoThumb({ produto, tamanho = 40 }: { produto: Product; tama
   }, [url]);
 
   const base: React.CSSProperties = {
-    width: tamanho,
-    height: tamanho,
+    width: preencher ? "100%" : tamanho,
+    height: preencher ? "100%" : tamanho,
     flex: "none",
     borderRadius: "var(--app-r-sm)",
     border: "1px solid var(--app-line)",

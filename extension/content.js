@@ -294,6 +294,20 @@
    */
   async function ensureInstallId() {
     if (installIdCache) return installIdCache;
+
+    // Desde a v0.19 o service worker é o criador único. Pedir primeiro a ele
+    // elimina a corrida entre painel, ponte do site e script do TikTok.
+    try {
+      const resposta = await chrome.runtime.sendMessage({ type: "PITCHAI_GET_INSTALL_ID" });
+      const id = String(resposta?.installId || "").toLowerCase();
+      if (INSTALL_UUID_RE.test(id)) {
+        installIdCache = id;
+        return installIdCache;
+      }
+    } catch {}
+
+    // Compatibilidade caso o worker ainda não esteja disponível durante uma
+    // atualização: preserva o comportamento das versões anteriores.
     const stored = await storageGet(INSTALL_ID_KEY);
     if (typeof stored === "string" && INSTALL_UUID_RE.test(stored)) {
       installIdCache = stored.toLowerCase();
@@ -5596,6 +5610,11 @@
     /(encerrar|finalizar|terminar|fechar)\s*(a\s*)?(live|transmiss[aã]o)|end\s+(live|stream|broadcast)|stop\s+(live|stream)|hang\s*up|power\s*off/i;
   const LIVE_CLOCK_RX = /^\d{2}:\d{2}:\d{2}$/;
 
+  function liveControlBlockReason() {
+    if (!extSecurity.isLocked) return null;
+    return extSecurity.message || "licença não confirmada";
+  }
+
   function liveControlLabel(node) {
     return `${node?.getAttribute?.("aria-label") || ""} ${node?.getAttribute?.("title") || ""} ${node?.textContent || ""}`
       .replace(/\s+/g, " ")
@@ -5703,13 +5722,29 @@
 
   function textLiveControl(rx) {
     const roots = DM()?.util?.allRoots?.() || [document];
+    const controlSelector =
+      'button,[role="button"],a,div.cursor-pointer,[class*="arco-btn"],[data-e2e*="live" i]';
     for (const root of roots) {
       let nodes = [];
       try {
-        nodes = Array.from(root.querySelectorAll('button,[role="button"],a'));
+        nodes = Array.from(root.querySelectorAll(controlSelector));
       } catch {}
       const found = nodes.find((node) => validLiveControl(node, rx));
-      if (found) return found.closest?.("button") || found;
+      if (found) return found.closest?.(controlSelector) || found;
+
+      // O Gerenciador também monta o CTA como texto dentro de uma div
+      // clicável. Procurar o rótulo curto e subir até o controle evita depender
+      // da tag escolhida pelo TikTok sem aceitar containers grandes da página.
+      let labels = [];
+      try {
+        labels = Array.from(root.querySelectorAll("span,div,p"));
+      } catch {}
+      for (const labelNode of labels) {
+        const label = ownNodeText(labelNode) || liveControlLabel(labelNode);
+        if (!label || label.length > 60 || !rx.test(label)) continue;
+        const control = labelNode.closest?.(controlSelector);
+        if (control && validLiveControl(control, rx)) return control;
+      }
     }
     return null;
   }
@@ -6246,12 +6281,20 @@
         return "Live encerrada";
       },
       "live:start": async () => {
+        const current = await loadConfig();
+        if (!(await checkExtensionLock(current.syncToken))) {
+          throw new Error(liveControlBlockReason() || "licença não confirmada");
+        }
         const state = await detectLiveState();
         if (state.active) return "A LIVE já está ativa.";
         if (!(await clickStartLive())) throw new Error("botão Iniciar LIVE não encontrado");
         return "Comando para iniciar a LIVE enviado ao TikTok.";
       },
       "live:end": async () => {
+        const current = await loadConfig();
+        if (!(await checkExtensionLock(current.syncToken))) {
+          throw new Error(liveControlBlockReason() || "licença não confirmada");
+        }
         const state = await detectLiveState();
         if (!state.active) throw new Error("nenhuma LIVE ativa foi detectada");
         if (!(await finishLive("comando do painel"))) {

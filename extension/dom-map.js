@@ -562,7 +562,7 @@
       loose: true,
     },
     startLive: {
-      pool: "button, [role='button'], a",
+      pool: "button, [role='button'], a, div.cursor-pointer, [class*='arco-btn'], [data-e2e*='live' i]",
       score: scoreStartLive,
       min: 7,
       region: ["studio", "topbar"],
