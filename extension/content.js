@@ -1382,6 +1382,15 @@
   const COUNTER_LINE_RX = /^:?\s*[\d.,]+\s*(mil|un(id\.?)?|pcs?|peças?)?\s*$/i;
   const PRODUCT_UI_RX =
     /^(?:carrinho|adicionado ao carrinho|cliques?|fixar|desafixar|editar|excluir|remover|mover para o topo|demonstra[çc][ãa]o solicitada)(?:\s*\d+)?$/i;
+  // Blocos comerciais e controles vizinhos da vitrine não são mercadorias.
+  // A regra atua sobre o nome extraído, nunca sobre descrição/badges de um
+  // produto real, que podem legitimamente mencionar desconto ou cupom.
+  const NON_PRODUCT_LABEL_RX =
+    /^(?:cup(?:om|ons)\b|promo(?:ç(?:ão|ões)|cao|coes)\b|oferta\s+rel[âa]mpago\b|cat[áa]logo(?:\s+(?:todos?|de\s+produtos?))?\b|todos?\s+(?:os\s+)?produtos?\b|recompensas?\b|cartaz(?:es)?(?:\s+de\s+cupom)?\b|descontos?\b|(?:r\$\s*)?\d+(?:[.,]\d+)?\s*(?:%|reais?)?\s*(?:off|de\s+desconto)\b)/i;
+  // Somente a assinatura do próprio nó. Não olha descendentes: um produto real
+  // pode conter um badge de promoção sem virar um card promocional.
+  const NON_PRODUCT_NODE_RX =
+    /(?:coupon|voucher|campaign|promo(?:tion)?[-_ ]?banner|reward[-_ ]?card|catalog(?:ue)?[-_ ]?(?:header|tab|filter|all)|category[-_ ]?(?:header|tab|filter))/i;
   // rótulos de menu de conta que grudam no nome do perfil (ex.: "arthurdias993Sair")
   const MENU_TAIL_RX =
     /\s*(sair|log ?out|perfil|meu perfil|minha conta|configura[çc][õo]es|central do vendedor|ajuda|notifica[çc][õo]es)\s*$/i;
@@ -1469,6 +1478,7 @@
     if ((cleaned.match(GLUED_WORDS_RX) || []).length > MAX_GLUED_WORDS) return true;
     if (EMPTY_STATE_RX.test(cleaned)) return true;
     if (PRODUCT_CHROME_RX.test(cleaned)) return true;
+    if (NON_PRODUCT_LABEL_RX.test(cleaned)) return true;
     if (BADGE_RX.test(cleaned) || JUNK_NAME_RX.test(cleaned) || PRODUCT_UI_RX.test(cleaned))
       return true;
     if (
@@ -1517,6 +1527,27 @@
     });
     // Une apenas variantes muito próximas; produtos da mesma marca continuam separados.
     return common / shortSet.size >= 0.86 && common / longSet.size >= 0.58;
+  }
+
+  /**
+   * Régua deliberadamente mais rígida para clicar em "Fixar". O catálogo pode
+   * fundir nomes parecidos para enriquecer dados, mas uma ação na página só é
+   * segura com igualdade ou truncamento longo do mesmo título.
+   */
+  function pinNamesMatch(a, b) {
+    const ka = normKey(a || "");
+    const kb = normKey(b || "");
+    if (!ka || !kb) return false;
+    if (ka === kb) return true;
+    // Só aceita prefixo quando o próprio DOM informa truncamento. Aceitar todo
+    // prefixo longo faria "Nome do produto Fixar Em estoque" parecer o título.
+    const rawA = cleanName(a || "");
+    const rawB = cleanName(b || "");
+    const aTruncated = /(?:…|\.\.\.)\s*$/.test(rawA);
+    const bTruncated = /(?:…|\.\.\.)\s*$/.test(rawB);
+    if (aTruncated) return ka.length >= 24 && kb.startsWith(ka);
+    if (bTruncated) return kb.length >= 24 && ka.startsWith(kb);
+    return false;
   }
 
   /** Casa chaves iguais ou truncadas (compat: mapas antigos com chave por nome). */
@@ -1916,10 +1947,46 @@
     return out.replace(/\s+/g, " ").trim();
   }
 
+  function isNonProductContainer(card) {
+    if (!card) return true;
+    try {
+      const signature = [
+        card.className,
+        card.id,
+        card.getAttribute?.("data-e2e"),
+        card.getAttribute?.("data-tid"),
+        card.getAttribute?.("data-testid"),
+        card.getAttribute?.("href"),
+        card.getAttribute?.("aria-label"),
+      ]
+        .map((value) => String(value || ""))
+        .join(" ");
+      if (NON_PRODUCT_NODE_RX.test(signature)) return true;
+
+      const actions = Array.from(
+        card.querySelectorAll('button[data-pin-performance-source="product_card"]'),
+      ).filter((button) => !button.matches?.(".pc_pin_product_list_pin"));
+      // Um ancestral amplo de uma linha concreta não é o card. Isso barra
+      // cabeçalhos/painéis de catálogo que envolvem um produto visível.
+      if (
+        actions.some((button) => {
+          const row = button.closest("div.rounded-4.mb-8");
+          return row && row !== card && card.contains(row);
+        })
+      ) {
+        return true;
+      }
+
+      if (NON_PRODUCT_LABEL_RX.test(cleanName(textOf(card)))) return true;
+    } catch {}
+    return false;
+  }
+
   /** Extrai nome/preço/descrição de um card, exigindo evidência mínima. */
   function parseProductCard(card) {
     const text = textOf(card);
     if (text.length < 5 || text.length > 800) return null;
+    if (isNonProductContainer(card)) return null;
     if (PRODUCT_CHROME_RX.test(text) && !PRICE_RX.test(text)) return null;
     // descarta wrappers de perfil/chat/avatar sem depender de refreshAccountNames
     if (isProfileNode(card)) return null;
@@ -1959,6 +2026,7 @@
         !BADGE_RX.test(s0) &&
         !JUNK_NAME_RX.test(s0) &&
         !PRODUCT_UI_RX.test(s0) &&
+        !NON_PRODUCT_LABEL_RX.test(s0) &&
         !PRODUCT_META_RX.test(s0)
       ) {
         name = s0;
@@ -1972,13 +2040,20 @@
         alt.length >= 4 &&
         !BADGE_RX.test(alt) &&
         !JUNK_NAME_RX.test(alt) &&
-        !PRODUCT_UI_RX.test(alt)
+        !PRODUCT_UI_RX.test(alt) &&
+        !NON_PRODUCT_LABEL_RX.test(alt)
       )
         name = alt;
     }
     if (!name) {
       const aria = cleanName(card.getAttribute?.("aria-label") || "");
-      if (aria.length >= 4 && !BADGE_RX.test(aria) && !PRODUCT_UI_RX.test(aria)) name = aria;
+      if (
+        aria.length >= 4 &&
+        !BADGE_RX.test(aria) &&
+        !PRODUCT_UI_RX.test(aria) &&
+        !NON_PRODUCT_LABEL_RX.test(aria)
+      )
+        name = aria;
     }
     if (!name) {
       const linhas = text.split(/[\n·|]/).map((l) => stripProductMeta(l));
@@ -1990,6 +2065,7 @@
             !BADGE_RX.test(l) &&
             !JUNK_NAME_RX.test(l) &&
             !PRODUCT_UI_RX.test(l) &&
+            !NON_PRODUCT_LABEL_RX.test(l) &&
             !PRODUCT_META_RX.test(l),
         ) || "";
     }
@@ -2020,7 +2096,20 @@
     };
   }
 
+  function productActionCount(el) {
+    try {
+      return Array.from(
+        el.querySelectorAll('button[data-pin-performance-source="product_card"]'),
+      ).filter((button) => !button.matches?.(".pc_pin_product_list_pin")).length;
+    } catch {
+      return 0;
+    }
+  }
+
   function hasMultipleProductRows(el) {
+    // O seletor do botão é a evidência mais confiável no Console de LIVE. Se
+    // um wrapper contém duas ações de produto, ele é uma lista — nunca um card.
+    if (productActionCount(el) >= 2) return true;
     let count = 0;
     try {
       Array.from(el.children || []).forEach((child) => {
@@ -2033,6 +2122,7 @@
 
   function addIfProductCard(el, out) {
     if (!(el instanceof HTMLElement)) return false;
+    if (isNonProductContainer(el)) return false;
     if (hasMultipleProductRows(el)) return false;
     const parsed = parseProductCard(el);
     if (!parsed) return false;
@@ -2143,8 +2233,7 @@
 
   /** Lê a vitrine: o DOM mapeado é a verdade; a rede só enriquece. A API do TikTok
    *  entrega na mesma página a vitrine da live E o catálogo completo da conta
-   *  (pesquisa/estoque) — por isso produtos vindos só da rede só entram quando o
-   *  DOM não entregou nenhuma vitrine (setor ainda não mapeado). */
+   *  (pesquisa/estoque), portanto um item visto apenas na rede nunca entra. */
   async function scrapeCatalog({ deep = false } = {}) {
     const results = new Map();
     const resultsIdx = new Map(); // normKey(name) -> chave em results (O(1) sem O(n²))
@@ -2299,8 +2388,9 @@
     const hasVitrine = vitrinePids.size > 0 || vitrineNames.length > 0;
     const vitrineNameKeys = new Set(vitrineNames.map((n) => normKey(n)));
 
-    // 3) rede enriquece produtos que existem na vitrine (preço/descrição/pid) e
-    //    só adiciona produtos novos quando o DOM não entregou nenhuma vitrine.
+    // 3) Rede somente enriquece produtos comprovados no DOM da vitrine. Se o
+    //    mapeamento falhar, é mais seguro retornar vazio do que importar o
+    //    catálogo completo, cupons ou campanhas da conta.
     for (const item of netItems) {
       const key = productKey(item);
       if (!key || isBadProductName(item.name)) continue;
@@ -2308,7 +2398,7 @@
         (item.pid && vitrinePids.has(String(item.pid))) ||
         vitrineNameKeys.has(normKey(item.name)) ||
         vitrineNames.some((n) => namesMatch(n, item.name));
-      if (hasVitrine && !inVitrine) continue;
+      if (!hasVitrine || !inVitrine) continue;
       upsertProduct(results, item, resultsIdx);
     }
 
@@ -4531,7 +4621,7 @@
   // ---------- Auto-fixar produto ----------
   const PIN_RX = /fixar|pin|destacar|topo|apresentar|mostrar/i;
   const PIN_DANGER_RX =
-    /remover|excluir|apagar|editar|comprar|carrinho|detalhes|desafixar|unpin|cancelar|parar/i;
+    /remover|excluir|apagar|editar|comprar|carrinho|detalhes|desafixar|unpin|cancelar|parar|cupom|voucher|promo(?:ç|c)|campanha|cat[áa]logo/i;
   const UNPIN_RX = /desafixar|unpin|remover (do )?destaque|parar de apresentar|cancelar apresenta/i;
   const CONFIRM_RX = /^(confirmar|apresentar|fixar|sim|ok|continuar)$/i;
   const PINNED_RX = /(fixado|apresentando|em destaque|no topo|unpin|desafixar|cancelar apresenta)/i;
@@ -4542,7 +4632,7 @@
     // para a rotação automática de um produto específico.
     try {
       const exact = card.querySelector("button.pc_pin_product_pin");
-      if (exact && DM()?.util?.isVisible?.(exact)) return exact;
+      if (exact && !looksLikeUnpinAction(exact) && DM()?.util?.isVisible?.(exact)) return exact;
     } catch {}
     // Console de LIVE: o atributo de tracking é constante nos dois estados;
     // serve como pin quando a classe de estado ainda não é a de desafixar.
@@ -4550,7 +4640,7 @@
       const tracked = card.querySelector('button[data-pin-performance-source="product_card"]');
       if (
         tracked &&
-        !tracked.matches?.(".pc_pin_product_unpin") &&
+        !looksLikeUnpinAction(tracked) &&
         !tracked.matches?.(".pc_pin_product_list_pin") &&
         DM()?.util?.isVisible?.(tracked)
       )
@@ -4568,7 +4658,10 @@
       if (b.matches?.(".pc_pin_product_list_pin")) continue;
       const label =
         `${b.getAttribute?.("aria-label") || ""} ${b.getAttribute?.("title") || ""} ${b.textContent || ""}`.toLowerCase();
-      if (PIN_RX.test(label) && !PIN_DANGER_RX.test(label)) return b.closest("button") || b;
+      const action = b.closest("button") || b;
+      if (PIN_RX.test(label) && !PIN_DANGER_RX.test(label) && !looksLikeUnpinAction(action)) {
+        return action;
+      }
     }
     // Fallback seguro para versões do TikTok que usam um único botão sem texto.
     // Nunca clica às cegas quando o card possui várias ações, nem quando o único
@@ -4589,6 +4682,16 @@
     return `${node?.getAttribute?.("aria-label") || ""} ${node?.getAttribute?.("title") || ""} ${node?.textContent || ""}`
       .replace(/\s+/g, " ")
       .trim();
+  }
+
+  function looksLikeUnpinAction(node) {
+    if (!node) return false;
+    return (
+      node.matches?.(".pc_pin_product_unpin") ||
+      node.getAttribute?.("aria-pressed") === "true" ||
+      UNPIN_RX.test(actionLabel(node)) ||
+      /unpin|unfix|desafix/i.test(`${node.className || ""}`)
+    );
   }
 
   function findUnpinButton(card) {
@@ -4624,7 +4727,23 @@
     if (findUnpinButton(card)) return true;
     const pinBtn = findPinButton(card);
     if (pinBtn && pinBtn.getAttribute?.("aria-pressed") === "true") return true;
-    return PINNED_RX.test((card.textContent || "").toLowerCase());
+    try {
+      const stateNodes = Array.from(
+        card.querySelectorAll(
+          '[aria-label], [title], [data-e2e*="pin" i], [class*="status" i], [class*="badge" i]',
+        ),
+      );
+      if (stateNodes.some((node) => PINNED_RX.test(actionLabel(node).toLowerCase()))) return true;
+      // Fallback conservador: apenas rótulos curtos e isolados. Nunca testa o
+      // textContent do card inteiro, que contém nome, estoque e outras linhas.
+      return Array.from(card.querySelectorAll("span, button, [role='button']")).some((node) => {
+        if (node.children?.length) return false;
+        const label = actionLabel(node).toLowerCase();
+        return label.length > 0 && label.length <= 40 && PINNED_RX.test(label);
+      });
+    } catch {
+      return false;
+    }
   }
 
   /** Alguns fluxos abrem um modal "Apresentar produto?" — confirma automaticamente. */
@@ -4718,9 +4837,46 @@
    * cheio de "Fixar"/"Em estoque"), então este matcher roda por último como
    * garantia antes de declarar "card não encontrado".
    */
-  function findDashboardRow(name) {
-    const key = normKey(name || "");
-    if (!key) return null;
+  function dashboardRowName(row) {
+    const candidates = [];
+    try {
+      const preferred = row.querySelectorAll(
+        '[data-e2e*="title" i], [class*="product-title" i], [class*="product-name" i], [class*="title" i]',
+      );
+      const fallback = row.querySelectorAll("span");
+      for (const node of [...preferred, ...fallback]) {
+        if (node.closest?.("button")) continue;
+        if (node.matches?.("span") && node.querySelector?.("span")) continue;
+        const text = stripProductMeta(node.getAttribute?.("title") || textOf(node));
+        if (
+          text.length >= 4 &&
+          text.length <= MAX_PRODUCT_NAME_LEN &&
+          !PRICE_RX.test(text) &&
+          !PRODUCT_META_RX.test(text) &&
+          !PRODUCT_UI_RX.test(text) &&
+          !NON_PRODUCT_LABEL_RX.test(text) &&
+          !JUNK_NAME_RX.test(text) &&
+          !isBadProductName(text)
+        ) {
+          candidates.push(text);
+        }
+      }
+    } catch {}
+    return candidates.sort((a, b) => b.length - a.length)[0] || "";
+  }
+
+  function productCardIdentity(card) {
+    if (productActionCount(card) === 1) {
+      const dashboardName = dashboardRowName(card);
+      if (dashboardName) return { pid: pidOf(card), name: dashboardName };
+    }
+    const parsed = parseProductCard(card);
+    if (parsed?.name) return parsed;
+    const name = dashboardRowName(card);
+    return name ? { pid: pidOf(card), name } : null;
+  }
+
+  function findDashboardRow(name, expectedPid = "") {
     const roots = DM()?.util?.allRoots?.() || [document];
     const seen = new Set();
     const rows = [];
@@ -4737,51 +4893,19 @@
           btn.closest('div[class*="rounded"]') ||
           btn.parentElement?.parentElement?.parentElement ||
           btn.parentElement;
-        if (!row || seen.has(row)) continue;
+        if (!row || seen.has(row) || productActionCount(row) !== 1) continue;
         seen.add(row);
         rows.push(row);
       }
     }
-    let best = null;
-    let bestScore = 0;
-    let tie = false;
-    for (const row of rows) {
-      if (!row.isConnected) continue;
-      // Nome: span da linha com o texto mais longo (o do título carrega o
-      // nome completo; botões/labels são curtos).
-      let rowName = "";
-      try {
-        for (const span of row.querySelectorAll("span")) {
-          const t = (span.textContent || "").trim();
-          if (t.length > rowName.length && t.length <= 200) rowName = t;
-        }
-      } catch {}
-      const t = normKey(rowName);
-      if (!t) continue;
-      const words = key.split(" ").filter((w) => w.length > 3);
-      const exact = t.includes(key) || key.includes(t) ? words.length + 1 : 0;
-      const hits = words.filter((w) => t.includes(w)).length;
-      const score = Math.max(exact, hits);
-      if (score > bestScore) {
-        bestScore = score;
-        best = row;
-        tie = false;
-      } else if (score === bestScore && score > 0) {
-        tie = true;
-      }
-    }
+    const best = matchCard(rows, name, expectedPid);
     console.debug("[PITCHAI-PIN] findDashboardRow:", {
-      key,
+      key: normKey(name || ""),
       rows: rows.length,
-      bestScore,
-      tie,
-      bestName: best ? (best.querySelector("span")?.textContent || "").slice(0, 60) : null,
+      expectedPid,
+      bestName: best ? productCardIdentity(best)?.name || null : null,
     });
-    if (tie || !best) return null;
-    return bestScore >=
-      Math.max(1, Math.ceil(key.split(" ").filter((w) => w.length > 3).length / 2))
-      ? best
-      : null;
+    return best;
   }
 
   async function locateProductCard(name, expectedPid = "") {
@@ -4834,7 +4958,7 @@
     const fallbackMatch = matchCard(fallbackCards, name, expectedPid);
     if (fallbackMatch) return fallbackMatch;
     // Última garantia: rota dedicada às linhas do Console de LIVE.
-    const dashboardRow = findDashboardRow(name);
+    const dashboardRow = findDashboardRow(name, expectedPid);
     if (dashboardRow) {
       console.debug("[PITCHAI-PIN] resolvido via findDashboardRow");
       return dashboardRow;
@@ -4846,59 +4970,44 @@
   function matchCard(cards, name, expectedPid = "") {
     const key = normKey(name);
     if (!key) return null;
-    // Identidade exata primeiro: se sabemos o pid do produto, um card com pid
-    // diferente nunca pode ser aceito — nome parecido não basta (a vitrine
-    // pode conter variações do mesmo título em produtos distintos).
-    if (expectedPid) {
-      const pidMatch = cards.find((card) => {
-        const parsed = parseProductCard(card);
-        return parsed?.pid && String(parsed.pid) === String(expectedPid);
-      });
-      if (pidMatch) return pidMatch;
-    }
-    const words = key
-      .split(" ")
-      .filter((w) => w.length > 3)
-      .slice(0, 4);
-    let best = null;
-    let bestScore = 0;
-    let tie = false;
-    const skippedPid = [];
-    for (const c of cards) {
-      const parsed = parseProductCard(c);
-      if (expectedPid && parsed?.pid && String(parsed.pid) !== String(expectedPid)) {
-        skippedPid.push({ pid: parsed.pid, name: parsed.name });
+    const pidMatches = [];
+    const nameMatches = [];
+    for (const card of cards) {
+      if (!card?.isConnected || isNonProductContainer(card) || hasMultipleProductRows(card))
+        continue;
+      const identity = productCardIdentity(card);
+      if (!identity?.name) continue;
+      const cardPid = String(identity.pid || "");
+      if (expectedPid && cardPid) {
+        if (cardPid === String(expectedPid)) pidMatches.push({ card, identity });
         continue;
       }
-      const t = normKey(`${parsed?.name || ""} ${c.textContent || ""}`);
-      if (!t) continue;
-      // substring completa do nome vale o máximo; senão conta palavras em comum
-      const exact = t.includes(key) ? words.length + 1 : 0;
-      const hits = words.filter((w) => t.includes(w)).length;
-      const score = Math.max(exact, hits);
-      console.debug("[PITCHAI-PIN] match:", { parsed, score, hits, exact, key });
-      if (score > bestScore) {
-        bestScore = score;
-        best = c;
-        tie = false;
-      } else if (score === bestScore && score > 0) {
-        tie = true;
+      if (pinNamesMatch(identity.name, name)) nameMatches.push({ card, identity });
+    }
+
+    const matches = pidMatches.length ? pidMatches : nameMatches;
+    // Sem PID, dois botões diferentes com o mesmo título continuam ambíguos.
+    // Wrappers aninhados do mesmo card compartilham o botão e são deduplicados.
+    const byAction = new Map();
+    for (const match of matches) {
+      const action = findPinButton(match.card) || findUnpinButton(match.card) || match.card;
+      const previous = byAction.get(action);
+      if (!previous || textOf(match.card).length < textOf(previous.card).length) {
+        byAction.set(action, match);
       }
     }
-    if (skippedPid.length) {
-      console.debug("[PITCHAI-PIN] cards ignorados por pid diferente:", skippedPid);
-    }
+    const unique = Array.from(byAction.values());
+    const ambiguous = !pidMatches.length && unique.length > 1;
+    const best = ambiguous ? null : unique[0]?.card || null;
     console.debug("[PITCHAI-PIN] resultado matchCard:", {
       key,
       expectedPid,
-      bestScore,
-      min: Math.max(1, Math.ceil(words.length / 2)),
-      tie,
-      bestName: best ? parseProductCard(best)?.name : null,
+      candidates: unique.length,
+      ambiguous,
+      matchedByPid: pidMatches.length > 0,
+      bestName: best ? productCardIdentity(best)?.name || null : null,
     });
-    // Empate de pontuação = ambiguidade: melhor não clicar do que fixar errado.
-    if (tie) return null;
-    return bestScore >= Math.max(1, Math.ceil(words.length / 2)) ? best : null;
+    return best;
   }
 
   /**
@@ -4906,6 +5015,16 @@
    * e a de texto devem apresentar. Retorna a entrada rica do catálogo quando
    * existe, senão o card parseado; null se nada estiver fixado.
    */
+  function catalogProductForIdentity(produtos, identity) {
+    if (!identity?.name) return null;
+    if (identity.pid) {
+      const byPid = produtos.find((p) => String(p.pid || "") === String(identity.pid));
+      if (byPid) return byPid;
+    }
+    const byName = produtos.filter((p) => pinNamesMatch(p?.name || "", identity.name));
+    return byName.length === 1 ? byName[0] : null;
+  }
+
   async function getPinnedProduct(cfg) {
     try {
       const produtos = cfg?.produtos || [];
@@ -4913,15 +5032,9 @@
       const cards = await productCards();
       const pinned = cards.find((card) => isPinnedCard(card));
       if (pinned) {
-        const parsed = parseProductCard(pinned);
-        if (parsed) {
-          const byPid = parsed.pid
-            ? produtos.find((p) => String(p.pid || "") === String(parsed.pid))
-            : null;
-          if (byPid) return byPid;
-          const key = normKey(parsed.name || "");
-          const byName = key ? produtos.find((p) => normKey(p?.name || "") === key) : null;
-          if (byName) return byName;
+        const identity = productCardIdentity(pinned);
+        if (identity) {
+          return catalogProductForIdentity(produtos, identity) || identity;
         }
       }
       // Rota 2 (Console de LIVE): a linha fixada carrega o botão "Desafixar".
@@ -4935,37 +5048,9 @@
         if (!btn) continue;
         const row =
           btn.closest("div.rounded-4.mb-8") || btn.closest("div[class*='rounded']") || btn;
-        // Nome completo = maior <span> da linha (o título guarda o texto inteiro).
-        let rowName = "";
-        try {
-          for (const span of row.querySelectorAll("span")) {
-            const t = (span.textContent || "").trim();
-            if (t.length > rowName.length && t.length <= 200) rowName = t;
-          }
-        } catch {}
-        const key = normKey(rowName);
-        if (!key) continue;
-        // Casa com o catálogo: igualdade/contenção e, senão, maior sobreposição
-        // de palavras — nunca o primeiro da lista por padrão.
-        let best = null;
-        let bestScore = 0;
-        for (const p of produtos) {
-          const pn = normKey(p?.name || "");
-          if (!pn) continue;
-          let score = 0;
-          if (pn === key || pn.includes(key) || key.includes(pn)) score = 100;
-          else {
-            const words = key.split(" ").filter((w) => w.length > 3);
-            const hits = words.filter((w) => pn.includes(w)).length;
-            score = words.length ? hits / words.length : 0;
-          }
-          if (score > bestScore) {
-            bestScore = score;
-            best = p;
-          }
-        }
-        if (best && bestScore >= 0.6) return best;
-        return { name: rowName, price: "", description: "", pid: "" };
+        const identity = productCardIdentity(row);
+        if (!identity) continue;
+        return catalogProductForIdentity(produtos, identity) || identity;
       }
       return null;
     } catch {
@@ -4980,138 +5065,53 @@
    * re-localização pode devolver a linha que subiu para o topo — clicar nela
    * fixaria o produto errado.
    */
-  function cardBelongsToTarget(card, name) {
-    if (!card || !card.isConnected) return false;
-    const key = normKey(name || "");
-    if (!key) return false;
-    let cardName = parseProductCard(card)?.name || "";
-    if (!cardName) {
-      // Linha do Console de LIVE: nome completo vive no maior <span> da linha.
-      try {
-        for (const span of card.querySelectorAll("span")) {
-          const t = (span.textContent || "").trim();
-          if (t.length > cardName.length && t.length <= 200) cardName = t;
-        }
-      } catch {}
+  function cardBelongsToTarget(card, name, expectedPid = "") {
+    if (
+      !card ||
+      !card.isConnected ||
+      isNonProductContainer(card) ||
+      hasMultipleProductRows(card)
+    )
+      return false;
+    const identity = productCardIdentity(card);
+    if (!identity?.name) return false;
+    if (expectedPid && identity.pid) {
+      return String(identity.pid) === String(expectedPid);
     }
-    const t = normKey(cardName);
-    if (!t) return false;
-    if (t === key || t.includes(key) || key.includes(t)) return true;
-    const words = key.split(" ").filter((w) => w.length > 3);
-    const hits = words.filter((w) => t.includes(w)).length;
-    return words.length > 0 && hits / words.length >= 0.8;
+    return pinNamesMatch(identity.name, name);
   }
 
   async function pinProduct(alvo) {
     const card = await locateProductCard(alvo.name || "", alvo.pid || "");
     if (!card) return { ok: false, reason: "card não encontrado na vitrine" };
+    if (!cardBelongsToTarget(card, alvo.name, alvo.pid || "")) {
+      return { ok: false, reason: "animação da vitrine: card encontrado não é o produto-alvo" };
+    }
     if (isPinnedCard(card)) {
       return { ok: true, reason: "já estava fixado" };
     }
-    if (!cardBelongsToTarget(card, alvo.name)) {
-      return { ok: false, reason: "animacao da vitrine: card encontrado nao e o produto-alvo" };
+    const btn = findPinButton(card);
+    if (!btn || looksLikeUnpinAction(btn)) {
+      return { ok: false, reason: "botão de fixar não encontrado com segurança" };
     }
-    // O TikTok ocasionalmente aceita o evento de clique sem executar a ação.
-    // Repete uma única vez, mas somente após confirmar que o card continua no
-    // estado "Fixar" E que continua sendo o produto-alvo; assim nunca alterna
-    // de volta um produto fixado nem clica na linha errada que subiu no lugar.
-    for (let clickAttempt = 0; clickAttempt < 2; clickAttempt++) {
-      let currentCard = card.isConnected ? card : null;
-      if (!currentCard) {
-        currentCard = await locateProductCard(alvo.name || "", alvo.pid || "");
-        if (currentCard && !cardBelongsToTarget(currentCard, alvo.name)) {
-          return { ok: false, reason: "animacao da vitrine: perdi o card do produto-alvo" };
-        }
-      }
-      if (!currentCard) return { ok: false, reason: "card saiu da vitrine" };
-      if (isPinnedCard(currentCard)) return { ok: true, reason: "fixado" };
-      const btn = findPinButton(currentCard);
-      if (!btn) return { ok: false, reason: "botão de fixar não encontrado" };
-      realClick(btn);
-      await confirmPinDialog();
-      // Depois do clique a lista reordena com animação: dá tempo suficiente
-      // antes de concluir (16 × 250ms = 4s) e só re-localiza por nome+pid,
-      // nunca confiando em referência antiga.
-      for (let attempt = 0; attempt < 16; attempt++) {
-        await sleep(250);
-        const current = currentCard.isConnected
-          ? currentCard
-          : await locateProductCard(alvo.name || "", alvo.pid || "");
-        if (current && isPinnedCard(current)) return { ok: true, reason: "fixado" };
+    // Um ciclo nunca repete o clique. Depois que o TikTok troca o estado do
+    // botão, uma segunda tentativa poderia acionar "Desafixar".
+    realClick(btn);
+    await confirmPinDialog();
+    for (let attempt = 0; attempt < 20; attempt++) {
+      await sleep(250);
+      let current =
+        card.isConnected && cardBelongsToTarget(card, alvo.name, alvo.pid || "") ? card : null;
+      if (!current) current = await locateProductCard(alvo.name || "", alvo.pid || "");
+      if (
+        current &&
+        cardBelongsToTarget(current, alvo.name, alvo.pid || "") &&
+        isPinnedCard(current)
+      ) {
+        return { ok: true, reason: "fixado" };
       }
     }
     return { ok: false, reason: "o TikTok não confirmou o produto em destaque" };
-  }
-
-  /** Desfixa somente o card que o TikTok identifica como produto em destaque. */
-  async function unpinCurrentProduct() {
-    const cards = await productCards();
-    let pinned = cards.find((card) => isPinnedCard(card));
-    if (!pinned) {
-      // Linha do Console de LIVE pode escapar do parser genérico: procura
-      // diretamente pelo botão "Desafixar" das linhas mapeadas.
-      const roots = DM()?.util?.allRoots?.() || [document];
-      for (const root of roots) {
-        let btn = null;
-        try {
-          btn = root.querySelector("button.pc_pin_product_unpin");
-        } catch {}
-        if (btn) {
-          pinned = btn.closest("div.rounded-4.mb-8") || btn.closest("div[class*='rounded']");
-          break;
-        }
-      }
-    }
-    if (!pinned) return { ok: true, changed: false, reason: "nenhum produto estava fixado" };
-    const button = findUnpinButton(pinned);
-    if (!button) {
-      return { ok: false, changed: false, reason: "botão de desafixar não encontrado" };
-    }
-    const pinnedInfo = parseProductCard(pinned);
-    const pinnedName = pinnedInfo?.name || "";
-    const pinnedPid = pinnedInfo?.pid || "";
-    realClick(button);
-    await confirmPinDialog();
-    for (let attempt = 0; attempt < 10; attempt++) {
-      await sleep(250);
-      const current = pinned.isConnected
-        ? pinned
-        : pinnedName
-          ? await locateProductCard(pinnedName, pinnedPid)
-          : null;
-      if (!current || !isPinnedCard(current)) {
-        return { ok: true, changed: true, reason: "produto anterior desfixado" };
-      }
-    }
-    return {
-      ok: false,
-      changed: false,
-      reason: "o TikTok não confirmou que o produto foi desfixado",
-    };
-  }
-
-  /**
-   * O que está fixado agora, com o nome da linha (para comparar com o alvo).
-   * Retorna { card, isTarget } ou null se nada estiver fixado.
-   */
-  async function findCurrentlyPinned(targetName) {
-    const cards = await productCards();
-    let pinned = cards.find((card) => isPinnedCard(card));
-    if (!pinned) {
-      const roots = DM()?.util?.allRoots?.() || [document];
-      for (const root of roots) {
-        let btn = null;
-        try {
-          btn = root.querySelector("button.pc_pin_product_unpin");
-        } catch {}
-        if (btn) {
-          pinned = btn.closest("div.rounded-4.mb-8") || btn.closest("div[class*='rounded']");
-          break;
-        }
-      }
-    }
-    if (!pinned) return null;
-    return { card: pinned, isTarget: cardBelongsToTarget(pinned, targetName || "") };
   }
 
   async function autoPinTick({ force = false } = {}) {
@@ -5134,8 +5134,7 @@
   async function runAutoPin(cfg, af) {
     const min = Math.max(5, Number(af.minSec) || 20);
     const max = Math.max(min, Number(af.maxSec) || 60);
-    // Bloqueia ticks durante o ciclo (que inclui a espera da animação de
-    // desafixar); o próximo horário é marcado ao FINAL do ciclo.
+    // Bloqueia ticks durante o ciclo; o próximo horário é marcado ao final.
     auto.nextPinAt = Number.MAX_SAFE_INTEGER;
 
     let produtos = cfg.produtos || [];
@@ -5172,22 +5171,9 @@
     let res = { ok: false, reason: "modo demo" };
     if (!demo.isOn()) {
       try {
-        // Lê o estado atual ANTES de clicar:
-        // - alvo já fixado → desfixa, espera a animação (10s) e refixa;
-        // - outro produto fixado ou nada fixado → apenas fixa o alvo
-        //   (o TikTok troca o destaque sozinho ao fixar um novo produto).
-        const current = await findCurrentlyPinned(alvo.name || "");
-        if (current?.isTarget) {
-          const unpinned = await unpinCurrentProduct();
-          if (!unpinned.ok) {
-            res = unpinned;
-          } else {
-            if (unpinned.changed) await sleep(10000);
-            res = await pinProduct(alvo);
-          }
-        } else {
-          res = await pinProduct(alvo);
-        }
+        // Somente fixa. Se já estiver fixado, pinProduct retorna sucesso sem
+        // clicar; se houver outro destaque, o próprio TikTok faz a substituição.
+        res = await pinProduct(alvo);
       } catch (e) {
         res = { ok: false, reason: String(e?.message || e) };
       }
@@ -5206,7 +5192,9 @@
       type: "pin",
       text:
         res.ok || demo.isOn()
-          ? `Produto desfixado e fixado novamente: ${alvo.name}`
+          ? res.reason === "já estava fixado"
+            ? `Produto já estava fixado: ${alvo.name}`
+            : `Produto fixado: ${alvo.name}`
           : `Destaque só no roteiro (${res.reason}): ${alvo.name}`,
       ts: Date.now(),
     });
@@ -6263,7 +6251,9 @@
         }
         const result = await autoPinTick({ force: true });
         if (!result?.ok) throw new Error(result?.reason || "não foi possível fixar o produto");
-        return "Produto desfixado e fixado novamente com sucesso.";
+        return result.reason === "já estava fixado"
+          ? "O produto já estava fixado."
+          : "Produto fixado com sucesso.";
       },
       "pick:chat": async () => {
         await startPickMode("chat");

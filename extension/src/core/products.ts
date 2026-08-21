@@ -66,10 +66,9 @@ export function extractProductName(card: HTMLElement, text: string, price: strin
   ];
 
   for (const sel of titleSelectors) {
-    const el = card.querySelector<HTMLElement>(sel);
-    if (el) {
+    for (const el of Array.from(card.querySelectorAll<HTMLElement>(sel))) {
       const name = cleanName(el.textContent || el.getAttribute("title") || "");
-      if (name.length >= 4 && !PRICE_RX.test(name)) {
+      if (name.length >= 4 && !PRICE_RX.test(name) && !isBadProductName(name)) {
         return name;
       }
     }
@@ -82,14 +81,14 @@ export function extractProductName(card: HTMLElement, text: string, price: strin
 
   if (img) {
     const alt = cleanName(img.getAttribute("alt") || "");
-    if (alt.length >= 4) {
+    if (alt.length >= 4 && !isBadProductName(alt)) {
       return alt;
     }
   }
 
   // Tentar extrair de aria-label
   const aria = cleanName(card.getAttribute("aria-label") || "");
-  if (aria.length >= 4) {
+  if (aria.length >= 4 && !isBadProductName(aria)) {
     return aria;
   }
 

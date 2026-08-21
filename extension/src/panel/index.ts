@@ -252,7 +252,7 @@ function save(cfg: Config, opts?: { products?: boolean }): void {
 // ============================================================================
 
 const BAD_PRODUCT_RX =
-  /(gerenciador\s+de\s+live|pesquisar\s+id|todas\s+as\s+categorias|todo\s+o\s+estoque|lista\s+de\s+produtos\s+nesta\s+live|portugu[eê]s\s+do\s+brasil|\bsair\b|pitcha[ií]\s+live|^(?:carrinho|adicionado ao carrinho|cliques?|fixar|desafixar|editar|excluir|remover)(?:\s*\d+)?$)/i;
+  /(gerenciador\s+de\s+live|pesquisar\s+id|todas\s+as\s+categorias|todo\s+o\s+estoque|lista\s+de\s+produtos\s+nesta\s+live|portugu[eê]s\s+do\s+brasil|\bsair\b|pitcha[ií]\s+live|^(?:carrinho|adicionado ao carrinho|cliques?|fixar|desafixar|editar|excluir|remover)(?:\s*\d+)?$|^(?:cup(?:om|ons)\b|promo(?:ç(?:ão|ões)|cao|coes)\b|oferta\s+rel[âa]mpago\b|cat[áa]logo(?:\s+(?:todos?|de\s+produtos?))?\b|todos?\s+(?:os\s+)?produtos?\b|recompensas?\b|cartaz(?:es)?(?:\s+de\s+cupom)?\b|descontos?\b|(?:r\$\s*)?\d+(?:[.,]\d+)?\s*(?:%|reais?)?\s*(?:off|de\s+desconto)\b))/i;
 
 function productKey(name: string): string {
   return String(name || "")

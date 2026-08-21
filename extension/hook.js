@@ -24,6 +24,13 @@
     /(gerenciador\s+de\s+live|pesquisar\s+id|todas\s+as\s+categorias|todo\s+o\s+estoque|lista\s+de\s+produtos\s+nesta\s+live|portugu[eê]s\s+do\s+brasil|\bsair\b|pitcha[ií]\s+live)/i;
   const BAD_PRODUCT_RX =
     /^(adicionar|fixar|desafixar|destacar|editar|excluir|remover|todos|produtos?|vitrine|estoque|pedidos?|comprar|carrinho|adicionado ao carrinho|cliques?)$/i;
+  const NON_PRODUCT_LABEL_RX =
+    /^(?:cup(?:om|ons)\b|promo(?:ç(?:ão|ões)|cao|coes)\b|oferta\s+rel[âa]mpago\b|cat[áa]logo(?:\s+(?:todos?|de\s+produtos?))?\b|todos?\s+(?:os\s+)?produtos?\b|recompensas?\b|cartaz(?:es)?(?:\s+de\s+cupom)?\b|descontos?\b|(?:r\$\s*)?\d+(?:[.,]\d+)?\s*(?:%|reais?)?\s*(?:off|de\s+desconto)\b)/i;
+  const PRODUCT_KEY_RX =
+    /^(?:product(?:_id|Id|_base|_name|_title|_status|_info)?|goods(?:_id|_name)?|sku(?:_id|_list)?|stock|stock_num)$/i;
+  const PROMOTION_KEY_RX =
+    /^(?:coupon|coupon_id|coupon_info|voucher|voucher_id|promotion|promotion_id|promotion_info|campaign|campaign_id|reward|marketing)$/i;
+  const PROMOTION_ID_KEY_RX = /^(?:coupon_id|voucher_id|promotion_id|campaign_id)$/i;
 
   function deep(o, ...paths) {
     for (const path of paths) {
@@ -73,8 +80,20 @@
   }
 
   function asProduct(o) {
+    let objectKeys = [];
+    try {
+      objectKeys = Object.keys(o);
+    } catch {}
+    const hasProductKey = objectKeys.some((key) => PRODUCT_KEY_RX.test(key));
+    const hasPromotionKey = objectKeys.some((key) => PROMOTION_KEY_RX.test(key));
+    if (objectKeys.some((key) => PROMOTION_ID_KEY_RX.test(key))) return null;
+    // Campanhas/cupons também têm id, título, preço e imagem. Sem uma chave
+    // específica de produto, esse formato nunca pode alimentar a vitrine.
+    if (hasPromotionKey && !hasProductKey) return null;
+
     const base = o.product_base || o.base_info || o.detail || null;
     const src = base && typeof base === "object" ? { ...base, ...o } : o;
+    if (!hasProductKey && src.id != null) return null;
     const name =
       str(src.title) ||
       str(src.product_name) ||
@@ -83,8 +102,15 @@
       str(src.goods_name) ||
       deep(o, "product_base.title", "base_info.title", "detail.title", "product_info.title");
     if (name.length < 4 || name.length > 220) return null;
-    if (PRODUCT_CHROME_RX.test(name) || BAD_PRODUCT_RX.test(name)) return null;
-    const id = src.product_id ?? src.productId ?? src.sku_id ?? src.goods_id ?? src.id ?? null;
+    if (
+      PRODUCT_CHROME_RX.test(name) ||
+      BAD_PRODUCT_RX.test(name) ||
+      NON_PRODUCT_LABEL_RX.test(name)
+    )
+      return null;
+    const specificId = src.product_id ?? src.productId ?? src.sku_id ?? src.goods_id ?? null;
+    // id sozinho é genérico demais (campanha, cupom, categoria ou banner).
+    const id = specificId ?? (hasProductKey ? src.id : null);
     const price = priceOf(src) || priceOf(o);
     // basta um id de produto: preço e imagem podem chegar depois pelo DOM
     const productEvidence = !!(
@@ -95,7 +121,7 @@
       src.product_status != null ||
       src.sku_list != null ||
       src.stock != null ||
-      base
+      (base && hasProductKey)
     );
     const validId = id != null && String(id).length >= 5;
     // Algumas rotas entregam o id apenas numa segunda resposta. Ainda aceitamos

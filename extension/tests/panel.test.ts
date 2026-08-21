@@ -67,6 +67,17 @@ describe("painel distribuído", () => {
     expect(contentSource).toContain("if (auto.pinBusy) return");
     expect(contentSource).toContain('alvo.pid || ""');
     expect(contentSource).toContain("expectedPid");
+    expect(contentSource).toContain("pinNamesMatch");
+    expect(contentSource).toContain("productActionCount");
+    expect(contentSource).toContain("isNonProductContainer");
+    expect(contentSource).toContain("NON_PRODUCT_LABEL_RX");
+    expect(contentSource).toContain("NON_PRODUCT_NODE_RX");
+    expect(contentSource).toContain("if (!hasVitrine || !inVitrine) continue");
+    expect(contentSource).toContain("res = await pinProduct(alvo)");
+    expect(contentSource).not.toContain("clickAttempt < 2");
+    expect(contentSource).not.toContain("unpinCurrentProduct");
+    expect(contentSource).not.toContain("findCurrentlyPinned");
+    expect(contentSource).not.toContain("Produto desfixado e fixado novamente");
   });
 
   it("controla o som do vídeo pelo painel sem cair no abaixamento manual", () => {

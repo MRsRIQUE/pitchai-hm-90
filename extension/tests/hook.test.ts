@@ -122,4 +122,48 @@ describe("hook de scraping de rede", () => {
 
     expect(events.find((event) => event.kind === "products")).toBeUndefined();
   });
+
+  it("não transforma cupom, campanha ou catálogo em produto", async () => {
+    const { fetchPayload } = createHookHarness();
+    const events = await fetchPayload({
+      blocks: [
+        {
+          coupon_id: "coupon-123456",
+          title: "Cupom do vendedor RICK5",
+          format_price: "R$ 5,00",
+          cover: "https://img/coupon",
+        },
+        {
+          promotion_id: "promotion-123456",
+          product_id: "referenced-product-123456",
+          title: "Benefício especial da loja",
+          format_price: "R$ 10,00",
+          cover: "https://img/promotion",
+        },
+        {
+          id: "catalog-123456",
+          title: "Catálogo Todos",
+          format_price: "R$ 0,00",
+          cover: "https://img/catalog",
+        },
+      ],
+    });
+
+    expect(events.find((event) => event.kind === "products")).toBeUndefined();
+  });
+
+  it("mantém produto real mesmo quando a API inclui dados promocionais", async () => {
+    const { fetchPayload } = createHookHarness();
+    const events = await fetchPayload({
+      product_id: "product-123456",
+      title: "Kit Panelas Antiaderente 5 Peças",
+      format_price: "R$ 99,90",
+      cover: "https://img/product",
+      promotion_info: { discount: "10%" },
+    });
+
+    const products = events.find((event) => event.kind === "products")?.payload;
+    expect(products).toHaveLength(1);
+    expect(products?.[0].name).toBe("Kit Panelas Antiaderente 5 Peças");
+  });
 });

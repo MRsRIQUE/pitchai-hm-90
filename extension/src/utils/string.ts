@@ -65,6 +65,13 @@ const EMPTY_STATE_RX =
   /(ainda\s+n[ãa]o\s+h[áa]\s+produtos|produtos\s+adicionados\s+aparecer[ãa]o|apenas\s+para\s+espectadores)/i;
 
 /**
+ * Controles comerciais vizinhos da vitrine. São entidades com imagem, valor e
+ * até id próprio, mas não mercadorias que possam ser apresentadas na LIVE.
+ */
+const NON_PRODUCT_LABEL_RX =
+  /^(?:cup(?:om|ons)\b|promo(?:ç(?:ão|ões)|cao|coes)\b|oferta\s+rel[âa]mpago\b|cat[áa]logo(?:\s+(?:todos?|de\s+produtos?))?\b|todos?\s+(?:os\s+)?produtos?\b|recompensas?\b|cartaz(?:es)?(?:\s+de\s+cupom)?\b|descontos?\b|(?:r\$\s*)?\d+(?:[.,]\d+)?\s*(?:%|reais?)?\s*(?:off|de\s+desconto)\b)/i;
+
+/**
  * Verifica se um nome de produto é inválido (ex: "Gerenciador de Live", "Sair", etc.)
  */
 export function isBadProductName(name: string | null | undefined): boolean {
@@ -81,6 +88,7 @@ export function isBadProductName(name: string | null | undefined): boolean {
   if (cleaned.length > MAX_PRODUCT_NAME_LEN) return true;
   if ((cleaned.match(GLUED_WORDS_RX) || []).length > MAX_GLUED_WORDS) return true;
   if (EMPTY_STATE_RX.test(cleaned)) return true;
+  if (NON_PRODUCT_LABEL_RX.test(cleaned)) return true;
 
   // Regex para nomes de navegação/chrome do TikTok
   const BAD_NAMES = [

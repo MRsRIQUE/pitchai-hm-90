@@ -83,6 +83,22 @@ describe("filtro de nome de produto da vitrine", () => {
       expect(isBadProductName(nome), nome).toBe(true);
     }
   });
+
+  it("rejeita cupons, promoções e controles de catálogo", () => {
+    for (const nome of [
+      "Cupom do vendedor RICK5 5% de desconto",
+      "Promoção da loja",
+      "Oferta relâmpago",
+      "Catálogo Todos",
+      "Todos os produtos",
+      "Recompensas",
+      "Cartaz de cupom",
+      "Desconto de R$ 20",
+      "15% OFF",
+    ]) {
+      expect(isBadProductName(nome), nome).toBe(true);
+    }
+  });
 });
 
 /**
@@ -138,6 +154,20 @@ describe("filtro de nome no content.js distribuído", () => {
   it("rejeita as frases de estado vazio da vitrine", () => {
     expect(isBadProductNameDistribuido("Ainda não há produtos")).toBe(true);
     expect(isBadProductNameDistribuido("Os produtos adicionados aparecerão aqui")).toBe(true);
+  });
+
+  it("rejeita entidades comerciais que ficam ao lado dos produtos", () => {
+    for (const nome of [
+      "Cupom do vendedor RICK5",
+      "Promoções",
+      "Oferta relâmpago",
+      "Catálogo Todos",
+      "Todos os produtos",
+      "Cartaz de cupom",
+      "10% OFF",
+    ]) {
+      expect(isBadProductNameDistribuido(nome), nome).toBe(true);
+    }
   });
 });
 
@@ -217,10 +247,95 @@ describe("cronômetro de oferta colado no nome (content.js distribuído)", () =>
     expect(cfg.produtos[0].active).toBe(true);
   });
 
+  it("remove do catálogo salvo as entidades comerciais antigas", () => {
+    const cfg = {
+      produtos: [
+        { id: "coupon", name: "Cupom do vendedor RICK5", fromVitrine: true, active: true },
+        { id: "catalog", name: "Catálogo Todos", fromVitrine: true, active: false },
+        {
+          id: "product",
+          name: "Kit Panelas Antiaderente 5 Peças",
+          price: "R$ 99,90",
+          fromVitrine: true,
+          active: false,
+        },
+      ],
+    };
+
+    expect(distribuido.cleanupProducts(cfg)).toBe(true);
+    expect(cfg.produtos).toHaveLength(1);
+    expect(cfg.produtos[0].name).toBe("Kit Panelas Antiaderente 5 Peças");
+    expect(cfg.produtos[0].active).toBe(true);
+  });
+
   it("dá o mesmo resultado que a versão de src/ — as duas não podem divergir", () => {
     for (const texto of [NOME_COM_CRONOMETRO, "Kit Determina em Pó 500g", ...NOMES_LEGITIMOS]) {
       expect(distribuido.stripProductMeta(texto), texto).toBe(stripProductMeta(texto));
     }
+  });
+});
+
+describe("identidade segura do produto para fixação", () => {
+  const pinNamesMatch = carregarDoContentJs(
+    "const BADGE_RX =",
+    "function pinNamesMatch(a, b) {",
+    "pinNamesMatch",
+  ) as (a: unknown, b: unknown) => boolean;
+
+  it("aceita o mesmo título com diferenças de acento e caixa", () => {
+    expect(
+      pinNamesMatch("Kit Panelas Antiaderente 5 Peças", "KIT PANELAS antiaderente 5 pecas"),
+    ).toBe(true);
+  });
+
+  it("aceita somente truncamento longo que esteja explícito no DOM", () => {
+    expect(
+      pinNamesMatch(
+        "Basike Teclado Mecânico Gamer Sem Fio…",
+        "Basike Teclado Mecânico Gamer Sem Fio 99 Teclas RGB Hot Swap",
+      ),
+    ).toBe(true);
+  });
+
+  it("não confunde produtos parecidos nem texto extra da vitrine com título", () => {
+    expect(
+      pinNamesMatch("Kit Maquiagem Profissional Rosa", "Kit Maquiagem Profissional Azul"),
+    ).toBe(false);
+    expect(
+      pinNamesMatch(
+        "Kit Panelas Antiaderente 5 Peças Fixar Em estoque 12",
+        "Kit Panelas Antiaderente 5 Peças",
+      ),
+    ).toBe(false);
+  });
+});
+
+describe("classificação estrutural da vitrine", () => {
+  const isNonProductContainer = carregarDoContentJs(
+    "const BADGE_RX =",
+    "function isNonProductContainer(card) {",
+    "isNonProductContainer",
+  ) as (card: Record<string, unknown>) => boolean;
+
+  const node = (className: string, textContent: string) => ({
+    className,
+    id: "",
+    textContent,
+    getAttribute: () => "",
+    querySelectorAll: () => [],
+    contains: () => false,
+  });
+
+  it("barra cards estruturais de cupom e cabeçalhos de catálogo", () => {
+    expect(isNonProductContainer(node("couponCard", "RICK5 5% OFF"))).toBe(true);
+    expect(isNonProductContainer(node("catalog-all", "Catálogo Todos"))).toBe(true);
+    expect(isNonProductContainer(node("toolbar", "Todos os produtos"))).toBe(true);
+  });
+
+  it("não barra um card comum pelo simples fato de ter preço", () => {
+    expect(
+      isNonProductContainer(node("product-card", "Kit Panelas Antiaderente 5 Peças R$ 99,90")),
+    ).toBe(false);
   });
 });
 
