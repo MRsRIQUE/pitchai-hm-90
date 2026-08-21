@@ -3,13 +3,25 @@ import { z } from "zod";
 import { corsHeaders } from "@/lib/live/cors.server";
 import { throttle } from "@/lib/live/rate-limit.server";
 import { verifyFirebaseIdToken } from "@/lib/firebase.server";
-import { addHotProduct, listHotProducts, removeHotProduct } from "@/lib/hot-products.server";
+import {
+  addHotProduct,
+  listHotProducts,
+  removeHotProductEverywhere,
+} from "@/lib/hot-products.server";
+import { isHotProductsMaster } from "@/lib/live/hot-products-master";
+
+const SafeIdSchema = z
+  .string()
+  .min(1)
+  .max(128)
+  .regex(/^[A-Za-z0-9._:-]+$/);
 
 const ProductSchema = z.object({
-  pid: z.string().min(1).max(64),
+  pid: SafeIdSchema,
   name: z.string().min(1).max(200),
   price: z.string().max(40).optional(),
   priceCents: z.number().int().nonnegative().optional(),
+  priceMaxCents: z.number().int().nonnegative().optional(),
   currency: z.string().max(8).optional(),
   imageUrl: z.string().max(1000).optional(),
   description: z.string().max(1000).optional(),
@@ -22,21 +34,15 @@ const BodySchema = z.discriminatedUnion("action", [
   }),
   z.object({
     action: z.literal("remove"),
-    pid: z.string().min(1).max(64),
+    pid: SafeIdSchema,
   }),
 ]);
 
-/** UIDs com poder de escrita, lidos de MASTER_UIDS (string separada por vírgula). */
-function masterUids(): Set<string> {
-  const raw = (process.env.MASTER_UIDS || "").trim();
-  return new Set(
-    raw
-      ? raw
-          .split(",")
-          .map((s) => s.trim())
-          .filter(Boolean)
-      : [],
-  );
+function isMaster(user: { uid: string; email?: string | null; emailVerified?: boolean }): boolean {
+  return isHotProductsMaster(user, {
+    masterUids: process.env.MASTER_UIDS,
+    masterEmails: process.env.MASTER_EMAILS,
+  });
 }
 
 async function authenticate(request: Request) {
@@ -73,7 +79,7 @@ export const Route = createFileRoute("/api/hot-products")({
 
         try {
           const items = await listHotProducts();
-          return json(200, { ok: true, isMaster: masterUids().has(auth.user.uid), items }, CORS);
+          return json(200, { ok: true, isMaster: isMaster(auth.user), items }, CORS);
         } catch (error) {
           console.error("[hot-products] GET falhou:", error);
           return json(500, { error: "internal" }, CORS);
@@ -93,7 +99,7 @@ export const Route = createFileRoute("/api/hot-products")({
         if (!parsed.success) return json(400, { error: "invalid_body" }, CORS);
         const body = parsed.data;
 
-        if (!masterUids().has(auth.user.uid)) {
+        if (!isMaster(auth.user)) {
           return json(403, { error: "forbidden" }, CORS);
         }
 
@@ -101,7 +107,7 @@ export const Route = createFileRoute("/api/hot-products")({
           if (body.action === "add") {
             await addHotProduct(auth.user.uid, body.product);
           } else {
-            await removeHotProduct(auth.user.uid, body.pid);
+            await removeHotProductEverywhere(body.pid);
           }
           return json(200, { ok: true }, CORS);
         } catch (error) {

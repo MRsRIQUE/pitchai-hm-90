@@ -82,6 +82,7 @@ export async function sendHotProduct(
           name: product.name,
           price: product.price || undefined,
           priceCents: product.priceCents ?? undefined,
+          priceMaxCents: product.priceMaxCents ?? undefined,
           currency: product.currency ?? undefined,
           imageUrl: product.imageUrl ?? undefined,
           description: product.description || undefined,

@@ -20,15 +20,15 @@ content.js (scrapeCatalog: rede + leitura DOM da vitrine)
 
 **Arquivos-chave:**
 
-| Peça | Local |
-|---|---|
-| Captura de rede (fetch/XHR/WS) | `extension/hook.js:9, 244-312, 75-131` |
-| Leitura DOM + merge rede | `extension/content.js:2021-2290, 4239-4320` |
-| Push da config | `extension/content.js:1060-1075` |
-| Rota push/pull | `src/routes/api/public/live/config.ts:8-70` |
-| Token e pull no site | `src/lib/live/sync.ts:55-92, 230-279` |
-| Auto-sync 20s | `src/hooks/live/useVitrineSync.ts:97-206, 235-265` |
-| Doc compartilhado | Firestore `live_configs_by_token/{sync_token}` |
+| Peça                           | Local                                              |
+| ------------------------------ | -------------------------------------------------- |
+| Captura de rede (fetch/XHR/WS) | `extension/hook.js:9, 244-312, 75-131`             |
+| Leitura DOM + merge rede       | `extension/content.js:2021-2290, 4239-4320`        |
+| Push da config                 | `extension/content.js:1060-1075`                   |
+| Rota push/pull                 | `src/routes/api/public/live/config.ts:8-70`        |
+| Token e pull no site           | `src/lib/live/sync.ts:55-92, 230-279`              |
+| Auto-sync 20s                  | `src/hooks/live/useVitrineSync.ts:97-206, 235-265` |
+| Doc compartilhado              | Firestore `live_configs_by_token/{sync_token}`     |
 
 ### Sobre a API oficial do TikTok
 
@@ -54,7 +54,7 @@ Requisitos de uma 2ª extensão segura: sem `hook.js` completo, sem `sessionStar
 A vitrine da conta mestre **já chega** ao painel dela pela extensão atual.
 
 1. **Site:** nova aba "Produtos Quentes" no dashboard (lê coleção Firestore `hot_products`).
-2. **Conta mestre:** flag `isMaster` no perfil; na aba Produtos dela, botão "Enviar para Quentes" por produto.
+2. **Conta mestre:** allowlist validada no backend; na aba Produtos dela, botão "Enviar para Quentes" por produto.
 3. **Sincronização:** `useVitrineSync` já traz a vitrine da mestre → ela promove produtos para `hot_products`.
 4. **Demais contas:** veem a lista quente (read-only) com botão "Adicionar ao meu catálogo" (copia para `config.produtos` delas).
 
@@ -67,8 +67,8 @@ A vitrine da conta mestre **já chega** ao painel dela pela extensão atual.
 
 ## Regras de segurança (Firestore)
 
-- `hot_products`: **só mestre escreve**, todas as contas leem.
-- Flag `isMaster` validada por custom claims do Firebase Auth (não editável pelo cliente).
+- `hot_products`: o backend escreve com service account; todas as contas autenticadas leem pela API.
+- O papel de mestre aceita `MASTER_UIDS`, `MASTER_EMAILS` verificados e a allowlist interna do produto.
 
 ## Riscos
 

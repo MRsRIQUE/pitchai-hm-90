@@ -5,6 +5,7 @@ export interface HotProductInput {
   name: string;
   price?: string | null;
   priceCents?: number | null;
+  priceMaxCents?: number | null;
   currency?: string | null;
   imageUrl?: string | null;
   description?: string | null;
@@ -29,19 +30,29 @@ export async function listHotProducts(): Promise<HotProduct[]> {
     orderBy: { field: "createdAt", direction: "DESCENDING" },
     limit: HOT_PRODUCTS_LIMIT,
   });
-  return docs.map((doc) => {
+  const seen = new Set<string>();
+  return docs.flatMap((doc) => {
     const data = doc.data;
-    return {
-      uid: String(data.uid ?? ""),
-      pid: String(data.pid ?? ""),
-      name: String(data.name ?? ""),
-      price: typeof data.price === "string" ? data.price : undefined,
-      priceCents: typeof data.priceCents === "number" ? data.priceCents : undefined,
-      currency: typeof data.currency === "string" ? data.currency : undefined,
-      imageUrl: typeof data.imageUrl === "string" ? data.imageUrl : undefined,
-      description: typeof data.description === "string" ? data.description : undefined,
-      createdAt: String(data.createdAt ?? ""),
-    };
+    const pid = String(data.pid ?? "");
+    // A mesma curadoria é compartilhada entre mestres. Como os documentos
+    // legados ainda incluem o UID no id, mantemos apenas a publicação mais
+    // recente de cada produto na resposta.
+    if (!pid || seen.has(pid)) return [];
+    seen.add(pid);
+    return [
+      {
+        uid: String(data.uid ?? ""),
+        pid,
+        name: String(data.name ?? ""),
+        price: typeof data.price === "string" ? data.price : undefined,
+        priceCents: typeof data.priceCents === "number" ? data.priceCents : undefined,
+        priceMaxCents: typeof data.priceMaxCents === "number" ? data.priceMaxCents : undefined,
+        currency: typeof data.currency === "string" ? data.currency : undefined,
+        imageUrl: typeof data.imageUrl === "string" ? data.imageUrl : undefined,
+        description: typeof data.description === "string" ? data.description : undefined,
+        createdAt: String(data.createdAt ?? ""),
+      },
+    ];
   });
 }
 
@@ -58,6 +69,7 @@ export async function addHotProduct(
       name: product.name,
       price: product.price ?? null,
       priceCents: product.priceCents ?? null,
+      priceMaxCents: product.priceMaxCents ?? null,
       currency: product.currency ?? null,
       imageUrl: product.imageUrl ?? null,
       description: product.description ?? null,
@@ -73,4 +85,13 @@ export async function removeHotProduct(
   options: { mode?: FirestoreAuthMode; userToken?: string } = {},
 ): Promise<void> {
   await fsDelete(`hot_products/${hotProductDocId(uid, pid)}`, { mode: "server", ...options });
+}
+
+/** Remove todas as publicações legadas do mesmo produto, independentemente da mestre. */
+export async function removeHotProductEverywhere(pid: string): Promise<void> {
+  const matches = await fsQuery("hot_products", {
+    mode: "server",
+    where: [{ field: "pid", op: "EQUAL", value: pid }],
+  });
+  await Promise.all(matches.map((doc) => fsDelete(doc.path, { mode: "server" })));
 }

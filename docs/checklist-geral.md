@@ -10,18 +10,18 @@
 
 ### Endpoints existentes
 
-| Rota | Auth | Função |
-|---|---|---|
-| `/api/hot-products` | Bearer Firebase + throttle | Produtos Quentes (escrita só `MASTER_UIDS`) |
-| `/api/account/ensure` | Bearer Firebase | Garante doc `users/{uid}` |
-| `/api/account/sync-token` | Bearer + assinatura | Token da extensão |
-| `/api/admin/check`, `/api/admin/courtesy` | Admin | Cortesias/comped_access |
-| `/api/checkout/start` | Bearer + throttle IP/uid | Checkout Stripe |
-| `/api/public/chat/reply` | Sync token + quota | IA do chat da live |
-| `/api/public/gemini/{generate,transcribe}` | Sync token | Gemini texto/áudio |
-| `/api/public/live/{config,mapping,session,verify}` | Sync token | Sync da extensão |
-| `/api/public/payments/webhook` | HMAC Stripe | Assinaturas + referrals |
-| `/api/public/pitch/bank`, `/api/public/tts/speak`, `/api/script/generate`, `/api/tts/preview` | Sync token | Pitches, voz, roteiros |
+| Rota                                                                                          | Auth                       | Função                                               |
+| --------------------------------------------------------------------------------------------- | -------------------------- | ---------------------------------------------------- |
+| `/api/hot-products`                                                                           | Bearer Firebase + throttle | Produtos Quentes (escrita só para mestre autorizado) |
+| `/api/account/ensure`                                                                         | Bearer Firebase            | Garante doc `users/{uid}`                            |
+| `/api/account/sync-token`                                                                     | Bearer + assinatura        | Token da extensão                                    |
+| `/api/admin/check`, `/api/admin/courtesy`                                                     | Admin                      | Cortesias/comped_access                              |
+| `/api/checkout/start`                                                                         | Bearer + throttle IP/uid   | Checkout Stripe                                      |
+| `/api/public/chat/reply`                                                                      | Sync token + quota         | IA do chat da live                                   |
+| `/api/public/gemini/{generate,transcribe}`                                                    | Sync token                 | Gemini texto/áudio                                   |
+| `/api/public/live/{config,mapping,session,verify}`                                            | Sync token                 | Sync da extensão                                     |
+| `/api/public/payments/webhook`                                                                | HMAC Stripe                | Assinaturas + referrals                              |
+| `/api/public/pitch/bank`, `/api/public/tts/speak`, `/api/script/generate`, `/api/tts/preview` | Sync token                 | Pitches, voz, roteiros                               |
 
 ### Pendências / riscos
 
@@ -32,10 +32,10 @@
 - ☐ Sem `throttle()` anti-brute-force em: `admin/*`, `account/ensure`, `script/generate`, `tts/preview`, `gemini/*`, `pitch/bank`.
 - ☐ `live/session.ts:157-170` — ações `start`/`event`/`end` sem try/catch (500 cru).
 - ☐ `admin/guard.ts:52` vaza `error.message` no 500.
-- ☐ Env vars ausentes do `.env.example`: `MASTER_UIDS`, `STRIPE_LIVE_API_KEY`, `STRIPE_SANDBOX_API_KEY`, `PAYMENTS_{SANDBOX,LIVE}_WEBHOOK_SECRET`, `GEMINI_TTS_MODEL`, `VITE_PAYMENTS_CLIENT_TOKEN`, `GCP_API_KEY`.
+- ☐ Env vars de integrações ainda precisam ser conferidas no deploy; `MASTER_UIDS` e `MASTER_EMAILS` já estão documentadas no `.env.example`.
 - ☐ CORS `cors.server.ts:20-22`: sem `origin` libera `*`; localhost HTTP aceito em produção.
 - ☐ HMAC bypass quando header ausente (`api-auth.server.ts:92`) — garantir `PITCHAI_SKIP_HMAC` fora de produção.
-- ☐ `MASTER_UIDS` só em Production (dev/preview ficam sem mestre — aceitável, mas documentar).
+- ☐ Conferir `MASTER_UIDS` e `MASTER_EMAILS` adicionais em Production e Preview.
 - ☐ `apiVersion` Stripe pinada `2026-03-25.dahlia` — confirmar suporte do SDK.
 
 ---
@@ -44,14 +44,14 @@
 
 ### Telas existentes
 
-| Tela | Status |
-|---|---|
-| Landing `/` | ✅ |
-| Login/Signup/Reset `/entrar` | ✅ |
-| Dashboard `/app` — 10 seções (inicio, live, desempenho, produtos, quentes, ia, voz, proteção, automações, conta) | ✅ |
-| Planos `/planos`, Comprar `/comprar` | ✅ |
-| Pós-checkout `/checkout/return` | ⚠️ parcial |
-| Quentes, Indique, Lives, Download, Termos, Admin | ✅ |
+| Tela                                                                                                             | Status     |
+| ---------------------------------------------------------------------------------------------------------------- | ---------- |
+| Landing `/`                                                                                                      | ✅         |
+| Login/Signup/Reset `/entrar`                                                                                     | ✅         |
+| Dashboard `/app` — 10 seções (inicio, live, desempenho, produtos, quentes, ia, voz, proteção, automações, conta) | ✅         |
+| Planos `/planos`, Comprar `/comprar`                                                                             | ✅         |
+| Pós-checkout `/checkout/return`                                                                                  | ⚠️ parcial |
+| Quentes, Indique, Lives, Download, Termos, Admin                                                                 | ✅         |
 
 ### Pendências / faltas
 
