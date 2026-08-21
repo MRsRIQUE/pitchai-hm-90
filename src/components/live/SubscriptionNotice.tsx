@@ -34,7 +34,10 @@ export function SubscriptionNotice() {
 
   if (tokenRemainingPct <= 10) {
     warnings.push(
-      <div key="tokens" className={`flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between ${AMBER.wrap}`}>
+      <div
+        key="tokens"
+        className={`flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between ${AMBER.wrap}`}
+      >
         <div className="flex items-start gap-3">
           <Sparkles className={AMBER.icon} />
           <p className={AMBER.text}>
@@ -56,7 +59,10 @@ export function SubscriptionNotice() {
     const tone = critical ? RED : AMBER;
     const label = daysUntilExpiry === 1 ? "1 dia" : `${daysUntilExpiry} dias`;
     warnings.push(
-      <div key="expiry" className={`flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between ${tone.wrap}`}>
+      <div
+        key="expiry"
+        className={`flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between ${tone.wrap}`}
+      >
         <div className="flex items-start gap-3">
           <AlertTriangle className={tone.icon} />
           <p className={tone.text}>

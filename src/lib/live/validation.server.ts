@@ -54,10 +54,17 @@ export function validateContentForPublish(rawText: unknown): {
  */
 export function sanitizeReplyForPublish(text: unknown): string {
   if (typeof text !== "string") return "";
-  return text
-    .replace(/[\p{Extended_Pictographic}\u200D\uFE0F\p{Emoji_Modifier}]/gu, "")
-    .replace(/\*/g, "")
-    .replace(/\r\n/g, "\n")
-    .replace(/\n{2,}/g, "\n")
-    .trim();
+  return (
+    text
+      // A regra `no-misleading-character-class` avisa que emoji composto
+      // (bandeira, familia, tom de pele) sai caractere a caractere em vez de
+      // inteiro. Aqui isso e o comportamento desejado: o que nao pode e sobrar
+      // pedaco de emoji no texto que a IA publica no chat da live.
+      // eslint-disable-next-line no-misleading-character-class
+      .replace(/[\p{Extended_Pictographic}\u200D\uFE0F\p{Emoji_Modifier}]/gu, "")
+      .replace(/\*/g, "")
+      .replace(/\r\n/g, "\n")
+      .replace(/\n{2,}/g, "\n")
+      .trim()
+  );
 }

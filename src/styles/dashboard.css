@@ -4,7 +4,8 @@
    sidebar fixa escura + área de trabalho clara.
    Tudo escopado sob `.dash-shell` para não vazar para o resto do app.
    ============================================================ */
-.dash-shell {
+.dash-shell,
+.app-tokens {
   --app-bg: #fbfbfa;
   --app-surface: #ffffff;
   --app-surface-2: #f4f4f2;
@@ -40,12 +41,16 @@
   --app-r-lg: 16px;
   --app-shadow-sm: 0 1px 2px rgba(12, 12, 13, 0.05);
   --app-shadow-md: 0 4px 16px -4px rgba(12, 12, 13, 0.08), 0 1px 3px rgba(12, 12, 13, 0.04);
+}
 
+/* Só a casca pinta o fundo quadriculado e ocupa a tela. `.app-tokens` leva a
+   paleta sozinha, para quem renderiza em portal: os modais do Radix nascem
+   fora da árvore do painel e perderiam todas as variáveis `--app-*`. */
+.dash-shell {
   min-height: 100dvh;
   background:
     linear-gradient(var(--app-grid-line) 1px, transparent 1px),
-    linear-gradient(90deg, var(--app-grid-line) 1px, transparent 1px),
-    var(--app-bg);
+    linear-gradient(90deg, var(--app-grid-line) 1px, transparent 1px), var(--app-bg);
   background-size:
     40px 40px,
     40px 40px,
@@ -63,7 +68,8 @@
   -webkit-font-smoothing: antialiased;
 }
 
-html.dark .dash-shell {
+html.dark .dash-shell,
+html.dark .app-tokens {
   --app-bg: #09070f;
   --app-surface: #12101c;
   --app-surface-2: #191626;
@@ -100,7 +106,8 @@ html.dark .dash-shell {
    As cores de marca e de estado (primary, secondary, success, destructive)
    ficam de fora de propósito: são decisão de identidade, não de superfície.
    ------------------------------------------------------------ */
-.dash-shell {
+.dash-shell,
+.app-tokens {
   --background: var(--app-bg);
   --foreground: var(--app-ink);
   --card: var(--app-glass);
@@ -143,10 +150,10 @@ html.dark .dash-shell {
 .app-main {
   flex: 1;
   min-width: 0;
-  padding: 28px 32px 72px;
+  padding: 32px 36px 80px;
 }
 .app-main-wrap {
-  max-width: 1080px;
+  max-width: 1280px;
   margin: 0 auto;
 }
 
@@ -429,7 +436,7 @@ html.dark .dash-shell {
   backdrop-filter: blur(14px);
   border: 1px solid var(--app-line);
   border-radius: var(--app-r-lg);
-  padding: 20px;
+  padding: 26px;
   box-shadow: var(--app-shadow-sm);
 }
 .app-card--flat {
@@ -440,25 +447,25 @@ html.dark .dash-shell {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
-  gap: 14px;
-  margin-bottom: 14px;
+  gap: 16px;
+  margin-bottom: 18px;
 }
 .app-card-title {
   margin: 0;
-  font-size: 15.5px;
+  font-size: 16.5px;
   font-weight: 700;
   letter-spacing: -0.018em;
 }
 .app-card-desc {
-  margin: 3px 0 0;
-  font-size: 13.5px;
+  margin: 4px 0 0;
+  font-size: 14px;
   color: var(--app-ink-3);
   line-height: 1.5;
 }
 
 .app-grid {
   display: grid;
-  gap: 16px;
+  gap: 20px;
 }
 .app-grid--2 {
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -478,7 +485,7 @@ html.dark .dash-shell {
   background: var(--app-glass-2);
   border: 1px solid var(--app-line);
   border-radius: var(--app-r-lg);
-  padding: 16px 18px;
+  padding: 20px 22px;
 }
 .app-stat-label {
   display: flex;
@@ -495,15 +502,23 @@ html.dark .dash-shell {
   height: 14px;
 }
 .app-stat-value {
-  margin-top: 6px;
-  font-size: 26px;
+  margin-top: 8px;
+  font-size: 30px;
   font-weight: 700;
   letter-spacing: -0.03em;
   line-height: 1.1;
+  /* rede contra o valor que vaza do cartão: número cabe sempre, palavra longa
+     não. Sem isto "Respondendo" em 30px atravessava a borda no notebook. */
+  overflow-wrap: anywhere;
+}
+/* valor que é palavra, não número: o corpo de 30px só serve para dígitos */
+.app-stat-value[data-size="sm"] {
+  font-size: 21px;
+  letter-spacing: -0.022em;
 }
 .app-stat-hint {
-  margin-top: 3px;
-  font-size: 12.5px;
+  margin-top: 5px;
+  font-size: 13px;
   color: var(--app-ink-3);
 }
 /* o número em si ganha cor quando o próprio valor é o alerta — custo no
@@ -590,14 +605,14 @@ html.dark .dash-shell {
 .app-steps {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 10px;
 }
 .app-step {
   display: flex;
   align-items: flex-start;
-  gap: 12px;
+  gap: 13px;
   width: 100%;
-  padding: 13px 14px;
+  padding: 15px 16px;
   border-radius: var(--app-r-md);
   border: 1px solid var(--app-line);
   background: var(--app-surface);
@@ -669,7 +684,7 @@ html.dark .dash-shell {
    TÍTULOS DE SEÇÃO
    ------------------------------------------------------------ */
 .app-section {
-  margin-bottom: 28px;
+  margin-bottom: 32px;
 }
 .app-section:last-child {
   margin-bottom: 0;
@@ -688,6 +703,1122 @@ html.dark .dash-shell {
   letter-spacing: 0.06em;
   text-transform: uppercase;
   color: var(--app-ink-3);
+}
+
+/* ------------------------------------------------------------
+   PAINEL DE GESTÃO — INÍCIO
+   A tela de entrada não é uma lista de tarefas empilhadas: é um painel.
+   Estado da operação em cima, números logo abaixo, e então duas colunas —
+   à esquerda o que o vendedor mexe (produto e chaves), à direita o que ele
+   só acompanha (preparação). Tudo aqui é de uso geral: `app-hero`,
+   `app-cols`, `app-tile` e `app-switch-row` servem a qualquer seção.
+   ------------------------------------------------------------ */
+
+/* faixa de estado: uma frase sobre a operação e a ação óbvia do momento */
+.app-hero {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  padding: 24px 26px;
+  border-radius: var(--app-r-lg);
+  border: 1px solid var(--app-line);
+  background: var(--app-glass);
+  -webkit-backdrop-filter: blur(14px);
+  backdrop-filter: blur(14px);
+  box-shadow: var(--app-shadow-sm);
+}
+/* a cor entra pela borda esquerda e pelo ícone — o fundo continua neutro,
+   senão a faixa competiria com os cartões de número logo abaixo */
+.app-hero[data-tone="ok"] {
+  border-left: 3px solid var(--app-ok);
+}
+.app-hero[data-tone="warn"] {
+  border-left: 3px solid var(--app-warn);
+}
+.app-hero-icon {
+  flex: none;
+  width: 48px;
+  height: 48px;
+  display: grid;
+  place-items: center;
+  border-radius: 999px;
+  background: var(--app-surface-2);
+  color: var(--app-ink-2);
+}
+.app-hero[data-tone="ok"] .app-hero-icon {
+  background: var(--app-ok-bg);
+  color: var(--app-ok);
+}
+.app-hero[data-tone="warn"] .app-hero-icon {
+  background: var(--app-warn-bg);
+  color: var(--app-warn);
+}
+.app-hero-icon svg {
+  width: 22px;
+  height: 22px;
+}
+.app-hero-body {
+  flex: 1;
+  min-width: 0;
+}
+.app-hero-title {
+  margin: 0;
+  font-size: 17.5px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+.app-hero-desc {
+  margin: 5px 0 0;
+  font-size: 14px;
+  color: var(--app-ink-3);
+  line-height: 1.45;
+}
+.app-hero-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: none;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+/* duas colunas: operação à esquerda, acompanhamento à direita */
+.app-cols {
+  display: grid;
+  grid-template-columns: minmax(0, 1.55fr) minmax(0, 1fr);
+  gap: 20px;
+  align-items: start;
+}
+.app-col {
+  display: grid;
+  gap: 20px;
+  min-width: 0;
+}
+
+/* item em destaque dentro de um card (o produto que a IA está vendendo) */
+.app-feature {
+  display: flex;
+  align-items: flex-start;
+  gap: 16px;
+  padding: 18px;
+  border-radius: var(--app-r-md);
+  border: 1px solid var(--app-accent);
+  background: var(--app-accent-bg);
+}
+.app-feature-body {
+  flex: 1;
+  min-width: 0;
+}
+.app-feature-name {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 700;
+  letter-spacing: -0.015em;
+  overflow-wrap: anywhere;
+}
+.app-feature-desc {
+  margin: 6px 0 0;
+  font-size: 13.5px;
+  color: var(--app-ink-3);
+  line-height: 1.45;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.app-feature-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 12px;
+  flex-wrap: wrap;
+}
+
+/* mosaico: cartões pequenos lado a lado, no lugar da lista de uma coluna */
+.app-tiles {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 12px;
+}
+.app-tile {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  color: inherit;
+  padding: 13px;
+  border-radius: var(--app-r-md);
+  border: 1px solid var(--app-line);
+  background: var(--app-surface);
+  text-align: left;
+  cursor: pointer;
+  min-width: 0;
+  transition:
+    border-color 0.16s ease,
+    background 0.16s ease;
+}
+.app-tile:hover {
+  border-color: color-mix(in srgb, var(--app-accent) 35%, var(--app-line));
+}
+.app-tile[data-state="active"] {
+  border-color: var(--app-accent);
+  background: var(--app-accent-bg);
+}
+.app-tile-body {
+  min-width: 0;
+  flex: 1;
+}
+.app-tile-name {
+  font-size: 13.5px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  /* nome de produto do TikTok é longo: duas linhas e corta, senão o mosaico
+     vira uma coluna de alturas diferentes */
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.app-tile-price {
+  display: block;
+  margin-top: 4px;
+  font-size: 12.5px;
+  color: var(--app-ink-3);
+  font-variant-numeric: tabular-nums;
+}
+
+/* chaves liga/desliga: uma lista dentro de um card só, não quatro cards */
+.app-switches {
+  display: flex;
+  flex-direction: column;
+}
+.app-switch-row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 16px 0;
+  border-top: 1px solid var(--app-line-2);
+}
+.app-switch-row:first-child {
+  border-top: none;
+  padding-top: 0;
+}
+.app-switch-row:last-child {
+  padding-bottom: 0;
+}
+.app-switch-icon {
+  flex: none;
+  width: 34px;
+  height: 34px;
+  display: grid;
+  place-items: center;
+  border-radius: var(--app-r-sm);
+  background: var(--app-surface-2);
+  color: var(--app-ink-3);
+}
+.app-switch-row[data-on="true"] .app-switch-icon {
+  background: var(--app-accent-bg);
+  color: var(--app-accent-ink);
+}
+.app-switch-icon svg {
+  width: 16px;
+  height: 16px;
+}
+.app-switch-body {
+  flex: 1;
+  min-width: 0;
+}
+.app-switch-title {
+  display: block;
+  font-size: 14.5px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+.app-switch-desc {
+  display: block;
+  margin-top: 3px;
+  font-size: 13px;
+  color: var(--app-ink-3);
+  line-height: 1.4;
+}
+
+/* gráfico de vendas — SVG desenhado à mão em `VendasChart.tsx`.
+   Todas as cores saem dos tokens, então o desenho troca de tema junto com o
+   painel sem uma linha de JS. */
+.app-chart {
+  display: block;
+  width: 100%;
+  height: auto;
+  overflow: visible;
+}
+.app-chart-grid {
+  stroke: var(--app-line-2);
+  stroke-width: 1;
+}
+.app-chart-bar {
+  fill: var(--app-accent);
+  opacity: 0.3;
+}
+/* o melhor dia da semana ganha peso, como o pico rotulado do modelo */
+.app-chart-bar[data-best="true"] {
+  opacity: 0.6;
+}
+.app-chart-line {
+  fill: none;
+  stroke: var(--app-ok);
+  stroke-width: 3;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+  filter: drop-shadow(0 0 6px color-mix(in srgb, var(--app-ok) 55%, transparent));
+}
+.app-chart-dot {
+  fill: var(--app-ok);
+}
+.app-chart-label {
+  fill: var(--app-ink-3);
+  font-size: 14px;
+  font-weight: 600;
+}
+.app-chart-peak {
+  fill: var(--app-ink);
+  font-size: 14px;
+  font-weight: 800;
+}
+
+.app-chart-legend {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex: none;
+  flex-wrap: wrap;
+}
+.app-chart-legend span {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--app-ink-3);
+  white-space: nowrap;
+}
+.app-chart-mark {
+  width: 9px;
+  height: 9px;
+  border-radius: 999px;
+  background: var(--app-accent);
+}
+.app-chart-mark[data-serie="respostas"] {
+  background: var(--app-ok);
+}
+
+.app-chart-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px solid var(--app-line-2);
+  font-size: 13.5px;
+  color: var(--app-ink-3);
+}
+
+/* ranking de produtos: a linha inteira é o botão que troca o produto ativo */
+.app-rank {
+  display: flex;
+  flex-direction: column;
+}
+.app-rank-item {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  width: 100%;
+  padding: 14px 0;
+  border: none;
+  border-top: 1px solid var(--app-line-2);
+  background: none;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.app-rank-item:first-child {
+  border-top: none;
+  padding-top: 0;
+}
+.app-rank-item:disabled {
+  cursor: default;
+  opacity: 0.55;
+}
+.app-rank-item:not(:disabled):hover .app-rank-name {
+  color: var(--app-accent-ink);
+}
+.app-rank-pos {
+  flex: none;
+  width: 22px;
+  font-size: 13px;
+  font-weight: 800;
+  color: var(--app-ink-3);
+  font-variant-numeric: tabular-nums;
+}
+.app-rank-item[data-active="true"] .app-rank-pos {
+  color: var(--app-accent-ink);
+}
+.app-rank-ghost {
+  flex: none;
+  width: 38px;
+  height: 38px;
+  display: grid;
+  place-items: center;
+  border-radius: var(--app-r-sm);
+  border: 1px solid var(--app-line);
+  background: var(--app-surface-2);
+  color: var(--app-ink-3);
+}
+.app-rank-ghost svg {
+  width: 16px;
+  height: 16px;
+}
+.app-rank-body {
+  flex: 1;
+  min-width: 0;
+}
+.app-rank-name {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: -0.012em;
+  transition: color 0.16s ease;
+}
+/* o nome é a única parte elástica da linha: sem o corte, um título de vitrine
+   do TikTok empurraria o número de vendas para fora do cartão */
+.app-rank-name {
+  overflow: hidden;
+}
+.app-rank-name > .app-tag {
+  flex: none;
+}
+.app-rank-bar {
+  display: block;
+  height: 6px;
+  margin-top: 8px;
+  border-radius: 999px;
+  background: var(--app-surface-2);
+  overflow: hidden;
+}
+.app-rank-bar > span {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+  background: linear-gradient(90deg, #7c3aed, #a78bfa);
+}
+.app-rank-value {
+  flex: none;
+  text-align: right;
+  font-size: 17px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
+}
+.app-rank-value small {
+  display: block;
+  margin-top: 2px;
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: 0;
+  color: var(--app-ink-3);
+}
+
+/* linhas rótulo/valor: resumo de estado sem virar tabela */
+.app-metas {
+  display: flex;
+  flex-direction: column;
+}
+.app-meta-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 13px 0;
+  border-top: 1px solid var(--app-line-2);
+  font-size: 14px;
+}
+.app-meta-row:first-child {
+  border-top: none;
+  padding-top: 0;
+}
+.app-meta-label {
+  color: var(--app-ink-3);
+}
+.app-meta-value {
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+/* checklist de acompanhamento: mais enxuto que `.app-step`, cabe na coluna */
+.app-checks {
+  display: flex;
+  flex-direction: column;
+}
+.app-check {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 13px 0;
+  border: none;
+  border-top: 1px solid var(--app-line-2);
+  background: none;
+  text-align: left;
+  cursor: pointer;
+  color: inherit;
+}
+.app-check:first-of-type {
+  border-top: none;
+}
+.app-check:hover .app-check-title {
+  color: var(--app-accent-ink);
+}
+.app-check-mark {
+  flex: none;
+  width: 22px;
+  height: 22px;
+  display: grid;
+  place-items: center;
+  border-radius: 999px;
+  border: 1.5px solid var(--app-line);
+  color: transparent;
+}
+.app-check-mark svg {
+  width: 12px;
+  height: 12px;
+}
+.app-check[data-done="true"] .app-check-mark {
+  border-color: transparent;
+  background: var(--app-ok-bg);
+  color: var(--app-ok);
+}
+.app-check[data-current="true"] .app-check-mark {
+  border-color: var(--app-accent);
+  color: var(--app-accent-ink);
+}
+.app-check-title {
+  flex: 1;
+  min-width: 0;
+  font-size: 14.5px;
+  font-weight: 500;
+  letter-spacing: -0.01em;
+  transition: color 0.16s ease;
+}
+.app-check[data-done="true"] .app-check-title {
+  color: var(--app-ink-3);
+}
+.app-check[data-current="true"] .app-check-title {
+  font-weight: 700;
+}
+
+/* ------------------------------------------------------------
+   CATÁLOGO DE PRODUTOS
+   Cards visuais no lugar da antiga lista/editor em duas colunas. O editor
+   ocupa a largura inteira para nomes grandes nunca empurrarem o painel.
+   ------------------------------------------------------------ */
+.app-products-panel {
+  overflow: hidden;
+}
+.app-products-head,
+.app-products-title-row,
+.app-products-actions,
+.app-product-editor-head,
+.app-product-editor-summary,
+.app-product-editor-actions {
+  display: flex;
+  align-items: center;
+}
+.app-products-head {
+  justify-content: space-between;
+  gap: 18px;
+}
+.app-products-title-row {
+  gap: 8px;
+}
+.app-products-actions {
+  justify-content: flex-end;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.app-product-featured {
+  display: grid;
+  grid-template-columns: 92px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 16px;
+  margin-top: 18px;
+  padding: 12px;
+  border: 1px solid color-mix(in srgb, var(--app-accent) 48%, var(--app-line));
+  border-radius: var(--app-r-lg);
+  background: linear-gradient(115deg, var(--app-accent-bg), var(--app-glass-2));
+}
+.app-product-featured-image {
+  width: 92px;
+  height: 76px;
+  overflow: hidden;
+  border-radius: var(--app-r-md);
+}
+.app-product-featured-image > * {
+  border-radius: inherit !important;
+}
+.app-product-featured-body {
+  min-width: 0;
+}
+.app-product-kicker {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--app-accent-ink);
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.055em;
+  text-transform: uppercase;
+}
+.app-product-kicker svg {
+  width: 13px;
+  height: 13px;
+  fill: currentColor;
+}
+.app-product-featured h4 {
+  margin: 3px 0 0;
+  font-size: 15px;
+  line-height: 1.35;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.app-product-featured-body p {
+  margin: 2px 0 0;
+  color: var(--app-ink-3);
+  font-size: 12.5px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.app-product-featured-side {
+  display: grid;
+  justify-items: end;
+  gap: 7px;
+  white-space: nowrap;
+}
+.app-product-featured-side strong {
+  color: var(--app-accent-ink);
+  font-size: 15px;
+  font-variant-numeric: tabular-nums;
+}
+.app-product-featured-actions {
+  display: flex;
+  gap: 6px;
+}
+.app-product-no-featured {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  margin-top: 18px;
+  padding: 11px 13px;
+  color: var(--app-ink-3);
+  border: 1px dashed var(--app-line);
+  border-radius: var(--app-r-md);
+  font-size: 13px;
+}
+.app-product-no-featured svg {
+  width: 16px;
+  height: 16px;
+}
+.app-products-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(210px, 100%), 1fr));
+  gap: 12px;
+  margin-top: 18px;
+}
+.app-product-card {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  overflow: hidden;
+  border: 1px solid var(--app-line);
+  border-radius: var(--app-r-lg);
+  background: var(--app-surface);
+  box-shadow: var(--app-shadow-sm);
+  transition:
+    border-color 0.16s ease,
+    transform 0.16s ease,
+    box-shadow 0.16s ease;
+}
+.app-product-card:hover {
+  transform: translateY(-1px);
+  border-color: color-mix(in srgb, var(--app-accent) 32%, var(--app-line));
+  box-shadow: var(--app-shadow-md);
+}
+.app-product-card[data-active="true"] {
+  border-color: color-mix(in srgb, var(--app-accent) 65%, var(--app-line));
+}
+.app-product-card[data-selected="true"] {
+  box-shadow:
+    0 0 0 2px var(--app-accent-bg),
+    var(--app-shadow-md);
+}
+.app-product-card-media {
+  position: relative;
+  display: block;
+  width: 100%;
+  height: 142px;
+  padding: 0;
+  overflow: hidden;
+  border: 0;
+  border-bottom: 1px solid var(--app-line-2);
+  background: var(--app-surface-2);
+  cursor: pointer;
+}
+.app-product-card-media:focus-visible {
+  z-index: 1;
+  outline: 2px solid var(--app-accent);
+  outline-offset: -2px;
+}
+.app-product-card-media > * {
+  border: 0 !important;
+  border-radius: 0 !important;
+}
+.app-product-card-badge {
+  position: absolute;
+  top: 9px;
+  left: 9px;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 8px;
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  border-radius: 999px;
+  color: #fff;
+  background: rgba(76, 29, 149, 0.88);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.18);
+  font-size: 10.5px;
+  font-weight: 800;
+  letter-spacing: 0.035em;
+  text-transform: uppercase;
+}
+.app-product-card-badge svg {
+  width: 11px;
+  height: 11px;
+  fill: currentColor;
+}
+.app-product-card-body {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  flex-direction: column;
+  padding: 12px 12px 10px;
+}
+.app-product-card-body h4 {
+  display: -webkit-box;
+  min-height: 38px;
+  margin: 0;
+  overflow: hidden;
+  font-size: 13.5px;
+  font-weight: 700;
+  line-height: 1.4;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+.app-product-card-body strong {
+  margin-top: 5px;
+  color: var(--app-accent-ink);
+  font-size: 14px;
+  font-variant-numeric: tabular-nums;
+}
+.app-product-card-body p {
+  display: -webkit-box;
+  margin: 4px 0 0;
+  overflow: hidden;
+  color: var(--app-ink-3);
+  font-size: 11.5px;
+  line-height: 1.4;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+.app-product-card-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 10px 12px 12px;
+  border-top: 1px solid var(--app-line-2);
+}
+.app-product-card-actions .app-btn {
+  min-width: 0;
+  padding-inline: 9px;
+}
+.app-product-main-action {
+  flex: 1;
+  color: var(--app-accent-ink);
+  border-color: color-mix(in srgb, var(--app-accent) 35%, var(--app-line));
+}
+.app-product-main-action svg {
+  fill: currentColor;
+}
+.app-products-empty {
+  display: grid;
+  justify-items: center;
+  margin-top: 18px;
+  padding: 38px 20px;
+  border: 1px dashed var(--app-line);
+  border-radius: var(--app-r-lg);
+  text-align: center;
+}
+.app-products-empty > span {
+  display: grid;
+  width: 48px;
+  height: 48px;
+  place-items: center;
+  border-radius: 999px;
+  color: var(--app-accent-ink);
+  background: var(--app-accent-bg);
+}
+.app-products-empty svg {
+  width: 21px;
+  height: 21px;
+}
+.app-products-empty h4 {
+  margin: 12px 0 0;
+  font-size: 15px;
+}
+.app-products-empty p {
+  max-width: 410px;
+  margin: 4px 0 14px;
+  color: var(--app-ink-3);
+  font-size: 13px;
+}
+.app-product-editor {
+  margin-top: 18px;
+  padding: 16px;
+  border: 1px solid var(--app-line);
+  border-radius: var(--app-r-lg);
+  background: var(--app-glass-2);
+}
+.app-product-editor-head {
+  justify-content: space-between;
+  gap: 16px;
+  padding-bottom: 14px;
+  border-bottom: 1px solid var(--app-line-2);
+}
+.app-product-editor-summary {
+  min-width: 0;
+  gap: 12px;
+}
+.app-product-editor-summary > div {
+  min-width: 0;
+}
+.app-product-editor-summary span {
+  color: var(--app-accent-ink);
+  font-size: 10.5px;
+  font-weight: 800;
+  letter-spacing: 0.055em;
+  text-transform: uppercase;
+}
+.app-product-editor-summary h4 {
+  max-width: 480px;
+  margin: 1px 0 0;
+  overflow: hidden;
+  font-size: 14px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.app-product-editor-summary p {
+  margin: 1px 0 0;
+  color: var(--app-ink-3);
+  font-size: 12.5px;
+}
+.app-product-editor-actions {
+  flex: none;
+  gap: 9px;
+}
+.app-product-editor-actions label {
+  color: var(--app-ink-3);
+  font-size: 12px;
+  font-weight: 600;
+}
+.app-product-editor-fields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 13px;
+  margin-top: 14px;
+}
+.app-product-editor-wide {
+  grid-column: 1 / -1;
+}
+.app-product-editor-wide label {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+.app-product-editor-wide label svg {
+  width: 13px;
+  height: 13px;
+}
+
+/* página interna aberta a partir de um card do catálogo */
+.app-product-detail-page {
+  width: 100%;
+  min-width: 0;
+}
+.app-product-detail-topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 16px;
+}
+.app-product-detail-back {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 4px 0;
+  border: 0;
+  color: var(--app-ink-3);
+  background: none;
+  font-size: 13.5px;
+  font-weight: 650;
+  cursor: pointer;
+  transition: color 0.16s ease;
+}
+.app-product-detail-back:hover {
+  color: var(--app-accent-ink);
+}
+.app-product-detail-back:focus-visible {
+  border-radius: 4px;
+  outline: 2px solid var(--app-accent);
+  outline-offset: 4px;
+}
+.app-product-detail-back svg {
+  width: 17px;
+  height: 17px;
+}
+.app-product-detail-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.app-product-detail-card {
+  padding: 22px;
+}
+.app-product-detail-layout {
+  display: grid;
+  grid-template-columns: minmax(260px, 0.9fr) minmax(0, 1.1fr);
+  align-items: stretch;
+  gap: 28px;
+}
+.app-product-detail-media {
+  position: relative;
+  min-height: 360px;
+  overflow: hidden;
+  border: 1px solid var(--app-line);
+  border-radius: var(--app-r-lg);
+  background:
+    radial-gradient(circle at 50% 28%, var(--app-accent-bg), transparent 58%), var(--app-surface-2);
+}
+.app-product-detail-media > *:first-child {
+  border: 0 !important;
+  border-radius: 0 !important;
+}
+.app-product-detail-content {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  justify-content: center;
+  padding: 8px 4px;
+}
+.app-product-detail-eyebrow {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--app-accent-ink);
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+.app-product-detail-eyebrow svg {
+  width: 14px;
+  height: 14px;
+}
+.app-product-detail-content h2 {
+  margin: 9px 0 0;
+  overflow-wrap: anywhere;
+  font-size: clamp(22px, 3vw, 32px);
+  font-weight: 800;
+  letter-spacing: -0.035em;
+  line-height: 1.16;
+}
+.app-product-detail-price {
+  margin-top: 13px;
+  color: var(--app-accent-ink);
+  font-size: clamp(22px, 2.4vw, 28px);
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.025em;
+}
+.app-product-detail-description {
+  margin-top: 22px;
+  padding-top: 18px;
+  border-top: 1px solid var(--app-line-2);
+}
+.app-product-detail-description > span {
+  color: var(--app-ink-3);
+  font-size: 11.5px;
+  font-weight: 750;
+  letter-spacing: 0.045em;
+  text-transform: uppercase;
+}
+.app-product-detail-description p {
+  margin: 7px 0 0;
+  color: var(--app-ink-2);
+  font-size: 14px;
+  line-height: 1.65;
+  white-space: pre-wrap;
+}
+.app-product-detail-metas {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  margin-top: 20px;
+}
+.app-product-detail-metas > div {
+  min-width: 0;
+  padding: 11px 12px;
+  border: 1px solid var(--app-line);
+  border-radius: var(--app-r-md);
+  background: var(--app-glass-2);
+}
+.app-product-detail-metas span,
+.app-product-detail-metas strong {
+  display: block;
+}
+.app-product-detail-metas span {
+  color: var(--app-ink-3);
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.app-product-detail-metas strong {
+  margin-top: 2px;
+  overflow: hidden;
+  font-size: 12.5px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.app-product-detail-ai-note {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  margin-top: 14px;
+  padding: 11px 12px;
+  border-radius: var(--app-r-md);
+  color: var(--app-ink-3);
+  background: var(--app-accent-bg);
+}
+.app-product-detail-ai-note > svg {
+  width: 16px;
+  height: 16px;
+  margin-top: 2px;
+  flex: none;
+  color: var(--app-accent-ink);
+}
+.app-product-detail-ai-note p {
+  margin: 0;
+  font-size: 12.5px;
+  line-height: 1.45;
+}
+.app-product-detail-ai-note strong {
+  display: block;
+  color: var(--app-ink-2);
+}
+.app-product-detail-editor {
+  margin-top: 24px;
+}
+
+@media (max-width: 720px) {
+  .app-products-head,
+  .app-product-editor-head {
+    align-items: stretch;
+    flex-direction: column;
+  }
+  .app-products-actions {
+    justify-content: stretch;
+  }
+  .app-products-actions .app-btn {
+    flex: 1;
+  }
+  .app-product-featured {
+    grid-template-columns: 72px minmax(0, 1fr);
+  }
+  .app-product-featured-image {
+    width: 72px;
+    height: 72px;
+  }
+  .app-product-featured-side {
+    grid-column: 1 / -1;
+    grid-template-columns: 1fr auto;
+    align-items: center;
+    justify-items: start;
+  }
+  .app-product-editor-actions {
+    flex-wrap: wrap;
+  }
+  .app-product-detail-topbar {
+    align-items: stretch;
+    flex-direction: column;
+  }
+  .app-product-detail-actions {
+    justify-content: flex-start;
+  }
+  .app-product-detail-layout {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 20px;
+  }
+  .app-product-detail-media {
+    min-height: 0;
+    aspect-ratio: 4 / 3;
+  }
+  .app-product-detail-content {
+    padding: 0;
+  }
+}
+
+@media (max-width: 520px) {
+  .app-products-actions .app-btn {
+    flex-basis: 100%;
+  }
+  .app-products-grid,
+  .app-product-editor-fields {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .app-product-editor-wide {
+    grid-column: auto;
+  }
+  .app-product-card-media {
+    height: 176px;
+  }
+  .app-product-detail-card {
+    padding: 14px;
+  }
+  .app-product-detail-actions .app-btn {
+    flex: 1;
+  }
+  .app-product-detail-actions .app-tag {
+    justify-content: center;
+    width: 100%;
+  }
+  .app-product-detail-metas {
+    grid-template-columns: minmax(0, 1fr);
+  }
 }
 
 /* ------------------------------------------------------------
@@ -988,6 +2119,299 @@ html.dark .dash-shell {
 }
 
 /* ------------------------------------------------------------
+   MODAL DO PAINEL
+   O Radix monta o conteúdo em portal, fora da `.dash-shell` — por isso o
+   `.app-tokens` acompanha a classe: sem ele o modal perde a paleta e cai
+   no tema cru do shadcn.
+   ------------------------------------------------------------ */
+.app-modal {
+  background: var(--app-surface);
+  color: var(--app-ink);
+  border: 1px solid var(--app-line);
+  border-radius: var(--app-r-lg);
+  padding: 0;
+  overflow: hidden;
+  gap: 0;
+  font-family:
+    "Inter",
+    -apple-system,
+    BlinkMacSystemFont,
+    "Segoe UI",
+    sans-serif;
+  letter-spacing: -0.011em;
+}
+/* o X de fechar do shadcn é filho direto do conteúdo e cai sobre o cabeçalho
+   roxo — herdar a tinta do painel o deixaria escuro sobre roxo no tema claro */
+.app-modal > button {
+  color: #fff;
+  opacity: 0.8;
+}
+.app-modal > button:hover {
+  opacity: 1;
+}
+.app-modal-head {
+  position: relative;
+  padding: 24px 26px 26px;
+  background: linear-gradient(120deg, #7c3aed, #9333ea 55%, #c084fc);
+  color: #fff;
+}
+.app-modal-eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 10px;
+  margin-bottom: 10px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.18);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+.app-modal-eyebrow svg {
+  width: 13px;
+  height: 13px;
+}
+.app-modal-title {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 800;
+  letter-spacing: -0.025em;
+  color: #fff;
+}
+.app-modal-desc {
+  margin: 4px 0 0;
+  font-size: 13.5px;
+  line-height: 1.45;
+  color: rgba(255, 255, 255, 0.85);
+}
+/* medidor do cabeçalho: percentual à esquerda, contagem à direita e a trilha
+   embaixo — o formato que os dois modelos de referência usam */
+.app-modal-meter {
+  margin-top: 18px;
+}
+.app-modal-meter-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 8px;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.82);
+}
+.app-modal-meter-row b {
+  font-size: 14px;
+  font-weight: 800;
+  color: #fff;
+}
+.app-modal-progress {
+  height: 6px;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.3);
+  overflow: hidden;
+}
+.app-modal-progress span {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+  background: #4ade80;
+  transition: width 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+}
+.app-modal-body {
+  padding: 24px 26px;
+  display: grid;
+  gap: 18px;
+  max-height: min(56vh, 520px);
+  overflow-y: auto;
+}
+.app-modal-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+  padding: 16px 26px;
+  border-top: 1px solid var(--app-line);
+  background: var(--app-surface-2);
+}
+.app-modal-foot-end {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: auto;
+}
+
+/* ------------------------------------------------------------
+   CHECKLIST EM ACORDEÃO
+   Todos os passos à vista, um aberto por vez. O estado de cada linha é
+   derivado do mundo real (extensão detectada, áudio testado, produto
+   cadastrado) — nunca de "o usuário clicou em continuar".
+   ------------------------------------------------------------ */
+.app-tasks {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.app-task {
+  border: 1px solid var(--app-line);
+  border-radius: var(--app-r-md);
+  background: var(--app-surface);
+  overflow: hidden;
+  transition:
+    border-color 0.16s ease,
+    background 0.16s ease;
+}
+.app-task[data-state="done"] {
+  background: var(--app-surface-2);
+  border-color: transparent;
+}
+.app-task[data-state="current"] {
+  border-color: var(--app-accent);
+  box-shadow: 0 0 0 3px var(--app-accent-bg);
+}
+
+.app-task-head {
+  display: flex;
+  align-items: center;
+  gap: 13px;
+  width: 100%;
+  padding: 14px 15px;
+  border: none;
+  background: none;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.app-task[data-state="current"] .app-task-head {
+  cursor: default;
+}
+
+/* o disco de estado: verde cheio quando feito, anel tracejado no que está em
+   andamento, cinza no que ainda não chegou */
+.app-task-icon {
+  flex: none;
+  width: 34px;
+  height: 34px;
+  display: grid;
+  place-items: center;
+  border-radius: 999px;
+  border: 2px solid var(--app-line);
+  background: var(--app-surface-2);
+  color: var(--app-ink-3);
+}
+.app-task-icon svg {
+  width: 16px;
+  height: 16px;
+}
+.app-task[data-state="done"] .app-task-icon {
+  border-color: transparent;
+  background: var(--app-ok);
+  color: #fff;
+}
+.app-task[data-state="current"] .app-task-icon {
+  border-style: dashed;
+  border-color: var(--app-accent);
+  background: var(--app-accent-bg);
+  color: var(--app-accent-ink);
+}
+
+.app-task-info {
+  flex: 1;
+  min-width: 0;
+}
+.app-task-title {
+  display: block;
+  font-size: 14.5px;
+  font-weight: 700;
+  letter-spacing: -0.014em;
+}
+.app-task[data-state="done"] .app-task-title {
+  color: var(--app-ink-3);
+}
+.app-task-desc {
+  display: block;
+  margin-top: 2px;
+  font-size: 13px;
+  color: var(--app-ink-3);
+  line-height: 1.4;
+}
+.app-task-chevron {
+  flex: none;
+  width: 16px;
+  height: 16px;
+  color: var(--app-ink-3);
+  transition: transform 0.2s ease;
+}
+/* o giro segue quem está aberto, não quem está em andamento: um passo já
+   concluído pode ser reaberto para revisão e precisa indicar isso */
+.app-task[data-open="true"] .app-task-chevron {
+  transform: rotate(180deg);
+}
+
+/* o corpo do passo aberto: as ações daquele passo, e só daquele */
+.app-task-panel {
+  display: grid;
+  gap: 14px;
+  padding: 2px 15px 16px 62px;
+}
+
+/* caixinhas de instrução dentro do modal */
+.app-hint-grid {
+  display: grid;
+  gap: 8px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+.app-hint {
+  padding: 13px 15px;
+  border-radius: var(--app-r-md);
+  border: 1px solid var(--app-line);
+  background: var(--app-surface-2);
+}
+.app-hint-title {
+  display: block;
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--app-accent-ink);
+}
+.app-hint-desc {
+  margin: 3px 0 0;
+  font-size: 12.5px;
+  color: var(--app-ink-3);
+  line-height: 1.4;
+}
+
+/* linha de confirmação do primeiro acesso */
+.app-confirm {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 15px 17px;
+  border-radius: var(--app-r-md);
+  border: 1px solid var(--app-line);
+  background: var(--app-surface-2);
+  cursor: pointer;
+}
+.app-confirm[data-checked="true"] {
+  border-color: var(--app-ok);
+  background: var(--app-ok-bg);
+}
+.app-confirm-text {
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--app-ink-2);
+}
+
+@media (max-width: 560px) {
+  .app-hint-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .app-modal-track-label {
+    display: none;
+  }
+}
+
+/* ------------------------------------------------------------
    PONTE — CORES FIXAS DO TEMA ESCURO
    O que sobra depois dos tokens: componentes que escreveram a cor na mão
    (`text-white`, `bg-black/40`, `text-slate-300`). Mesma técnica que o
@@ -995,71 +2419,76 @@ html.dark .dash-shell {
 
    Duas restrições que fazem a regra ser correta e não só conveniente:
    - só sob `html.light`, porque no escuro essas cores estão certas;
-   - só dentro de `.app-main` e `.app-topbar`. A sidebar é escura, e lá o
-     `text-white` da logo é o valor desejado — incluir `.dash-shell` inteiro
-     apagaria a marca contra o próprio fundo.
+   - só dentro de `.app-main`, `.app-topbar` e `.app-modal`. A sidebar é
+     escura, e lá o `text-white` da logo é o valor desejado — incluir
+     `.dash-shell` inteiro apagaria a marca contra o próprio fundo. O modal
+     entra por fora da casca porque o Radix o monta em portal.
 
    Isto é ponte, não destino: conforme cada componente for migrado para os
    utilitários `app-*`, o seletor correspondente aqui pode sair.
    ------------------------------------------------------------ */
-html.light .dash-shell :is(.app-main, .app-topbar) [class*="bg-white/"],
-html.light .dash-shell :is(.app-main, .app-topbar) [class*="bg-black/"],
-html.light .dash-shell :is(.app-main, .app-topbar) [class*="bg-[#171326]"] {
+html.light :is(.dash-shell :is(.app-main, .app-topbar), .app-modal) [class*="bg-white/"],
+html.light :is(.dash-shell :is(.app-main, .app-topbar), .app-modal) [class*="bg-black/"],
+html.light :is(.dash-shell :is(.app-main, .app-topbar), .app-modal) [class*="bg-[#171326]"] {
   background-color: var(--app-surface) !important;
   background-image: none !important;
   border-color: var(--app-line) !important;
 }
-html.light .dash-shell :is(.app-main, .app-topbar) [class*="border-white/"] {
+html.light :is(.dash-shell :is(.app-main, .app-topbar), .app-modal) [class*="border-white/"] {
   border-color: var(--app-line) !important;
 }
 
-html.light .dash-shell :is(.app-main, .app-topbar) [class~="text-white"],
-html.light .dash-shell :is(.app-main, .app-topbar) [class*="text-white/"] {
+html.light :is(.dash-shell :is(.app-main, .app-topbar), .app-modal) [class~="text-white"],
+html.light :is(.dash-shell :is(.app-main, .app-topbar), .app-modal) [class*="text-white/"] {
   color: var(--app-ink-2) !important;
 }
 /* título mantém o contraste cheio; corpo fica um tom abaixo */
-html.light .dash-shell :is(.app-main, .app-topbar) :is(h1, h2, h3, h4)[class~="text-white"],
-html.light .dash-shell :is(.app-main, .app-topbar) :is(h1, h2, h3, h4)[class*="text-white/"] {
+html.light
+  :is(.dash-shell :is(.app-main, .app-topbar), .app-modal)
+  :is(h1, h2, h3, h4)[class~="text-white"],
+html.light
+  :is(.dash-shell :is(.app-main, .app-topbar), .app-modal)
+  :is(h1, h2, h3, h4)[class*="text-white/"] {
   color: var(--app-ink) !important;
 }
 
 /* cinzas claros → tinta terciária */
-html.light .dash-shell :is(.app-main, .app-topbar) [class*="text-slate-2"],
-html.light .dash-shell :is(.app-main, .app-topbar) [class*="text-slate-3"],
-html.light .dash-shell :is(.app-main, .app-topbar) [class*="text-slate-4"],
-html.light .dash-shell :is(.app-main, .app-topbar) [class*="text-zinc-3"],
-html.light .dash-shell :is(.app-main, .app-topbar) [class*="text-zinc-4"],
-html.light .dash-shell :is(.app-main, .app-topbar) [class*="text-gray-3"],
-html.light .dash-shell :is(.app-main, .app-topbar) [class*="text-gray-4"] {
+html.light :is(.dash-shell :is(.app-main, .app-topbar), .app-modal) [class*="text-slate-2"],
+html.light :is(.dash-shell :is(.app-main, .app-topbar), .app-modal) [class*="text-slate-3"],
+html.light :is(.dash-shell :is(.app-main, .app-topbar), .app-modal) [class*="text-slate-4"],
+html.light :is(.dash-shell :is(.app-main, .app-topbar), .app-modal) [class*="text-zinc-3"],
+html.light :is(.dash-shell :is(.app-main, .app-topbar), .app-modal) [class*="text-zinc-4"],
+html.light :is(.dash-shell :is(.app-main, .app-topbar), .app-modal) [class*="text-gray-3"],
+html.light :is(.dash-shell :is(.app-main, .app-topbar), .app-modal) [class*="text-gray-4"] {
   color: var(--app-ink-3) !important;
 }
 
 /* tons de marca e de estado calibrados para fundo escuro */
-html.light .dash-shell :is(.app-main, .app-topbar) [class*="text-purple-2"],
-html.light .dash-shell :is(.app-main, .app-topbar) [class*="text-purple-3"],
-html.light .dash-shell :is(.app-main, .app-topbar) [class*="text-purple-4"],
-html.light .dash-shell :is(.app-main, .app-topbar) [class*="text-violet-3"],
-html.light .dash-shell :is(.app-main, .app-topbar) [class*="text-violet-4"] {
+html.light :is(.dash-shell :is(.app-main, .app-topbar), .app-modal) [class*="text-purple-2"],
+html.light :is(.dash-shell :is(.app-main, .app-topbar), .app-modal) [class*="text-purple-3"],
+html.light :is(.dash-shell :is(.app-main, .app-topbar), .app-modal) [class*="text-purple-4"],
+html.light :is(.dash-shell :is(.app-main, .app-topbar), .app-modal) [class*="text-violet-3"],
+html.light :is(.dash-shell :is(.app-main, .app-topbar), .app-modal) [class*="text-violet-4"] {
   color: var(--app-accent-ink) !important;
 }
-html.light .dash-shell :is(.app-main, .app-topbar) [class*="text-emerald-1"],
-html.light .dash-shell :is(.app-main, .app-topbar) [class*="text-emerald-3"],
-html.light .dash-shell :is(.app-main, .app-topbar) [class*="text-emerald-4"],
-html.light .dash-shell :is(.app-main, .app-topbar) [class*="text-green-3"],
-html.light .dash-shell :is(.app-main, .app-topbar) [class*="text-green-4"] {
+html.light :is(.dash-shell :is(.app-main, .app-topbar), .app-modal) [class*="text-emerald-1"],
+html.light :is(.dash-shell :is(.app-main, .app-topbar), .app-modal) [class*="text-emerald-3"],
+html.light :is(.dash-shell :is(.app-main, .app-topbar), .app-modal) [class*="text-emerald-4"],
+html.light :is(.dash-shell :is(.app-main, .app-topbar), .app-modal) [class*="text-green-3"],
+html.light :is(.dash-shell :is(.app-main, .app-topbar), .app-modal) [class*="text-green-4"] {
   color: var(--app-ok) !important;
 }
-html.light .dash-shell :is(.app-main, .app-topbar) [class*="text-amber-1"],
-html.light .dash-shell :is(.app-main, .app-topbar) [class*="text-amber-3"],
-html.light .dash-shell :is(.app-main, .app-topbar) [class*="text-amber-4"],
-html.light .dash-shell :is(.app-main, .app-topbar) [class*="text-yellow-3"],
-html.light .dash-shell :is(.app-main, .app-topbar) [class*="text-yellow-4"] {
+html.light :is(.dash-shell :is(.app-main, .app-topbar), .app-modal) [class*="text-amber-1"],
+html.light :is(.dash-shell :is(.app-main, .app-topbar), .app-modal) [class*="text-amber-3"],
+html.light :is(.dash-shell :is(.app-main, .app-topbar), .app-modal) [class*="text-amber-4"],
+html.light :is(.dash-shell :is(.app-main, .app-topbar), .app-modal) [class*="text-yellow-3"],
+html.light :is(.dash-shell :is(.app-main, .app-topbar), .app-modal) [class*="text-yellow-4"] {
   color: var(--app-warn) !important;
 }
-html.light .dash-shell :is(.app-main, .app-topbar) [class*="text-red-3"],
-html.light .dash-shell :is(.app-main, .app-topbar) [class*="text-red-4"],
-html.light .dash-shell :is(.app-main, .app-topbar) [class*="text-rose-3"],
-html.light .dash-shell :is(.app-main, .app-topbar) [class*="text-rose-4"] {
+html.light :is(.dash-shell :is(.app-main, .app-topbar), .app-modal) [class*="text-red-3"],
+html.light :is(.dash-shell :is(.app-main, .app-topbar), .app-modal) [class*="text-red-4"],
+html.light :is(.dash-shell :is(.app-main, .app-topbar), .app-modal) [class*="text-rose-3"],
+html.light :is(.dash-shell :is(.app-main, .app-topbar), .app-modal) [class*="text-rose-4"] {
   color: var(--app-danger) !important;
 }
 
@@ -1079,6 +2508,11 @@ html.light .dash-shell :is(.app-main, .app-topbar) [class*="text-rose-4"] {
   .app-grid--4,
   .app-grid--5 {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  /* abaixo disso a coluna de acompanhamento fica estreita demais para o
+     checklist: as duas colunas viram uma pilha */
+  .app-cols {
+    grid-template-columns: minmax(0, 1fr);
   }
 }
 
@@ -1122,6 +2556,17 @@ html.light .dash-shell :is(.app-main, .app-topbar) [class*="text-rose-4"] {
   .app-grid--4,
   .app-grid--5 {
     grid-template-columns: minmax(0, 1fr);
+  }
+  .app-hero {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+  .app-hero-actions {
+    width: 100%;
+    justify-content: stretch;
+  }
+  .app-hero-actions > * {
+    flex: 1;
   }
   .app-toolbar .app-input {
     width: 100%;

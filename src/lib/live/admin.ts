@@ -7,6 +7,7 @@ import {
   fsSet,
   fsDelete,
   fsGet,
+  type FirestoreDocument,
   type SubscriptionData,
 } from "@/lib/firebase.server";
 import { PITCHAI_PLANS } from "@/lib/live/plans";
@@ -23,6 +24,13 @@ export { parseLocaleNumber } from "@/lib/live/number-parsing";
 
 export type RankedProduct = {
   id: string;
+  /**
+   * Código do produto no TikTok — o mesmo `product_id` que aparece na URL
+   * (`/view/product/<código>`). Guardado como texto porque são 19 dígitos:
+   * como número, o JavaScript arredonda a partir do 16º e dois produtos
+   * diferentes passam a ter o mesmo código.
+   */
+  tiktok_product_id: string | null;
   nome: string;
   vendas: number;
   receita: number;
@@ -37,6 +45,7 @@ export type RankedProduct = {
 
 export type NewRankedProduct = {
   nome: string;
+  tiktok_product_id?: string | null;
   vendas?: number;
   receita?: number;
   link?: string | null;
@@ -230,40 +239,77 @@ export async function checkIsAdmin(): Promise<{ ok: boolean; error?: string }> {
   }
 }
 
-/* ---------- Ranking (server-only) ---------- */
+/* ---------- Ranking ---------- */
+
+/** Documento cru do Firestore vira produto do ranking. */
+function toRankedProduct(d: FirestoreDocument): RankedProduct {
+  return {
+    id: d.id,
+    tiktok_product_id: (d.data.tiktok_product_id as string) ?? null,
+    nome: (d.data.nome as string) ?? "",
+    vendas: (d.data.vendas as number) ?? 0,
+    receita: (d.data.receita as number) ?? 0,
+    destaque: (d.data.destaque as boolean) ?? false,
+    link: (d.data.link as string) ?? null,
+    preco: (d.data.preco as number) ?? 0,
+    imagem_url: (d.data.imagem_url as string) ?? null,
+    categoria: (d.data.categoria as string) ?? null,
+    comissao_pct: (d.data.comissao_pct as number) ?? 0,
+    ordem: (d.data.ordem as number) ?? 0,
+  };
+}
+
+/** Destaque na frente, depois a ordem manual, e o desempate é quem mais vendeu. */
+function byRankingOrder(a: RankedProduct, b: RankedProduct): number {
+  return Number(b.destaque) - Number(a.destaque) || a.ordem - b.ordem || b.vendas - a.vendas;
+}
+
 const getRanking = createServerFn({ method: "GET" })
   .middleware([requireFirebaseAuth])
   .handler(async ({ context }): Promise<RankedProduct[]> => {
     await ensureAdmin(context);
     const docs = await fsQuery("ranked_products", adminFirestoreOptions(context));
-    return docs
-      .map((d) => ({
-        id: d.id,
-        nome: (d.data.nome as string) ?? "",
-        vendas: (d.data.vendas as number) ?? 0,
-        receita: (d.data.receita as number) ?? 0,
-        destaque: (d.data.destaque as boolean) ?? false,
-        link: (d.data.link as string) ?? null,
-        preco: (d.data.preco as number) ?? 0,
-        imagem_url: (d.data.imagem_url as string) ?? null,
-        categoria: (d.data.categoria as string) ?? null,
-        comissao_pct: (d.data.comissao_pct as number) ?? 0,
-        ordem: (d.data.ordem as number) ?? 0,
-      }))
-      .sort(
-        (a, b) =>
-          Number(b.destaque) - Number(a.destaque) || a.ordem - b.ordem || b.vendas - a.vendas,
-      );
+    return docs.map(toRankedProduct).sort(byRankingOrder);
   });
+
+/**
+ * Leitura sem login, para a vitrine pública `/quentes` e para o painel do
+ * assinante.
+ *
+ * Existe porque `getRanking` passa por `requireFirebaseAuth` + `ensureAdmin`:
+ * um visitante deslogado tomava 401 e a página caía no "Nenhum produto no
+ * ranking ainda" mesmo com a curadoria cadastrada. A regra do Firestore para
+ * `ranked_products` já é `allow read: if true`, então ler em modo público não
+ * abre nada que a coleção não exponha por conta própria.
+ */
+const getPublicRanking = createServerFn({ method: "GET" }).handler(
+  async (): Promise<RankedProduct[]> => {
+    const docs = await fsQuery("ranked_products", { mode: "public" });
+    return docs.map(toRankedProduct).sort(byRankingOrder);
+  },
+);
 
 export async function fetchRanking(): Promise<RankedProduct[]> {
   return getRanking({});
+}
+
+export async function fetchPublicRanking(): Promise<RankedProduct[]> {
+  return getPublicRanking();
 }
 
 const insertProducts = createServerFn({ method: "POST" })
   .middleware([requireFirebaseAuth])
   .validator((data: { items: NewRankedProduct[] }) => {
     if (!Array.isArray(data.items)) throw new Error("Invalid items");
+    for (const item of data.items) {
+      // A foto pode chegar embutida como data URL. Um documento do Firestore
+      // não passa de 1 MiB somando todos os campos, e estourar isso derruba a
+      // gravação inteira — melhor recusar aqui, com motivo legível.
+      if ((item.imagem_url?.length ?? 0) > MAX_IMAGEM_CHARS)
+        throw new Error(
+          `A foto de "${item.nome}" está grande demais para o cadastro. Use uma imagem menor.`,
+        );
+    }
     return data;
   })
   .handler(async ({ data, context }) => {
@@ -275,6 +321,7 @@ const insertProducts = createServerFn({ method: "POST" })
         `ranked_products/${id}`,
         {
           nome: item.nome,
+          tiktok_product_id: item.tiktok_product_id ?? null,
           vendas: item.vendas ?? 0,
           receita: item.receita ?? 0,
           destaque: item.destaque ?? false,
@@ -303,6 +350,7 @@ const updateProduct = createServerFn({ method: "POST" })
     if (!data?.id || typeof data.patch !== "object") throw new Error("Invalid update payload");
     const allowed = new Set([
       "nome",
+      "tiktok_product_id",
       "vendas",
       "receita",
       "destaque",
@@ -364,6 +412,205 @@ const deleteAllProducts = createServerFn({ method: "POST" })
 
 export async function deleteAllRankedProducts() {
   await deleteAllProducts({});
+}
+
+/* ---------- Cadastro pelo código do TikTok ---------- */
+
+/**
+ * Teto do campo `imagem_url` quando a foto vem embutida (data URL) em vez de
+ * apontar para o CDN. Um documento do Firestore inteiro não passa de 1 MiB, e
+ * a foto é só um dos campos — o teto deixa folga para o resto do produto.
+ */
+export const MAX_IMAGEM_CHARS = 700_000;
+
+export type TikTokProductLookup = {
+  tiktok_product_id: string | null;
+  link: string | null;
+  nome: string | null;
+  preco: number | null;
+  imagem_url: string | null;
+  /** `null` quando veio tudo. Preenchido, é o texto que a tela mostra ao admin. */
+  aviso: string | null;
+};
+
+/**
+ * O TikTok responde à raspagem de servidor com uma página de verificação
+ * ("Security Check") em vez do produto — medido em 2026-08-18 tanto em
+ * `shop.tiktok.com` quanto em `www.tiktok.com`. Fingir cabeçalho de navegador
+ * não resolve o bloqueio; serve só para não sermos barrados antes disso.
+ */
+const UA_NAVEGADOR =
+  "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36";
+
+const MSG_BLOQUEIO =
+  "O TikTok respondeu com a página de verificação e não entregou os dados do produto. " +
+  "Confira o nome e o preço e cole a foto aqui embaixo — é o caminho que funciona hoje.";
+
+/** Extrai o código do produto de um código puro ou de qualquer URL que o carregue. */
+export function extractTikTokProductId(entrada: string): string | null {
+  const texto = (entrada ?? "").trim();
+  if (!texto) return null;
+  if (/^\d{6,25}$/.test(texto)) return texto;
+  return (
+    texto.match(/\/(?:view\/)?product\/(\d{6,25})/i)?.[1] ??
+    texto.match(/[?&](?:product_id|productId|pid)=(\d{6,25})/i)?.[1] ??
+    null
+  );
+}
+
+function decodeHtmlEntities(texto: string): string {
+  return texto
+    .replace(/&quot;/g, '"')
+    .replace(/&#0?39;/g, "'")
+    .replace(/&apos;/g, "'")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&nbsp;/g, " ")
+    .replace(/&amp;/g, "&");
+}
+
+function metaContent(html: string, chave: string): string | null {
+  const tag = html.match(
+    new RegExp(`<meta[^>]+(?:property|name)=["']${chave}["'][^>]*>`, "i"),
+  )?.[0];
+  const valor = tag?.match(/content=["']([^"']*)["']/i)?.[1];
+  return valor?.trim() ? decodeHtmlEntities(valor.trim()) : null;
+}
+
+/** A resposta veio, mas é a barreira antirraspagem — não é a página do produto. */
+function pareceBloqueio(html: string): boolean {
+  return /security check|verify to continue|captcha|slide to verify/i.test(html.slice(0, 4000));
+}
+
+/**
+ * Descobre o que der a partir do código do produto ou do link de afiliado.
+ *
+ * O que realmente funciona aqui é seguir o redirecionamento do link curto até a
+ * URL final e tirar dela o código do produto. Nome, preço e foto quase sempre
+ * voltam vazios com `aviso` preenchido: a página é blindada para servidor. A
+ * função é honesta sobre isso em vez de devolver dado pela metade sem avisar.
+ */
+const lookupTikTokProduct = createServerFn({ method: "POST" })
+  .middleware([requireFirebaseAuth])
+  .validator((data: { entrada: string }) => {
+    const entrada = (data?.entrada ?? "").trim();
+    if (!entrada) throw new Error("Informe o código do produto ou o link de afiliado.");
+    if (entrada.length > 2048) throw new Error("Link comprido demais para ser do TikTok.");
+    return { entrada };
+  })
+  .handler(async ({ data, context }): Promise<TikTokProductLookup> => {
+    await ensureAdmin(context);
+    const { entrada } = data;
+    const ehUrl = /^https?:\/\//i.test(entrada);
+
+    const achado: TikTokProductLookup = {
+      tiktok_product_id: extractTikTokProductId(entrada),
+      link: ehUrl ? entrada : null,
+      nome: null,
+      preco: null,
+      imagem_url: null,
+      aviso: null,
+    };
+
+    if (!ehUrl && !achado.tiktok_product_id) {
+      achado.aviso =
+        "Isso não parece um código do TikTok (só dígitos) nem um link. Cole o link de afiliado inteiro.";
+      return achado;
+    }
+
+    const alvo = ehUrl
+      ? entrada
+      : `https://shop.tiktok.com/view/product/${achado.tiktok_product_id}`;
+
+    try {
+      const res = await fetch(alvo, {
+        redirect: "follow",
+        signal: AbortSignal.timeout(12_000),
+        headers: {
+          "user-agent": UA_NAVEGADOR,
+          accept: "text/html,application/xhtml+xml",
+          "accept-language": "pt-BR,pt;q=0.9",
+        },
+      });
+
+      // O ganho real do link curto: o destino do redirecionamento carrega o código.
+      const urlFinal = res.url || alvo;
+      achado.tiktok_product_id = achado.tiktok_product_id ?? extractTikTokProductId(urlFinal);
+
+      // Teto de leitura: a página pode ser enorme e não vamos guardá-la.
+      const html = (await res.text()).slice(0, 600_000);
+
+      if (pareceBloqueio(html)) {
+        achado.aviso = MSG_BLOQUEIO;
+      } else {
+        achado.nome = metaContent(html, "og:title");
+        achado.imagem_url = metaContent(html, "og:image");
+        const precoTexto =
+          metaContent(html, "product:price:amount") ?? metaContent(html, "og:price:amount");
+        achado.preco = precoTexto ? parseLocaleNumber(precoTexto) || null : null;
+        if (!achado.nome && !achado.imagem_url) achado.aviso = MSG_BLOQUEIO;
+      }
+    } catch {
+      achado.aviso =
+        "Não deu para falar com o TikTok agora. Se o código foi extraído do link, preencha o resto à mão.";
+    }
+
+    if (!achado.tiktok_product_id)
+      achado.aviso =
+        "Não achei o código do produto nesse link. Abra o produto no TikTok e copie o link da barra de endereço.";
+
+    return achado;
+  });
+
+export async function lookupTikTokProductByCode(entrada: string): Promise<TikTokProductLookup> {
+  return lookupTikTokProduct({ data: { entrada } });
+}
+
+/**
+ * Baixa uma imagem pelo servidor e devolve embutida.
+ *
+ * Precisa passar por aqui porque o CDN do TikTok não manda cabeçalho de CORS:
+ * o navegador até exibe a foto, mas ao desenhá-la num canvas para redimensionar
+ * a leitura é bloqueada. Baixando pelo servidor, a imagem chega como data URL,
+ * que para o canvas é de mesma origem. O CDN, ao contrário da página do
+ * produto, responde normalmente a servidor — foi medido.
+ */
+const importImagem = createServerFn({ method: "POST" })
+  .middleware([requireFirebaseAuth])
+  .validator((data: { url: string }) => {
+    const url = (data?.url ?? "").trim();
+    if (!/^https?:\/\//i.test(url)) throw new Error("A foto precisa ser um endereço http(s).");
+    if (url.length > 2048) throw new Error("Endereço da foto comprido demais.");
+    return { url };
+  })
+  .handler(async ({ data, context }): Promise<{ dataUrl: string }> => {
+    await ensureAdmin(context);
+    const res = await fetch(data.url, {
+      redirect: "follow",
+      signal: AbortSignal.timeout(15_000),
+      headers: { "user-agent": UA_NAVEGADOR, accept: "image/*" },
+    });
+    if (!res.ok) throw new Error(`A foto não abriu (HTTP ${res.status}).`);
+
+    const tipo = (res.headers.get("content-type") ?? "").split(";")[0].trim().toLowerCase();
+    if (!tipo.startsWith("image/"))
+      throw new Error("Esse endereço não devolveu uma imagem — confira se copiou o link da foto.");
+
+    const bytes = new Uint8Array(await res.arrayBuffer());
+    // 8 MB é folgado para foto de produto e evita segurar memória do servidor.
+    if (bytes.byteLength > 8 * 1024 * 1024) throw new Error("A foto passa de 8 MB.");
+
+    let binario = "";
+    const bloco = 0x8000; // fatiado: `fromCharCode` com o array inteiro estoura a pilha.
+    for (let i = 0; i < bytes.length; i += bloco)
+      binario += String.fromCharCode(...bytes.subarray(i, i + bloco));
+
+    return { dataUrl: `data:${tipo};base64,${btoa(binario)}` };
+  });
+
+export async function importImagemDoTikTok(url: string): Promise<string> {
+  const { dataUrl } = await importImagem({ data: { url } });
+  return dataUrl;
 }
 
 function detectDelimiter(line: string): "," | ";" | "\t" {

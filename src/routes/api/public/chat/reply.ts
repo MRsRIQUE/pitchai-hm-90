@@ -125,6 +125,10 @@ export const Route = createFileRoute("/api/public/chat/reply")({
         if (!guard.ok) {
           return json(guard.status ?? 500, {
             error: guard.status === 429 ? "quota_exceeded" : "invalid_token",
+            // Aditivo: `error` continua o mesmo para a extensão antiga. `reason`
+            // é o motivo preciso (hoje só "device_mismatch") — sem ele, uma
+            // recusa de vínculo chegaria rotulada como token inválido.
+            reason: guard.reason,
             message: guard.message,
             remaining: 0,
             locked: true,

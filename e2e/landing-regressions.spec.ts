@@ -1,27 +1,36 @@
 import { expect, test } from "@playwright/test";
 
 test.describe("regressões da landing", () => {
-  test("vídeo continua reproduzindo após alternar o tema", async ({ page }) => {
+  /*
+   * O que este teste vigia mudou de forma, porque a landing mudou.
+   *
+   * Ele nasceu para provar que o vídeo do hero não remontava ao alternar o
+   * tema. Só que a landing hoje é escura e ponto: `ForceDarkTheme` trava o modo
+   * enquanto a página de marketing está montada, e o seletor de tema foi
+   * retirado dali de propósito — hero, partículas e máscaras foram calibrados
+   * sobre preto e no claro não têm contraste. Um teste que clica num botão que
+   * não existe mais não protege nada; ficava vermelho por conta própria.
+   *
+   * O que segue valendo é o vídeo do hero montar e tocar: ele é a primeira
+   * coisa que o visitante vê, é pesado, e já quebrou antes. O `<video>` único
+   * de classe `stage-video` deu lugar ao HeroMotion, que monta um deitado e um
+   * em pé e deixa o CSS escolher qual aparece — daí o `:visible`.
+   */
+  test("vídeo do hero monta e toca na landing", async ({ page }) => {
     await page.goto("/", { waitUntil: "domcontentloaded" });
 
-    const video = page.locator(".landing .stage-video");
+    const video = page.locator(".landing .hero-video:visible");
     await expect(video).toHaveCount(1);
     await expect
       .poll(() => video.evaluate((el) => (el as HTMLVideoElement).readyState))
       .toBeGreaterThan(1);
 
     await video.evaluate((el) => (el as HTMLVideoElement).play());
-    const sourceBefore = await video.getAttribute("src");
-    await page
-      .getByRole("banner")
-      .getByRole("button", { name: /Mudar para o modo/i })
-      .click();
-
-    await expect(video).toHaveAttribute("src", sourceBefore!);
     await expect.poll(() => video.evaluate((el) => (el as HTMLVideoElement).paused)).toBe(false);
-    await expect
-      .poll(() => video.evaluate((el) => (el as HTMLVideoElement).readyState))
-      .toBeGreaterThan(1);
+
+    // O tema continua escuro o tempo todo: se alguém devolver o seletor à
+    // landing, é aqui que a decisão volta a ser discutida.
+    await expect(page.locator("html")).toHaveClass(/dark/);
   });
 
   test("todos os CTAs de assinatura preservam o plano e usuário anônimo vai ao cadastro", async ({

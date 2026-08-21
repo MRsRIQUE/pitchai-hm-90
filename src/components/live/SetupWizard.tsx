@@ -1,23 +1,52 @@
-import { useState } from "react";
-import { Card } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import { useEffect, useState } from "react";
 import { Link } from "@tanstack/react-router";
 import { toast } from "sonner";
-import { Check, Loader2, Volume2, Puzzle, ShoppingBag, Rocket, ArrowRight } from "lucide-react";
+import {
+  Check,
+  CheckCircle2,
+  ChevronDown,
+  Loader2,
+  Puzzle,
+  Rocket,
+  ShoppingBag,
+  Volume2,
+} from "lucide-react";
+
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Checkbox } from "@/components/ui/checkbox";
+import {
+  ExtensionStatusBanner,
+  fireSuccessConfetti,
+} from "@/components/live/ExtensionStatusBanner";
+import { useExtensionInstalled } from "@/components/live/LiveDashboard/sections/useExtensionInstalled";
 import { aiHeaders } from "@/lib/live/ai-headers";
 import { SAMPLE_PHRASE } from "@/lib/live/voices";
 import { newProduct, type LiveConfig } from "@/lib/live/config";
-import { cn } from "@/lib/utils";
-import { ExtensionStatusBanner } from "@/components/live/ExtensionStatusBanner";
 
-const STEPS = [
-  { id: 1, title: "Instalar a extensão", icon: Puzzle },
-  { id: 2, title: "Ligar o áudio", icon: Volume2 },
-  { id: 3, title: "Escolher o produto", icon: ShoppingBag },
-] as const;
+/**
+ * Configuração inicial — o pop-up do primeiro acesso.
+ *
+ * Checklist, não wizard: os três passos ficam todos à vista e só o que está em
+ * andamento abre. A diferença não é estética — cada passo se marca sozinho a
+ * partir do mundo real (a extensão respondeu, o áudio tocou, existe produto no
+ * catálogo), em vez de contar cliques em "Continuar". Assim ninguém termina o
+ * guia com um passo verde que na verdade não aconteceu.
+ *
+ * Abre sozinho no primeiro acesso; o `onFinish` marca `onboardingDone`, que é
+ * o que impede o guia de voltar.
+ */
+
+type PassoId = "extensao" | "audio" | "produto";
 
 export function SetupWizard({
+  open,
+  onOpenChange,
   cfg,
   setCfg,
   onImportVitrine,
@@ -25,6 +54,8 @@ export function SetupWizard({
   onFinish,
   syncToken,
 }: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
   cfg: LiveConfig;
   setCfg: (updater: (cfg: LiveConfig) => LiveConfig) => void;
   onImportVitrine: () => Promise<void> | void;
@@ -32,13 +63,64 @@ export function SetupWizard({
   onFinish: () => void;
   syncToken?: string;
 }) {
-  const [step, setStep] = useState(1);
+  const extensaoInstalada = useExtensionInstalled();
+
+  const [aberto, setAberto] = useState<PassoId | null>("extensao");
   const [testing, setTesting] = useState(false);
   const [audioOk, setAudioOk] = useState<boolean | null>(null);
+  const [confirmouExtensao, setConfirmouExtensao] = useState(false);
   const [nome, setNome] = useState("");
   const [preco, setPreco] = useState("");
 
   const temProduto = cfg.produtos.length > 0;
+  // A extensão se anuncia sozinha; o check à mão existe para quem acabou de
+  // instalar e o navegador ainda não avisou.
+  const extensaoOk = extensaoInstalada || confirmouExtensao;
+  const audioTestado = audioOk === true;
+
+  const passos = [
+    {
+      id: "extensao" as const,
+      icone: Puzzle,
+      titulo: "Instalar a extensão",
+      descricao: "É ela que lê o chat da sua live e fixa os produtos.",
+      feito: extensaoOk,
+    },
+    {
+      id: "audio" as const,
+      icone: Volume2,
+      titulo: "Ligar o áudio",
+      descricao: "Um clique para confirmar que a voz sai neste computador.",
+      feito: audioTestado,
+    },
+    {
+      id: "produto" as const,
+      icone: ShoppingBag,
+      titulo: "Escolher o produto",
+      descricao: "A IA responde com base no produto ativo.",
+      feito: temProduto,
+    },
+  ];
+
+  const feitos = passos.filter((p) => p.feito).length;
+  const pct = Math.round((feitos / passos.length) * 100);
+  const tudoPronto = feitos === passos.length;
+  const primeiroPendente = passos.find((p) => !p.feito)?.id ?? null;
+
+  // Cada abertura do modal começa no primeiro passo que ainda falta: mandar
+  // quem já tem a extensão instalada ler de novo como instalar é ruído.
+  useEffect(() => {
+    if (open) setAberto(primeiroPendente);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open]);
+
+  // Concluiu o passo aberto? O próximo pendente abre sozinho — é o que dava a
+  // sensação de avanço no wizard antigo, agora sem botão de "Continuar".
+  useEffect(() => {
+    if (!open || !aberto) return;
+    if (passos.find((p) => p.id === aberto)?.feito) setAberto(primeiroPendente);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, aberto, extensaoOk, audioTestado, temProduto]);
 
   const testarVoz = async () => {
     setTesting(true);
@@ -76,7 +158,7 @@ export function SetupWizard({
       toast.error("Não foi possível testar a voz", {
         description:
           error instanceof DOMException && error.name === "NotAllowedError"
-            ? "O Chrome bloqueou a reprodução. Clique novamente em Testar voz."
+            ? "O Chrome bloqueou a reprodução. Clique novamente em Ouvir a voz da IA."
             : message,
       });
     } finally {
@@ -101,159 +183,256 @@ export function SetupWizard({
     toast.success("Produto adicionado");
   };
 
+  const concluir = () => {
+    if (tudoPronto) fireSuccessConfetti();
+    onFinish();
+    onOpenChange(false);
+    toast.success(tudoPronto ? "Tudo pronto para a sua live" : "Configuração guardada", {
+      description: "O guia não abre mais sozinho — ele fica no botão Configuração inicial.",
+    });
+  };
+
+  /*
+   * Fechar pelo X, pelo ESC ou clicando fora também encerra o onboarding. Sem
+   * isso o pop-up voltaria a cada visita ao Início e viraria obstáculo: quem
+   * fechou já disse que não quer o guia agora.
+   */
+  const handleOpenChange = (visivel: boolean) => {
+    if (!visivel) onFinish();
+    onOpenChange(visivel);
+  };
+
   return (
-    <Card className="border-primary/30 bg-gradient-to-br from-primary/5 to-transparent p-5">
-      <div className="mb-4 flex items-center gap-3">
-        <div className="grid h-10 w-10 place-items-center rounded-full bg-primary/15 text-primary">
-          <Rocket className="h-5 w-5" />
-        </div>
-        <div className="min-w-0">
-          <div className="font-display text-base font-bold">Vamos deixar tudo pronto</div>
-          <div className="text-xs text-muted-foreground">
-            3 passos rápidos — depois é só iniciar a live.
-          </div>
-        </div>
-        <Button variant="ghost" size="sm" className="ml-auto shrink-0 text-xs" onClick={onFinish}>
-          Pular
-        </Button>
-      </div>
+    <Dialog open={open} onOpenChange={handleOpenChange}>
+      <DialogContent className="app-tokens app-modal max-w-2xl gap-0 overflow-hidden border-[var(--app-line)] bg-[var(--app-surface)] p-0 text-[var(--app-ink)]">
+        <div className="app-modal-head">
+          <span className="app-modal-eyebrow">
+            <Rocket aria-hidden="true" />
+            Configuração inicial
+          </span>
+          <DialogHeader>
+            <DialogTitle className="app-modal-title">Vamos deixar tudo pronto</DialogTitle>
+            <DialogDescription className="app-modal-desc">
+              Três passos e a IA já pode vender junto com você na live.
+            </DialogDescription>
+          </DialogHeader>
 
-      <ol className="mb-4 flex items-center gap-2">
-        {STEPS.map((s) => (
-          <li key={s.id} className="flex flex-1 items-center gap-2">
+          <div className="app-modal-meter">
+            <div className="app-modal-meter-row">
+              <span>
+                <b>{pct}%</b> concluído
+              </span>
+              <span>
+                {feitos} de {passos.length} passos
+              </span>
+            </div>
             <div
-              className={cn(
-                "grid h-7 w-7 shrink-0 place-items-center rounded-full border-2 text-xs font-bold",
-                step > s.id
-                  ? "border-primary bg-primary text-primary-foreground"
-                  : step === s.id
-                    ? "border-primary text-primary"
-                    : "border-border text-muted-foreground",
-              )}
+              className="app-modal-progress"
+              role="progressbar"
+              aria-valuenow={pct}
+              aria-valuemin={0}
+              aria-valuemax={100}
             >
-              {step > s.id ? <Check className="h-3.5 w-3.5" /> : s.id}
+              <span style={{ width: `${pct}%` }} />
             </div>
-            <span
-              className={cn(
-                "hidden truncate text-xs sm:block",
-                step === s.id ? "font-semibold" : "text-muted-foreground",
-              )}
+          </div>
+        </div>
+
+        <div className="app-modal-body">
+          <div className="app-tasks">
+            {passos.map((passo) => {
+              const estado = passo.feito ? "done" : aberto === passo.id ? "current" : "todo";
+              const Icone = passo.icone;
+              return (
+                <div
+                  key={passo.id}
+                  className="app-task"
+                  data-state={estado}
+                  data-open={aberto === passo.id}
+                >
+                  <button
+                    type="button"
+                    className="app-task-head"
+                    aria-expanded={aberto === passo.id}
+                    onClick={() => setAberto(aberto === passo.id ? null : passo.id)}
+                  >
+                    <span className="app-task-icon">
+                      {passo.feito ? <Check aria-hidden="true" /> : <Icone aria-hidden="true" />}
+                    </span>
+                    <span className="app-task-info">
+                      <span className="app-task-title">{passo.titulo}</span>
+                      <span className="app-task-desc">{passo.descricao}</span>
+                    </span>
+                    {passo.feito ? (
+                      <span className="app-tag" data-tone="ok">
+                        Concluído
+                      </span>
+                    ) : aberto === passo.id ? (
+                      <span className="app-tag" data-tone="accent">
+                        Agora
+                      </span>
+                    ) : null}
+                    <ChevronDown className="app-task-chevron" aria-hidden="true" />
+                  </button>
+
+                  {aberto === passo.id ? (
+                    <div className="app-task-panel">
+                      {passo.id === "extensao" ? (
+                        <>
+                          <ExtensionStatusBanner syncToken={syncToken} />
+
+                          <div className="app-hint-grid">
+                            <div className="app-hint">
+                              <span className="app-hint-title">1. Clique em baixar</span>
+                              <p className="app-hint-desc">
+                                Você recebe um arquivo .zip com a extensão.
+                              </p>
+                            </div>
+                            <div className="app-hint">
+                              <span className="app-hint-title">2. Extraia a pasta</span>
+                              <p className="app-hint-desc">
+                                Descompacte o arquivo no seu computador.
+                              </p>
+                            </div>
+                            <div className="app-hint">
+                              <span className="app-hint-title">3. Arraste pro Chrome</span>
+                              <p className="app-hint-desc">
+                                Em chrome://extensions com o Modo Dev ativo.
+                              </p>
+                            </div>
+                          </div>
+
+                          <label className="app-confirm" data-checked={confirmouExtensao}>
+                            <Checkbox
+                              checked={confirmouExtensao}
+                              onCheckedChange={(v) => setConfirmouExtensao(v === true)}
+                            />
+                            <span className="app-confirm-text">
+                              Já instalei a extensão no meu Chrome. Se ela ainda não aparecer como
+                              ativa aqui, recarrego esta página depois.
+                            </span>
+                          </label>
+
+                          <div>
+                            <Link
+                              to="/download"
+                              target="_blank"
+                              rel="noreferrer"
+                              className="app-btn app-btn--sm"
+                            >
+                              Ver o passo a passo ilustrado
+                            </Link>
+                          </div>
+                        </>
+                      ) : null}
+
+                      {passo.id === "audio" ? (
+                        <>
+                          <p className="app-card-desc" style={{ margin: 0 }}>
+                            Clique em ouvir. Se você escutar a voz, este passo se marca sozinho.
+                          </p>
+                          <div>
+                            <button
+                              type="button"
+                              className="app-btn app-btn--primary"
+                              onClick={() => void testarVoz()}
+                              disabled={testing}
+                            >
+                              {testing ? (
+                                <Loader2 aria-hidden="true" className="animate-spin" />
+                              ) : (
+                                <Volume2 aria-hidden="true" />
+                              )}
+                              Ouvir a voz da IA
+                            </button>
+                          </div>
+                          {audioOk === false ? (
+                            <div className="app-alert" data-tone="warn">
+                              <span>
+                                Não ouviu nada? Confira o volume do computador. Para mandar a voz
+                                para dentro da live você escolhe o cabo virtual (VB-Cable no
+                                Windows, BlackHole no Mac) na seção <b>Voz</b> do painel.
+                              </span>
+                            </div>
+                          ) : null}
+                        </>
+                      ) : null}
+
+                      {passo.id === "produto" ? (
+                        <>
+                          <p className="app-card-desc" style={{ margin: 0 }}>
+                            Traga a vitrine do TikTok de uma vez, ou cadastre um produto à mão.
+                          </p>
+                          <div>
+                            <button
+                              type="button"
+                              className="app-btn"
+                              onClick={() => void onImportVitrine()}
+                              disabled={importing}
+                            >
+                              {importing ? (
+                                <Loader2 aria-hidden="true" className="animate-spin" />
+                              ) : null}
+                              Sincronizar da vitrine
+                            </button>
+                          </div>
+                          <div
+                            style={{
+                              display: "grid",
+                              gap: 8,
+                              gridTemplateColumns: "1fr 130px auto",
+                            }}
+                          >
+                            <input
+                              className="app-input"
+                              placeholder="Nome do produto"
+                              value={nome}
+                              onChange={(e) => setNome(e.target.value)}
+                            />
+                            <input
+                              className="app-input"
+                              placeholder="R$ 99,90"
+                              value={preco}
+                              onChange={(e) => setPreco(e.target.value)}
+                            />
+                            <button type="button" className="app-btn" onClick={criarProduto}>
+                              Adicionar
+                            </button>
+                          </div>
+                        </>
+                      ) : null}
+                    </div>
+                  ) : null}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+
+        <div className="app-modal-foot">
+          <button
+            type="button"
+            className="app-btn app-btn--sm app-btn--ghost"
+            onClick={() => {
+              onFinish();
+              onOpenChange(false);
+            }}
+          >
+            Configurar depois
+          </button>
+
+          <div className="app-modal-foot-end">
+            <button
+              type="button"
+              className="app-btn app-btn--sm app-btn--primary"
+              onClick={concluir}
             >
-              {s.title}
-            </span>
-          </li>
-        ))}
-      </ol>
-
-      {step === 1 && (
-        <div className="space-y-4">
-          <ExtensionStatusBanner syncToken={syncToken} />
-
-          <div className="rounded-xl border border-white/10 bg-white/5 p-4 space-y-3">
-            <h4 className="font-bold text-sm text-white flex items-center gap-2">
-              <span>Como é fácil instalar no seu computador (menos de 2 min)</span>
-            </h4>
-            <div className="grid gap-2 text-xs text-slate-300 sm:grid-cols-3">
-              <div className="rounded-lg bg-black/40 p-2.5 border border-white/10">
-                <span className="font-bold text-[#A855F7]">1. Clique em Baixar</span>
-                <p className="mt-1 text-slate-400">Você receberá o arquivo zip com a extensão.</p>
-              </div>
-              <div className="rounded-lg bg-black/40 p-2.5 border border-white/10">
-                <span className="font-bold text-[#A855F7]">2. Extraia a Pasta</span>
-                <p className="mt-1 text-slate-400">Descompacte o arquivo no seu computador.</p>
-              </div>
-              <div className="rounded-lg bg-black/40 p-2.5 border border-white/10">
-                <span className="font-bold text-[#A855F7]">3. Arraste pro Chrome</span>
-                <p className="mt-1 text-slate-400">Em chrome://extensions com Modo Dev ativo.</p>
-              </div>
-            </div>
-          </div>
-
-          <div className="flex flex-wrap gap-2 pt-2">
-            <Button asChild className="bg-[#7C3AED] hover:bg-[#6D28D9] text-white font-bold">
-              <Link to="/download">Ver Passo a Passo Ilustrado Completo</Link>
-            </Button>
-            <Button variant="outline" onClick={() => setStep(2)}>
-              Já instalei — continuar <ArrowRight className="ml-1 h-3.5 w-3.5" />
-            </Button>
+              <CheckCircle2 aria-hidden="true" />
+              {tudoPronto ? "Tudo pronto — ir para o painel" : "Concluir configuração"}
+            </button>
           </div>
         </div>
-      )}
-
-      {step === 2 && (
-        <div className="space-y-3">
-          <p className="text-sm text-muted-foreground">
-            Clique para ouvir a voz da IA. Se você escutar, está tudo certo.
-          </p>
-          <div className="flex flex-wrap items-center gap-2">
-            <Button onClick={testarVoz} disabled={testing}>
-              {testing ? (
-                <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />
-              ) : (
-                <Volume2 className="mr-1.5 h-4 w-4" />
-              )}
-              Testar voz
-            </Button>
-            {audioOk === true && (
-              <span className="text-xs font-medium text-primary">Ouviu? Então está pronto.</span>
-            )}
-          </div>
-          {audioOk === false && (
-            <div className="rounded-lg border border-border/60 p-3 text-xs text-muted-foreground">
-              Não ouviu nada? Verifique o volume, e depois configure para onde a voz vai (VB-Cable
-              no Windows, BlackHole no Mac) na seção
-              <b className="text-foreground"> Como transmitir a voz da IA</b> do modo avançado.
-            </div>
-          )}
-          <div className="flex gap-2">
-            <Button variant="ghost" onClick={() => setStep(1)}>
-              Voltar
-            </Button>
-            <Button variant="outline" onClick={() => setStep(3)}>
-              Continuar
-            </Button>
-          </div>
-        </div>
-      )}
-
-      {step === 3 && (
-        <div className="space-y-3">
-          <p className="text-sm text-muted-foreground">
-            A IA responde com base no produto ativo. Sincronize sua vitrine do TikTok ou cadastre um
-            produto agora.
-          </p>
-          <Button variant="outline" onClick={() => void onImportVitrine()} disabled={importing}>
-            {importing && <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />}
-            Sincronizar da vitrine
-          </Button>
-          <div className="grid gap-2 sm:grid-cols-[1fr_140px_auto]">
-            <Input
-              placeholder="Nome do produto"
-              value={nome}
-              onChange={(e) => setNome(e.target.value)}
-            />
-            <Input
-              placeholder="R$ 99,90"
-              value={preco}
-              onChange={(e) => setPreco(e.target.value)}
-            />
-            <Button variant="outline" onClick={criarProduto}>
-              Adicionar
-            </Button>
-          </div>
-          {temProduto && (
-            <p className="text-xs text-primary">{cfg.produtos.length} produto(s) prontos.</p>
-          )}
-          <div className="flex gap-2">
-            <Button variant="ghost" onClick={() => setStep(2)}>
-              Voltar
-            </Button>
-            <Button onClick={onFinish} disabled={!temProduto}>
-              Tudo pronto — ir para a live
-            </Button>
-          </div>
-        </div>
-      )}
-    </Card>
+      </DialogContent>
+    </Dialog>
   );
 }

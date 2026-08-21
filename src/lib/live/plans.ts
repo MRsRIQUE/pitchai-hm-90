@@ -229,7 +229,9 @@ export function hasActiveCompedAccess(comped?: CompedAccessRecord | null): boole
  * quando não corresponde a nenhum plano comercial.
  */
 export function canonicalPlanId(plan?: string | null): string | null {
-  const value = String(plan || "").trim().toLowerCase();
+  const value = String(plan || "")
+    .trim()
+    .toLowerCase();
   if (!value || value === "free" || value === "gratuito") return null;
   const aliases: Record<string, string> = {
     pitchai_mensal: "pitchai_mensal",
@@ -249,11 +251,7 @@ export function canonicalPlanId(plan?: string | null): string | null {
     pitchai_max_yearly: "pitchai_anual",
     max: "pitchai_anual",
   };
-  return (
-    aliases[value] ??
-    PITCHAI_PLANS.find((p) => p.priceId === value)?.priceId ??
-    null
-  );
+  return aliases[value] ?? PITCHAI_PLANS.find((p) => p.priceId === value)?.priceId ?? null;
 }
 
 /**

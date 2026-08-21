@@ -39,6 +39,9 @@ export const Route = createFileRoute("/api/public/tts/speak")({
         if (!guard.ok) {
           return json(guard.status ?? 500, {
             error: guard.status === 429 ? "quota_exceeded" : "invalid_token",
+            // Aditivo: `error` segue igual para a extensão antiga. `reason` diz
+            // o motivo preciso (hoje só "device_mismatch").
+            reason: guard.reason,
             message: guard.message ?? "Acesso negado",
             remaining: 0,
             locked: true,

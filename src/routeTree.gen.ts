@@ -23,6 +23,7 @@ import { Route as ResetPasswordRouteImport } from './routes/reset-password'
 import { Route as TermosRouteImport } from './routes/termos'
 import { Route as ApiHotProductsRouteImport } from './routes/api/hot-products'
 import { Route as CheckoutReturnRouteImport } from './routes/checkout.return'
+import { Route as ApiAccountDeviceBindingRouteImport } from './routes/api/account/device-binding'
 import { Route as ApiAccountEnsureRouteImport } from './routes/api/account/ensure'
 import { Route as ApiAccountSyncTokenRouteImport } from './routes/api/account/sync-token'
 import { Route as ApiAdminCheckRouteImport } from './routes/api/admin/check'
@@ -111,6 +112,11 @@ const ApiHotProductsRoute = ApiHotProductsRouteImport.update({
 const CheckoutReturnRoute = CheckoutReturnRouteImport.update({
   id: '/checkout/return',
   path: '/checkout/return',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiAccountDeviceBindingRoute = ApiAccountDeviceBindingRouteImport.update({
+  id: '/api/account/device-binding',
+  path: '/api/account/device-binding',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ApiAccountEnsureRoute = ApiAccountEnsureRouteImport.update({
@@ -226,6 +232,7 @@ export interface FileRoutesByFullPath {
   '/termos': typeof TermosRoute
   '/api/hot-products': typeof ApiHotProductsRoute
   '/checkout/return': typeof CheckoutReturnRoute
+  '/api/account/device-binding': typeof ApiAccountDeviceBindingRoute
   '/api/account/ensure': typeof ApiAccountEnsureRoute
   '/api/account/sync-token': typeof ApiAccountSyncTokenRoute
   '/api/admin/check': typeof ApiAdminCheckRoute
@@ -261,6 +268,7 @@ export interface FileRoutesByTo {
   '/termos': typeof TermosRoute
   '/api/hot-products': typeof ApiHotProductsRoute
   '/checkout/return': typeof CheckoutReturnRoute
+  '/api/account/device-binding': typeof ApiAccountDeviceBindingRoute
   '/api/account/ensure': typeof ApiAccountEnsureRoute
   '/api/account/sync-token': typeof ApiAccountSyncTokenRoute
   '/api/admin/check': typeof ApiAdminCheckRoute
@@ -297,6 +305,7 @@ export interface FileRoutesById {
   '/termos': typeof TermosRoute
   '/api/hot-products': typeof ApiHotProductsRoute
   '/checkout/return': typeof CheckoutReturnRoute
+  '/api/account/device-binding': typeof ApiAccountDeviceBindingRoute
   '/api/account/ensure': typeof ApiAccountEnsureRoute
   '/api/account/sync-token': typeof ApiAccountSyncTokenRoute
   '/api/admin/check': typeof ApiAdminCheckRoute
@@ -334,6 +343,7 @@ export interface FileRouteTypes {
     | '/termos'
     | '/api/hot-products'
     | '/checkout/return'
+    | '/api/account/device-binding'
     | '/api/account/ensure'
     | '/api/account/sync-token'
     | '/api/admin/check'
@@ -369,6 +379,7 @@ export interface FileRouteTypes {
     | '/termos'
     | '/api/hot-products'
     | '/checkout/return'
+    | '/api/account/device-binding'
     | '/api/account/ensure'
     | '/api/account/sync-token'
     | '/api/admin/check'
@@ -404,6 +415,7 @@ export interface FileRouteTypes {
     | '/termos'
     | '/api/hot-products'
     | '/checkout/return'
+    | '/api/account/device-binding'
     | '/api/account/ensure'
     | '/api/account/sync-token'
     | '/api/admin/check'
@@ -440,6 +452,7 @@ export interface RootRouteChildren {
   TermosRoute: typeof TermosRoute
   ApiHotProductsRoute: typeof ApiHotProductsRoute
   CheckoutReturnRoute: typeof CheckoutReturnRoute
+  ApiAccountDeviceBindingRoute: typeof ApiAccountDeviceBindingRoute
   ApiAccountEnsureRoute: typeof ApiAccountEnsureRoute
   ApiAccountSyncTokenRoute: typeof ApiAccountSyncTokenRoute
   ApiAdminCheckRoute: typeof ApiAdminCheckRoute
@@ -559,6 +572,13 @@ declare module '@tanstack/react-router' {
       path: '/checkout/return'
       fullPath: '/checkout/return'
       preLoaderRoute: typeof CheckoutReturnRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/account/device-binding': {
+      id: '/api/account/device-binding'
+      path: '/api/account/device-binding'
+      fullPath: '/api/account/device-binding'
+      preLoaderRoute: typeof ApiAccountDeviceBindingRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/account/ensure': {
@@ -712,6 +732,7 @@ const rootRouteChildren: RootRouteChildren = {
   TermosRoute: TermosRoute,
   ApiHotProductsRoute: ApiHotProductsRoute,
   CheckoutReturnRoute: CheckoutReturnRoute,
+  ApiAccountDeviceBindingRoute: ApiAccountDeviceBindingRoute,
   ApiAccountEnsureRoute: ApiAccountEnsureRoute,
   ApiAccountSyncTokenRoute: ApiAccountSyncTokenRoute,
   ApiAdminCheckRoute: ApiAdminCheckRoute,

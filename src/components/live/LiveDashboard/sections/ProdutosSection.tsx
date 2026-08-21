@@ -1,5 +1,17 @@
 import { useEffect, useState } from "react";
-import { CheckCircle2, Loader2, Pin, Plus, ShoppingBag, Trash2 } from "lucide-react";
+import {
+  ArrowLeft,
+  CheckCircle2,
+  Eye,
+  ImageIcon,
+  Loader2,
+  Pencil,
+  Pin,
+  Plus,
+  ShoppingBag,
+  Star,
+  Trash2,
+} from "lucide-react";
 import { toast } from "sonner";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
@@ -8,8 +20,7 @@ import { useLiveStore } from "@/stores/useLiveStore";
 import { useShallow } from "zustand/react/shallow";
 import { useSyncedUpdateConfig } from "@/hooks/live/useLiveControls";
 import { useVitrineSync } from "@/hooks/live/useVitrineSync";
-import { pushLiveConfigFields } from "@/lib/live/sync";
-import { mergeVitrineProducts, newProduct, type LiveConfig, type Product } from "@/lib/live/config";
+import { mergeVitrineProducts, newProduct, type Product } from "@/lib/live/config";
 import { useHotProducts, sendHotProduct } from "@/hooks/live/useHotProducts";
 import { ProdutoThumb } from "./ProdutoThumb";
 import { formatarPreco } from "./produto";
@@ -30,36 +41,30 @@ export function ProdutosSection() {
 
   const { syncVitrine } = useVitrineSync({ autoSync: false });
 
-  const [editingId, setEditingId] = useState<string | null>(null);
+  const [detailsId, setDetailsId] = useState<string | null>(null);
+  const [editingDetails, setEditingDetails] = useState(false);
   const [importing, setImporting] = useState(false);
 
-  // Seleciona o primeiro produto para editar se não houver nenhum selecionado
-  useEffect(() => {
-    if (!editingId && config.produtos[0]) {
-      setEditingId(config.produtos[0].id);
-    }
-  }, [config.produtos, editingId]);
+  const detailsProduct = config.produtos.find((p) => p.id === detailsId) ?? null;
 
-  const editing = config.produtos.find((p) => p.id === editingId) ?? null;
+  // Se o produto aberto for removido em outra origem, volta ao catálogo.
+  useEffect(() => {
+    if (detailsId && !detailsProduct) {
+      setDetailsId(null);
+      setEditingDetails(false);
+    }
+  }, [detailsId, detailsProduct]);
+
   const activeProduct = config.produtos.find((p) => p.active) ?? null;
 
-  // A extensão precisa saber do rodízio na hora; o resto do catálogo ela relê
-  // no próximo ciclo da vitrine.
-  const updateAutoFixar = (value: LiveConfig["autoFixar"]) => {
-    updateConfig((c) => ({ ...c, autoFixar: value }));
-    void pushLiveConfigFields({ autoFixar: value }).catch((error) => {
-      console.error("[ProdutosSection] falha ao sincronizar Auto-Fixar:", error);
-      toast.error("Não consegui atualizar o Auto-Fixar na extensão");
-    });
+  const openDetails = (productId: string, edit = false) => {
+    setDetailsId(productId);
+    setEditingDetails(edit);
   };
 
-  const toggleProduto = (produtoId: string) => {
-    const atuais = config.autoFixar.ids ?? [];
-    const ids = atuais.includes(produtoId)
-      ? atuais.filter((id) => id !== produtoId)
-      : [...atuais, produtoId];
-    const names = config.produtos.filter((p) => ids.includes(p.id)).map((p) => p.name);
-    updateAutoFixar({ ...config.autoFixar, ids, names });
+  const closeDetails = () => {
+    setDetailsId(null);
+    setEditingDetails(false);
   };
 
   // Sincroniza com a vitrine e traz os itens para a lista de produtos.
@@ -134,15 +139,15 @@ export function ProdutosSection() {
   const addProduct = () => {
     const p = newProduct();
     updateConfig((c) => ({ ...c, produtos: [...c.produtos, p] }));
-    setEditingId(p.id);
+    openDetails(p.id, true);
   };
 
   // Atualiza campo de produto
   const updateProductField = <K extends keyof Product>(field: K, value: Product[K]) => {
-    if (!editing) return;
+    if (!detailsProduct) return;
     updateConfig((c) => ({
       ...c,
-      produtos: c.produtos.map((p) => (p.id === editing.id ? { ...p, [field]: value } : p)),
+      produtos: c.produtos.map((p) => (p.id === detailsProduct.id ? { ...p, [field]: value } : p)),
     }));
   };
 
@@ -159,14 +164,184 @@ export function ProdutosSection() {
   // Remove produto
   const removeProduct = (productId: string) => {
     updateConfig((c) => ({ ...c, produtos: c.produtos.filter((p) => p.id !== productId) }));
-    if (editingId === productId) {
-      setEditingId(null);
+    if (detailsId === productId) {
+      closeDetails();
     }
   };
 
-  const filtro = config.autoFixar.query.trim().toLowerCase();
-  const visiveis = config.produtos.filter((p) => p.name.toLowerCase().includes(filtro));
-  const selecionados = (config.autoFixar.ids ?? []).length;
+  if (detailsProduct) {
+    const preco = formatarPreco(detailsProduct);
+
+    return (
+      <div className="app-section app-product-detail-page">
+        <div className="app-product-detail-topbar">
+          <button type="button" className="app-product-detail-back" onClick={closeDetails}>
+            <ArrowLeft aria-hidden="true" />
+            Voltar para produtos
+          </button>
+          <div className="app-product-detail-actions">
+            {!detailsProduct.active ? (
+              <button
+                type="button"
+                className="app-btn"
+                onClick={() => setActiveProduct(detailsProduct.id, true)}
+              >
+                <Star aria-hidden="true" /> Tornar principal
+              </button>
+            ) : (
+              <span className="app-tag" data-tone="accent">
+                <Star aria-hidden="true" /> Produto principal
+              </span>
+            )}
+            <button
+              type="button"
+              className={`app-btn${editingDetails ? " app-btn--primary" : ""}`}
+              onClick={() => setEditingDetails((current) => !current)}
+            >
+              {editingDetails ? (
+                <>
+                  <CheckCircle2 aria-hidden="true" /> Concluir edição
+                </>
+              ) : (
+                <>
+                  <Pencil aria-hidden="true" /> Editar produto
+                </>
+              )}
+            </button>
+          </div>
+        </div>
+
+        <div className="app-card app-product-detail-card">
+          <div className="app-product-detail-layout">
+            <div className="app-product-detail-media">
+              <ProdutoThumb produto={detailsProduct} preencher />
+              {detailsProduct.active ? (
+                <span className="app-product-card-badge">
+                  <Star aria-hidden="true" /> Principal
+                </span>
+              ) : null}
+            </div>
+
+            <div className="app-product-detail-content">
+              <div className="app-product-detail-eyebrow">
+                <ShoppingBag aria-hidden="true" /> Detalhes do produto
+              </div>
+              <h2>{detailsProduct.name || "Produto sem nome"}</h2>
+              <div className="app-product-detail-price">{preco ?? "Preço não informado"}</div>
+
+              <div className="app-product-detail-description">
+                <span>Descrição e benefícios</span>
+                <p>
+                  {detailsProduct.description ||
+                    "Este produto ainda não possui uma descrição cadastrada."}
+                </p>
+              </div>
+
+              <div className="app-product-detail-metas" aria-label="Resumo do produto">
+                <div>
+                  <span>Status</span>
+                  <strong>{detailsProduct.active ? "Principal" : "No catálogo"}</strong>
+                </div>
+                <div>
+                  <span>Imagem</span>
+                  <strong>{detailsProduct.imageUrl ? "Cadastrada" : "Sem foto"}</strong>
+                </div>
+                <div>
+                  <span>Uso pela IA</span>
+                  <strong>{detailsProduct.active ? "Ativo" : "Disponível"}</strong>
+                </div>
+              </div>
+
+              <div className="app-product-detail-ai-note">
+                <CheckCircle2 aria-hidden="true" />
+                <p>
+                  <strong>Informações usadas pela IA</strong>
+                  Nome, preço e descrição ajudam a responder dúvidas e criar argumentos de venda.
+                </p>
+              </div>
+            </div>
+          </div>
+
+          {editingDetails ? (
+            <div className="app-product-editor app-product-detail-editor">
+              <div className="app-product-editor-head">
+                <div className="app-product-editor-summary">
+                  <ProdutoThumb produto={detailsProduct} tamanho={64} />
+                  <div>
+                    <span>Edição automática</span>
+                    <h4 title={detailsProduct.name}>{detailsProduct.name || "Produto sem nome"}</h4>
+                    <p>As alterações são salvas enquanto você digita.</p>
+                  </div>
+                </div>
+                <div className="app-product-editor-actions">
+                  <label htmlFor={`produto-principal-${detailsProduct.id}`}>
+                    Produto principal
+                  </label>
+                  <Switch
+                    id={`produto-principal-${detailsProduct.id}`}
+                    checked={detailsProduct.active}
+                    onCheckedChange={(v) => setActiveProduct(detailsProduct.id, v)}
+                  />
+                  <button
+                    type="button"
+                    className="app-btn app-btn--sm app-btn--danger"
+                    onClick={() => removeProduct(detailsProduct.id)}
+                  >
+                    <Trash2 aria-hidden="true" /> Remover
+                  </button>
+                </div>
+              </div>
+
+              <div className="app-product-editor-fields">
+                <div className="app-field">
+                  <label htmlFor="produto-nome">Nome</label>
+                  <Input
+                    id="produto-nome"
+                    className="app-input"
+                    value={detailsProduct.name}
+                    onChange={(e) => updateProductField("name", e.target.value)}
+                  />
+                </div>
+                <div className="app-field">
+                  <label htmlFor="produto-preco">Preço</label>
+                  <Input
+                    id="produto-preco"
+                    className="app-input"
+                    value={detailsProduct.price}
+                    onChange={(e) => updateProductField("price", e.target.value)}
+                    placeholder="R$ 0,00"
+                  />
+                </div>
+                <div className="app-field app-product-editor-wide">
+                  <label htmlFor="produto-imagem">
+                    <ImageIcon aria-hidden="true" /> URL da foto
+                  </label>
+                  <Input
+                    id="produto-imagem"
+                    className="app-input"
+                    value={detailsProduct.imageUrl ?? ""}
+                    onChange={(e) => updateProductField("imageUrl", e.target.value)}
+                    placeholder="https://..."
+                  />
+                </div>
+                <div className="app-field app-product-editor-wide">
+                  <label htmlFor="produto-desc">Descrição / benefícios</label>
+                  <Textarea
+                    id="produto-desc"
+                    className="app-input"
+                    value={detailsProduct.description}
+                    onChange={(e) => updateProductField("description", e.target.value)}
+                    rows={5}
+                    placeholder="A IA usa este texto para responder perguntas."
+                  />
+                </div>
+              </div>
+            </div>
+          ) : null}
+        </div>
+      </div>
+    );
+  }
 
   return (
     <>
@@ -178,20 +353,23 @@ export function ProdutosSection() {
           </p>
         </div>
 
-        <div className="app-card">
-          <div className="app-card-head">
+        <div className="app-card app-products-panel">
+          <div className="app-products-head">
             <div>
-              <h3 className="app-card-title">Seus produtos</h3>
+              <div className="app-products-title-row">
+                <h3 className="app-card-title">Seus produtos</h3>
+                <span className="app-tag">{config.produtos.length}</span>
+              </div>
               <p className="app-card-desc">
                 {vitrineStatus === "ok" && vitrineAt
                   ? `Vitrine do TikTok sincronizada às ${new Date(vitrineAt).toLocaleTimeString("pt-BR")}.`
                   : "Importe a vitrine do TikTok pela extensão, ou cadastre manualmente."}
               </p>
             </div>
-            <div className="app-toolbar" style={{ marginBottom: 0 }}>
+            <div className="app-products-actions">
               <button
                 type="button"
-                className="app-btn"
+                className="app-btn app-btn--primary"
                 onClick={() => void handleImportVitrine()}
                 disabled={importing}
               >
@@ -206,160 +384,112 @@ export function ProdutosSection() {
                 <Plus aria-hidden="true" />
                 Colar catálogo
               </button>
+              <button type="button" className="app-btn" onClick={addProduct}>
+                <Plus aria-hidden="true" />
+                Novo produto
+              </button>
             </div>
           </div>
 
-          {/* PRODUTO EM DESTAQUE: o escolhido da IA sempre visível —
-              é ele que a live inteira vende. */}
+          {/* O principal fica destacado sem competir com os cards do catálogo. */}
           {activeProduct ? (
-            <div
-              className="app-card app-card--flat"
-              style={{
-                marginTop: 16,
-                display: "flex",
-                alignItems: "center",
-                gap: 16,
-                borderColor: "var(--app-accent, #7c3aed)",
-              }}
-            >
-              <ProdutoThumb produto={activeProduct} tamanho={64} />
-              <div style={{ minWidth: 0, flex: 1 }}>
-                <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 8 }}>
-                  <span className="app-tag" data-tone="accent">
-                    Produto principal
-                  </span>
-                  {formatarPreco(activeProduct) ? (
-                    <span className="app-card-title" style={{ fontSize: 14 }}>
-                      {formatarPreco(activeProduct)}
-                    </span>
-                  ) : null}
-                </div>
-                <p
-                  className="app-card-title"
-                  style={{ marginTop: 4, overflowWrap: "anywhere" }}
-                  title={activeProduct.name}
-                >
-                  {activeProduct.name}
-                </p>
-                <p
-                  className="app-card-desc"
-                  style={{
-                    display: "-webkit-box",
-                    WebkitLineClamp: 2,
-                    WebkitBoxOrient: "vertical",
-                    overflow: "hidden",
-                  }}
-                >
-                  {activeProduct.description || "Sem descrição — a IA usa só nome e preço."}
-                </p>
+            <div className="app-product-featured">
+              <div className="app-product-featured-image">
+                <ProdutoThumb produto={activeProduct} preencher />
               </div>
-              <button
-                type="button"
-                className="app-btn app-btn--sm"
-                onClick={() => setEditingId(activeProduct.id)}
-              >
-                Editar
+              <div className="app-product-featured-body">
+                <span className="app-product-kicker">
+                  <Star aria-hidden="true" /> Produto principal
+                </span>
+                <h4 title={activeProduct.name}>{activeProduct.name}</h4>
+                <p>{activeProduct.description || "Sem descrição — a IA usa nome e preço."}</p>
+              </div>
+              <div className="app-product-featured-side">
+                <strong>{formatarPreco(activeProduct) ?? "Sem preço"}</strong>
+                <div className="app-product-featured-actions">
+                  <button
+                    type="button"
+                    className="app-btn app-btn--sm"
+                    onClick={() => openDetails(activeProduct.id)}
+                  >
+                    <Eye aria-hidden="true" /> Detalhes
+                  </button>
+                  <button
+                    type="button"
+                    className="app-btn app-btn--sm"
+                    onClick={() => openDetails(activeProduct.id, true)}
+                  >
+                    <Pencil aria-hidden="true" /> Editar
+                  </button>
+                </div>
+              </div>
+            </div>
+          ) : (
+            <div className="app-product-no-featured">
+              <Star aria-hidden="true" />
+              <span>Escolha um produto principal para a IA começar a vender.</span>
+            </div>
+          )}
+
+          {config.produtos.length === 0 ? (
+            <div className="app-products-empty">
+              <span>
+                <ShoppingBag aria-hidden="true" />
+              </span>
+              <h4>Seu catálogo está vazio</h4>
+              <p>Importe sua vitrine do TikTok ou cadastre o primeiro produto manualmente.</p>
+              <button type="button" className="app-btn app-btn--primary" onClick={addProduct}>
+                <Plus aria-hidden="true" /> Cadastrar produto
               </button>
             </div>
           ) : (
-            <p className="app-field-hint" style={{ marginTop: 16 }}>
-              Nenhum produto ativo — escolha um na lista abaixo para a IA começar a vender.
-            </p>
-          )}
-
-          {/* minmax(0,1fr) + min-w-0 nas colunas: o mínimo padrão do grid é o
-              conteúdo, então um nome longo sem quebra (vindo da vitrine) empurra
-              a coluna do editor para fora do cartão. */}
-          <div className="app-grid app-grid--2" style={{ marginTop: 16 }}>
-            {/* Lista de produtos */}
-            <div className="min-w-0">
-              <div className="app-card-head" style={{ marginBottom: 10 }}>
-                <span className="app-stat-label" style={{ margin: 0 }}>
-                  Lista
-                </span>
-                <button type="button" className="app-btn app-btn--sm" onClick={addProduct}>
-                  <Plus aria-hidden="true" />
-                  Novo
-                </button>
-              </div>
-
-              <div style={{ display: "grid", gap: 6 }}>
-                {config.produtos.length === 0 && (
-                  <p className="app-field-hint">
-                    Nenhum produto. Use "Importar vitrine" ou clique em "Novo".
-                  </p>
-                )}
-                {config.produtos.map((p) => {
-                  const preco = formatarPreco(p);
-                  const emEdicao = editingId === p.id;
-                  return (
-                    <div
-                      key={p.id}
-                      className={`app-card app-card--flat${emEdicao ? " app-produto--editando" : ""}`}
-                      style={{
-                        display: "flex",
-                        alignItems: "center",
-                        gap: 8,
-                        padding: "8px 10px",
-                        cursor: "pointer",
-                        minWidth: 0,
-                        maxWidth: "100%",
-                        overflow: "hidden",
-                        borderColor: emEdicao ? "var(--app-accent, #7c3aed)" : undefined,
-                      }}
-                      onClick={() => setEditingId(p.id)}
+            <div className="app-products-grid" aria-label="Catálogo de produtos">
+              {config.produtos.map((p) => {
+                const preco = formatarPreco(p);
+                return (
+                  <article key={p.id} className="app-product-card" data-active={p.active}>
+                    <button
+                      type="button"
+                      className="app-product-card-media"
+                      onClick={() => openDetails(p.id)}
+                      aria-label={`Ver detalhes de ${p.name}`}
                     >
-                      <ProdutoThumb produto={p} tamanho={32} />
-                      <span style={{ minWidth: 0, flex: 1 }}>
-                        <span
-                          style={{
-                            display: "block",
-                            overflow: "hidden",
-                            textOverflow: "ellipsis",
-                            whiteSpace: "nowrap",
-                            fontWeight: 500,
-                          }}
-                          title={p.name}
-                        >
-                          {p.name}
-                        </span>
-                        <span
-                          className="app-card-desc"
-                          style={{
-                            display: "block",
-                            overflow: "hidden",
-                            textOverflow: "ellipsis",
-                            whiteSpace: "nowrap",
-                          }}
-                        >
-                          {preco ?? "sem preço"}
-                        </span>
-                      </span>
+                      <ProdutoThumb produto={p} preencher />
                       {p.active ? (
-                        <span className="app-tag" data-tone="accent" style={{ flexShrink: 0 }}>
-                          Principal
+                        <span className="app-product-card-badge">
+                          <Star aria-hidden="true" /> Principal
                         </span>
-                      ) : (
+                      ) : null}
+                    </button>
+                    <div className="app-product-card-body">
+                      <h4 title={p.name}>{p.name || "Produto sem nome"}</h4>
+                      <strong>{preco ?? "Sem preço"}</strong>
+                      <p>{p.description || "Sem descrição cadastrada."}</p>
+                    </div>
+                    <div className="app-product-card-actions">
+                      <button
+                        type="button"
+                        className="app-btn app-btn--sm"
+                        onClick={() => openDetails(p.id)}
+                      >
+                        <Eye aria-hidden="true" /> Detalhes
+                      </button>
+                      {!p.active ? (
                         <button
                           type="button"
-                          className="app-btn app-btn--sm"
-                          style={{ flexShrink: 0 }}
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setActiveProduct(p.id, true);
-                          }}
+                          className="app-btn app-btn--sm app-product-main-action"
+                          onClick={() => setActiveProduct(p.id, true)}
                         >
-                          Tornar principal
+                          <Star aria-hidden="true" /> Principal
                         </button>
-                      )}
-                      {isMaster && (
+                      ) : null}
+                      {isMaster ? (
                         <button
                           type="button"
                           className="app-btn app-btn--sm"
-                          style={{ flexShrink: 0 }}
                           title="Enviar para Produtos Quentes"
-                          onClick={async (e) => {
-                            e.stopPropagation();
+                          aria-label={`Enviar ${p.name} para Produtos Quentes`}
+                          onClick={async () => {
                             const ok = await sendHotProduct({
                               id: p.id,
                               name: p.name,
@@ -374,220 +504,14 @@ export function ProdutosSection() {
                           }}
                         >
                           <Pin aria-hidden="true" />
-                          Quente
                         </button>
-                      )}
+                      ) : null}
                     </div>
-                  );
-                })}
-              </div>
+                  </article>
+                );
+              })}
             </div>
-
-            {/* Editor de produto */}
-            <div className="min-w-0">
-              {editing ? (
-                <div style={{ display: "grid", gap: 12 }}>
-                  <div
-                    className="app-card app-card--flat"
-                    style={{ display: "flex", alignItems: "center", gap: 12, padding: 12 }}
-                  >
-                    <ProdutoThumb produto={editing} tamanho={56} />
-                    <div style={{ minWidth: 0, flex: 1 }}>
-                      <p
-                        className="app-card-title"
-                        style={{
-                          overflow: "hidden",
-                          textOverflow: "ellipsis",
-                          whiteSpace: "nowrap",
-                        }}
-                        title={editing.name}
-                      >
-                        {editing.name}
-                      </p>
-                      <p className="app-card-desc">{formatarPreco(editing) ?? "sem preço"}</p>
-                    </div>
-                    <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                      <span className="app-stat-label" style={{ margin: 0 }}>
-                        Principal
-                      </span>
-                      <Switch
-                        checked={editing.active}
-                        onCheckedChange={(v) => setActiveProduct(editing.id, v)}
-                      />
-                      <button
-                        type="button"
-                        className="app-btn app-btn--sm app-btn--danger"
-                        title="Remover produto"
-                        onClick={() => {
-                          removeProduct(editing.id);
-                          setEditingId(null);
-                        }}
-                      >
-                        <Trash2 aria-hidden="true" />
-                      </button>
-                    </div>
-                  </div>
-
-                  <div className="app-field">
-                    <label htmlFor="produto-nome">Nome</label>
-                    <Input
-                      id="produto-nome"
-                      className="app-input"
-                      value={editing.name}
-                      onChange={(e) => updateProductField("name", e.target.value)}
-                    />
-                  </div>
-                  <div className="app-field">
-                    <label htmlFor="produto-preco">Preço</label>
-                    <Input
-                      id="produto-preco"
-                      className="app-input"
-                      value={editing.price}
-                      onChange={(e) => updateProductField("price", e.target.value)}
-                      placeholder="R$ 0,00"
-                    />
-                  </div>
-                  <div className="app-field">
-                    <label htmlFor="produto-desc">Descrição / benefícios</label>
-                    <Textarea
-                      id="produto-desc"
-                      className="app-input"
-                      value={editing.description}
-                      onChange={(e) => updateProductField("description", e.target.value)}
-                      rows={4}
-                      placeholder="A IA usa este texto para responder perguntas."
-                    />
-                  </div>
-                </div>
-              ) : (
-                <p className="app-field-hint">Selecione ou crie um produto para editar.</p>
-              )}
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <div className="app-section">
-        <div className="app-section-head">
-          <h2 className="app-section-title">Rodízio automático</h2>
-        </div>
-
-        <div className="app-card">
-          <div className="app-card-head">
-            <div>
-              <h3
-                className="app-card-title"
-                style={{ display: "flex", alignItems: "center", gap: 8 }}
-              >
-                <span className="app-stat-label" style={{ margin: 0 }}>
-                  <Pin aria-hidden="true" />
-                </span>
-                Auto-fixar produto
-              </h3>
-              <p className="app-card-desc">
-                A extensão troca o produto fixado na live sozinha, dentro do intervalo escolhido.
-              </p>
-            </div>
-            <Switch
-              checked={config.autoFixar.enabled}
-              onCheckedChange={(enabled) => updateAutoFixar({ ...config.autoFixar, enabled })}
-            />
-          </div>
-
-          <div className="app-grid app-grid--3">
-            <div className="app-field">
-              <label htmlFor="autofixar-filtro">Filtrar a lista</label>
-              <input
-                id="autofixar-filtro"
-                className="app-input"
-                placeholder="Nome do produto"
-                value={config.autoFixar.query}
-                onChange={(e) => updateAutoFixar({ ...config.autoFixar, query: e.target.value })}
-              />
-            </div>
-            <div className="app-field">
-              <label htmlFor="autofixar-min">Re-fixa a cada, no mínimo (s)</label>
-              <input
-                id="autofixar-min"
-                className="app-input"
-                type="number"
-                min={5}
-                value={config.autoFixar.minSec}
-                onChange={(e) =>
-                  updateAutoFixar({
-                    ...config.autoFixar,
-                    minSec: Math.max(5, Number(e.target.value) || 20),
-                  })
-                }
-              />
-            </div>
-            <div className="app-field">
-              <label htmlFor="autofixar-max">E no máximo (s)</label>
-              <input
-                id="autofixar-max"
-                className="app-input"
-                type="number"
-                min={5}
-                value={config.autoFixar.maxSec}
-                onChange={(e) =>
-                  updateAutoFixar({
-                    ...config.autoFixar,
-                    maxSec: Math.max(5, Number(e.target.value) || 60),
-                  })
-                }
-              />
-            </div>
-          </div>
-
-          <div className="app-card app-card--flat" style={{ marginTop: 16 }}>
-            <div className="app-card-head" style={{ marginBottom: 10 }}>
-              <h4 className="app-section-title">Produtos no rodízio</h4>
-              <span className="app-tag" data-tone={selecionados > 0 ? "accent" : undefined}>
-                {selecionados} selecionado{selecionados === 1 ? "" : "s"}
-              </span>
-            </div>
-
-            {config.produtos.length === 0 ? (
-              <p className="app-field-hint">
-                Sincronize a vitrine acima para escolher os produtos que serão fixados.
-              </p>
-            ) : visiveis.length === 0 ? (
-              <p className="app-field-hint">Nenhum produto encontrado com esse filtro.</p>
-            ) : (
-              <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
-                {visiveis.map((produto) => {
-                  const marcado = (config.autoFixar.ids ?? []).includes(produto.id);
-                  return (
-                    <button
-                      key={produto.id}
-                      type="button"
-                      className={`app-btn app-btn--sm${marcado ? " app-btn--primary" : ""}`}
-                      onClick={() => toggleProduto(produto.id)}
-                      title={produto.name}
-                      // `.app-btn` é nowrap e sem teto de largura: um nome longo
-                      // vira um botão gigante que estoura o cartão.
-                      style={{ maxWidth: "min(280px, 100%)" }}
-                    >
-                      {marcado ? <CheckCircle2 aria-hidden="true" /> : null}
-                      {/* text-overflow não pega em texto solto de flex container:
-                          sem o span o nome longo aparece cortado dos dois lados. */}
-                      <span
-                        style={{
-                          minWidth: 0,
-                          overflow: "hidden",
-                          textOverflow: "ellipsis",
-                          whiteSpace: "nowrap",
-                        }}
-                      >
-                        {produto.name}
-                        {formatarPreco(produto) ? ` · ${formatarPreco(produto)}` : ""}
-                      </span>
-                    </button>
-                  );
-                })}
-              </div>
-            )}
-          </div>
+          )}
         </div>
       </div>
     </>

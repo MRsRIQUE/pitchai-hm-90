@@ -25,6 +25,95 @@
       });
     } catch {}
   }
+  // Estado do vínculo publicado por quem acabou de falar com o verify.
+  const DEVICE_STATUS_KEY = "pitchai.device.status";
+
+  function loadDeviceStatus() {
+    return new Promise((resolve) => {
+      try {
+        chrome.storage.local.get([DEVICE_STATUS_KEY], (r) =>
+          resolve(r?.[DEVICE_STATUS_KEY] || null),
+        );
+      } catch {
+        resolve(null);
+      }
+    });
+  }
+
+  /** "19/08 às 14h32" — o vendedor precisa da hora exata, não de um "amanhã". */
+  function momentoBR(iso) {
+    if (!iso) return "";
+    const at = new Date(iso);
+    if (Number.isNaN(at.getTime())) return "";
+    return at
+      .toLocaleString("pt-BR", {
+        day: "2-digit",
+        month: "2-digit",
+        hour: "2-digit",
+        minute: "2-digit",
+      })
+      .replace(", ", " às ")
+      .replace(":", "h");
+  }
+
+  function renderDeviceBinding(st) {
+    const stateEl = document.getElementById("pnl-device-state");
+    const detailEl = document.getElementById("pnl-device-detail");
+    const btn = document.getElementById("pnl-device-action");
+    if (!stateEl || !detailEl || !btn) return;
+
+    if (!st) {
+      stateEl.textContent = "Verificando o vínculo...";
+      detailEl.textContent = "Assim que a licença for confirmada, o estado aparece aqui.";
+      btn.hidden = true;
+      return;
+    }
+
+    if (st.vinculo === "esta") {
+      // "observar" e "off" não barram ninguém. Dizer só "vinculado" prometeria
+      // uma trava que não está valendo.
+      const so =
+        st.modo && st.modo !== "exigir" ? ` (modo ${st.modo}: ninguém é barrado ainda)` : "";
+      stateEl.textContent = `✅ Vinculado a este navegador${so}`;
+      const desde = momentoBR(st.boundAt);
+      detailEl.textContent = desde
+        ? `A licença está ativa aqui desde ${desde}. Para usar em outro navegador, desvincule na sua conta — uma vez por dia.`
+        : "A licença está ativa neste navegador. Para usar em outro, desvincule na sua conta — uma vez por dia.";
+      btn.hidden = false;
+      btn.classList.remove("danger");
+      btn.textContent = "Desvincular ↗";
+      return;
+    }
+
+    if (st.vinculo === "outra") {
+      stateEl.textContent = "⛔ Vinculado a outro navegador";
+      // A mensagem do servidor já traz a hora da próxima liberação e trata o
+      // caso da reinstalação; texto nosso aqui inventaria data.
+      detailEl.textContent = st.message || "Esta licença já está ativa em outro navegador.";
+      btn.hidden = false;
+      btn.classList.add("danger");
+      btn.textContent = st.canReleaseAt
+        ? `Liberar em ${momentoBR(st.canReleaseAt)}`
+        : "Desvincular navegador ↗";
+      return;
+    }
+
+    if (st.vinculo === "desconhecido") {
+      // A licença não foi confirmada. Afirmar "nenhum navegador vinculado" seria
+      // inventar: o servidor não respondeu sobre o vínculo.
+      stateEl.textContent = "Vínculo não confirmado";
+      detailEl.textContent =
+        st.motivoTexto || "Não foi possível determinar o vínculo desta instalação.";
+      btn.hidden = true;
+      return;
+    }
+
+    stateEl.textContent = "Nenhum navegador vinculado";
+    detailEl.textContent =
+      "O primeiro navegador que abrir a extensão com o seu código passa a ser o vinculado.";
+    btn.hidden = true;
+  }
+
   function loadTokenStatus() {
     return new Promise((resolve) => {
       try {
@@ -35,8 +124,79 @@
     });
   }
 
+  // ---------- Identidade da instalação (1 extensão por conta) ----------
+  // O painel LÊ este id, NUNCA o cria. Desde a v0.19 o único criador é o
+  // service worker; isso também funciona antes de abrir uma página do TikTok.
+  const INSTALL_ID_KEY = "pitchai_install_id";
+  let installIdCache = "";
+
+  async function readInstallId() {
+    // O achado fica em cache; a AUSÊNCIA não. O painel costuma abrir antes de o
+    // content script ter criado o id, e guardar o vazio o deixaria sem cabeçalho
+    // pelo resto da sessão.
+    if (installIdCache) return installIdCache;
+    try {
+      const resposta = await chrome.runtime.sendMessage({ type: "PITCHAI_GET_INSTALL_ID" });
+      const id = String(resposta?.installId || "").toLowerCase();
+      if (SYNC_UUID_RE.test(id)) {
+        installIdCache = id;
+        return installIdCache;
+      }
+    } catch {}
+    const stored = await new Promise((resolve) => {
+      try {
+        chrome.storage.local.get([INSTALL_ID_KEY], (res) => resolve(res?.[INSTALL_ID_KEY]));
+      } catch {
+        resolve(null);
+      }
+    });
+    if (typeof stored === "string" && SYNC_UUID_RE.test(stored)) {
+      installIdCache = stored.toLowerCase();
+    }
+    return installIdCache;
+  }
+
+  async function installHeaders() {
+    try {
+      const id = await readInstallId();
+      return id ? { "X-PitchAI-Install": id } : {};
+    } catch {
+      return {};
+    }
+  }
+
+  async function publishDeviceBindingFromVerify(data) {
+    const installId = await readInstallId();
+    const conhecido = data?.deviceKnown === true;
+    const mismatch = data?.reason === "device_mismatch";
+    const vinculo = mismatch
+      ? "outra"
+      : conhecido && data?.deviceIsThis === true
+        ? "esta"
+        : conhecido
+          ? "nenhuma"
+          : "desconhecido";
+    try {
+      await chrome.storage.local.set({
+        [DEVICE_STATUS_KEY]: {
+          installId,
+          vinculo,
+          motivo: data?.reason || "",
+          motivoTexto: data?.message || "O servidor não informou o vínculo desta instalação.",
+          modo: data?.deviceBindingMode || "",
+          boundAt: data?.boundAt || null,
+          canReleaseAt: data?.canReleaseAt || null,
+          message: mismatch ? data?.message || "" : "",
+          at: Date.now(),
+        },
+      });
+    } catch {}
+  }
+
   async function signRequest(token, endpoint) {
-    if (!token) return {};
+    // Acompanha a chamada, mas fica FORA da assinatura.
+    const install = await installHeaders();
+    if (!token) return install;
     const ts = Date.now().toString();
     const nonce = Math.random().toString(36).substring(2, 10);
     try {
@@ -57,6 +217,7 @@
         .map((b) => b.toString(16).padStart(2, "0"))
         .join("");
       return {
+        ...install,
         "X-PitchAI-Signature": sigHex,
         "X-PitchAI-Timestamp": ts,
         "X-PitchAI-Nonce": nonce,
@@ -64,7 +225,7 @@
         Authorization: `Bearer ${token}`,
       };
     } catch {
-      return { Authorization: `Bearer ${token}` };
+      return { ...install, Authorization: `Bearer ${token}` };
     }
   }
 
@@ -1659,6 +1820,7 @@
           body: JSON.stringify({ token: t }),
         });
         const data = await res.json().catch(() => ({}));
+        await publishDeviceBindingFromVerify(data);
         if (res.ok && data.valid && !data.locked && !data.aiLocked) {
           const tokenBalance = Number(data.tokenRemaining ?? 0).toLocaleString("pt-BR");
           credsEl.textContent = `Conectado · Plano ${(data.plan || "free").toUpperCase()} · ${tokenBalance} tokens disponíveis`;
@@ -1721,7 +1883,7 @@
       try {
         const r = await fetch(`${API_BASE}/api/public/live/config`, {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: { "Content-Type": "application/json", ...(await installHeaders()) },
           body: JSON.stringify({ action: "pull", token: cfg.syncToken }),
         });
         const data = await r.json();
@@ -1742,7 +1904,7 @@
         const { syncToken, ...toSend } = cfg;
         const r = await fetch(`${API_BASE}/api/public/live/config`, {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: { "Content-Type": "application/json", ...(await installHeaders()) },
           body: JSON.stringify({ action: "push", token: cfg.syncToken, config: toSend }),
         });
         const data = await r.json();
@@ -1823,6 +1985,26 @@
     (async () => {
       renderTokenMeter(await loadTokenStatus());
     })();
+
+    // Vínculo do navegador: mesmo caminho do medidor — o content.js publica, o
+    // painel reflete. O painel não pergunta ao servidor por conta própria porque
+    // a rota de conta usa cookie do site, que este iframe não tem.
+    try {
+      chrome.storage.onChanged.addListener((changes) => {
+        if (changes[DEVICE_STATUS_KEY]) renderDeviceBinding(changes[DEVICE_STATUS_KEY].newValue);
+      });
+    } catch {}
+
+    (async () => {
+      renderDeviceBinding(await loadDeviceStatus());
+    })();
+
+    // Desvincular acontece na tela de Conta, com login: o painel não pode
+    // desvincular sozinho, senão bastaria abrir a extensão para roubar o vínculo
+    // de outra pessoa que tenha o código.
+    document.getElementById("pnl-device-action")?.addEventListener("click", () => {
+      window.open(new URL("/app?desvincular=1", API_BASE).href, "_blank");
+    });
 
     // Primeiro uso: animação em tela cheia e tutorial navegável.
     const ONBOARD_KEY = "pitchai.onboarded.v2";

@@ -17,7 +17,7 @@ export function corsHeaders(request: Request, methods = "POST, OPTIONS") {
     "Access-Control-Allow-Origin": allowed ? origin : origin ? "null" : "*",
     "Access-Control-Allow-Methods": methods,
     "Access-Control-Allow-Headers":
-      "Content-Type, Authorization, X-PitchAI-Signature, X-PitchAI-Timestamp, X-PitchAI-Nonce, X-PitchAI-Token",
+      "Content-Type, Authorization, X-PitchAI-Signature, X-PitchAI-Timestamp, X-PitchAI-Nonce, X-PitchAI-Token, X-PitchAI-Install",
     Vary: "Origin",
   };
 }

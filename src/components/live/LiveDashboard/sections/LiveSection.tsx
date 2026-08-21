@@ -5,6 +5,7 @@ import { useShallow } from "zustand/react/shallow";
 import { useSyncedUpdateConfig } from "@/hooks/live/useLiveControls";
 import { LiveStudioCard } from "../../LiveStudioCard";
 import { DemoModeCard } from "../../DemoModeCard";
+import { RodizioAutomatico } from "./RodizioAutomatico";
 
 /**
  * A seção da transmissão em si.
@@ -27,6 +28,8 @@ export function LiveSection({ ativa, simples }: { ativa: boolean; simples: boole
       <div className="app-section">
         <LiveStudioCard compact={simples} />
       </div>
+
+      <RodizioAutomatico />
 
       <div className="app-section">
         <div className="app-card">
