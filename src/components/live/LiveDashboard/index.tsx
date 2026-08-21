@@ -157,6 +157,8 @@ function LiveDashboardContent() {
 
   const [active, setActive] = useState<SectionId>("inicio");
   const [quickStartOpen, setQuickStartOpen] = useState(false);
+  const [wizardOpen, setWizardOpen] = useState(false);
+  const [hidratado, setHidratado] = useState(false);
   const [audioOutputs, setAudioOutputs] = useState<MediaDeviceInfo[]>([]);
   const [audioPermGranted, setAudioPermGranted] = useState(false);
   const [pttActive, setPttActive] = useState(false);
@@ -191,7 +193,18 @@ function LiveDashboardContent() {
       ultimoSerial.current = JSON.stringify(cfg);
       updateConfigRaw(() => cfg);
     }
+    setHidratado(true);
   }, [updateConfigRaw]);
+
+  /*
+   * A configuração inicial abre sozinha uma vez só, no primeiro acesso.
+   * Esperar a hidratação não é detalhe: antes dela `config` é o padrão, com
+   * `onboardingDone: false`, e o pop-up piscaria na cara de quem já configurou
+   * tudo há semanas. Quem fecha ou conclui grava a marca e nunca mais vê.
+   */
+  useEffect(() => {
+    if (hidratado && !config.onboardingDone) setWizardOpen(true);
+  }, [hidratado, config.onboardingDone]);
 
   // A extensão manda o vendedor para /app?desvincular=1 quando recusa o
   // navegador. Sem abrir a seção Conta aqui, ele cai no Início e não vê nada: o
@@ -343,6 +356,17 @@ function LiveDashboardContent() {
         syncToken={syncToken ?? undefined}
       />
 
+      <SetupWizard
+        open={wizardOpen}
+        onOpenChange={setWizardOpen}
+        cfg={config}
+        setCfg={updateConfig}
+        importing={loadingState.vitrine}
+        onImportVitrine={() => void importVitrine()}
+        onFinish={() => updateConfig((c) => ({ ...c, onboardingDone: true }))}
+        syncToken={syncToken ?? undefined}
+      />
+
       <AppShell
         sections={sections}
         active={active}
@@ -402,25 +426,13 @@ function LiveDashboardContent() {
           </div>
         }
       >
-        {active === "inicio" && !config.onboardingDone ? (
-          <div className="app-section">
-            <SetupWizard
-              cfg={config}
-              setCfg={updateConfig}
-              importing={loadingState.vitrine}
-              onImportVitrine={() => void importVitrine()}
-              onFinish={() => updateConfig((c) => ({ ...c, onboardingDone: true }))}
-              syncToken={syncToken ?? undefined}
-            />
-          </div>
-        ) : null}
-
         {active === "inicio" ? (
           <InicioSection
             extensaoInstalada={extensaoInstalada}
             syncToken={syncToken}
             vendas={vendas}
             onSelect={setActive}
+            onAbrirConfiguracao={() => setWizardOpen(true)}
           />
         ) : null}
 
