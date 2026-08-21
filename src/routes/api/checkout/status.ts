@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { verifyFirebaseIdToken } from "@/lib/firebase.server";
 import { throttle } from "@/lib/live/rate-limit.server";
-import { createStripeClient } from "@/lib/stripe.server";
+import { createStripeClient, getStripeEnvironment } from "@/lib/stripe.server";
 
 // Verificação pós-checkout: a página de retorno só confia no status real da
 // Checkout Session no Stripe, nunca na presença do session_id na URL.
@@ -35,9 +35,7 @@ export const Route = createFileRoute("/api/checkout/status")({
         }
 
         try {
-          const stripeEnv = process.env.STRIPE_SECRET_KEY?.startsWith("sk_live_")
-            ? ("live" as const)
-            : ("sandbox" as const);
+          const stripeEnv = getStripeEnvironment();
           const stripe = createStripeClient(stripeEnv);
           const session = await stripe.checkout.sessions.retrieve(sessionId);
           // Só devolve o status ao dono da sessão: o session_id não é segredo

@@ -1,14 +1,13 @@
 import { loadStripe, type Stripe } from "@stripe/stripe-js";
 
-type StripeEnv = "sandbox" | "live";
+type StripeEnv = "live";
 
 const clientToken = (import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY ||
   import.meta.env.VITE_PAYMENTS_CLIENT_TOKEN) as string | undefined;
 
 function paymentsEnvironment(): StripeEnv {
-  if (clientToken?.startsWith("pk_test_")) return "sandbox";
   if (clientToken?.startsWith("pk_live_")) return "live";
-  throw new Error("Pagamentos Stripe ainda não estão configurados para este build.");
+  throw new Error("Pagamentos exigem uma chave publicável live da Stripe.");
 }
 
 let stripePromise: Promise<Stripe | null> | null = null;

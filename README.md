@@ -29,7 +29,7 @@ Scripts principais: `npm run build`, `npm run lint`, `npm run test:e2e`, `npm ru
 - Firestore: default deny; escritas sensíveis (assinatura, uso, cotas) exclusivas do backend; ver `firestore.rules` e `security_spec.md`
 - Endpoints de IA: autenticação por ID token Firebase ou sync token + HMAC (timestamp + nonce anti-replay), cotas diárias/mensais por plano (`src/lib/live/api-auth.server.ts`)
 - Em dev, o HMAC pode ser desativado explicitamente com `PITCHAI_SKIP_HMAC=1` (nunca em produção)
-- Webhook Stripe: assinatura verificada manualmente (HMAC-SHA256, tolerância de 5 min); ambiente inferido da `STRIPE_SECRET_KEY`
+- Webhook Stripe: assinatura verificada manualmente (HMAC-SHA256, tolerância de 5 min); somente chaves live são aceitas
 
 ## Estrutura
 

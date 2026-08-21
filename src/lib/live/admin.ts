@@ -11,7 +11,7 @@ import {
 } from "@/lib/firebase.server";
 import { PITCHAI_PLANS } from "@/lib/live/plans";
 import { DEFAULT_PLAN_QUOTAS, PLAN_QUOTA_SCHEMA_VERSION, type PlanQuota } from "@/lib/live/quotas";
-import { createStripeClient, type StripeEnv } from "@/lib/stripe.server";
+import { createStripeClient, getStripeEnvironment, type StripeEnv } from "@/lib/stripe.server";
 import { AdminError } from "@/lib/admin/errors";
 import { fsDeleteMany } from "@/lib/admin/firestore";
 import { normalizeReferralCode } from "@/lib/referrals.shared";
@@ -503,7 +503,7 @@ export async function fetchPlans(): Promise<Plan[]> {
 }
 
 function stripeEnvironment(): StripeEnv {
-  return process.env.STRIPE_SECRET_KEY?.startsWith("sk_live_") ? "live" : "sandbox";
+  return getStripeEnvironment();
 }
 
 function monthlyRecurringCents(

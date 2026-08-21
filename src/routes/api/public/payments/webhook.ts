@@ -1,6 +1,11 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { z } from "zod";
-import { createStripeClient, type StripeEnv, verifyWebhook } from "@/lib/stripe.server";
+import {
+  createStripeClient,
+  getStripeEnvironment,
+  type StripeEnv,
+  verifyWebhook,
+} from "@/lib/stripe.server";
 import { entitlementPlanId, findPitchaiPlan } from "@/lib/live/plans";
 import {
   fsCreateIfAbsent,
@@ -438,10 +443,8 @@ export const Route = createFileRoute("/api/public/payments/webhook")({
         // O ambiente é SEMPRE inferido da chave configurada. Nunca aceitamos
         // um parâmetro de query: ele permitia aplicar eventos de um ambiente
         // no contexto de outro.
-        const stripeEnv: StripeEnv = process.env.STRIPE_SECRET_KEY?.startsWith("sk_live_")
-          ? "live"
-          : "sandbox";
         try {
+          const stripeEnv = getStripeEnvironment();
           await handleWebhook(request, stripeEnv);
           return Response.json({ received: true });
         } catch (e) {

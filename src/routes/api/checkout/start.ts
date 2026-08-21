@@ -2,7 +2,11 @@ import { createFileRoute } from "@tanstack/react-router";
 import { fsCreate, fsGet, fsSet, verifyFirebaseIdToken } from "@/lib/firebase.server";
 import { findPitchaiPlan } from "@/lib/live/plans";
 import { throttle } from "@/lib/live/rate-limit.server";
-import { createStripeClient, getStripeErrorMessage, type StripeEnv } from "@/lib/stripe.server";
+import {
+  createStripeClient,
+  getStripeEnvironment,
+  getStripeErrorMessage,
+} from "@/lib/stripe.server";
 import { createReferralLink, resolveReferralCode } from "@/lib/referrals.server";
 import { normalizeReferralCode } from "@/lib/referrals.shared";
 
@@ -119,9 +123,7 @@ export const Route = createFileRoute("/api/checkout/start")({
             { mode: "server" },
           );
 
-          const stripeEnv: StripeEnv = process.env.STRIPE_SECRET_KEY?.startsWith("sk_live_")
-            ? "live"
-            : "sandbox";
+          const stripeEnv = getStripeEnvironment();
           const stripe = createStripeClient(stripeEnv);
           const prices = await stripe.prices.list({
             lookup_keys: [plan.priceId],

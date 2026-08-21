@@ -25,7 +25,7 @@
 
 ### Pendências / riscos
 
-- ☐ **`STRIPE_WEBHOOK_SECRET` de produção ainda é o antigo (teste)** — criar webhook Live na Stripe apontando para `/api/public/payments/webhook` e atualizar a env var. **Prioridade máxima: pagamentos reais não confirmam.**
+- ☐ **Configurar `STRIPE_LIVE_WEBHOOK_SECRET`** — criar webhook Live na Stripe apontando para `/api/public/payments/webhook`. O deploy agora bloqueia qualquer configuração Stripe que não seja explicitamente live. **Prioridade máxima: pagamentos reais não confirmam sem esse segredo.**
 - ☐ **Roll da sk_live** colada em texto puro no chat (Stripe → API keys → Roll).
 - ☐ `checkout/start.ts:206-210` devolve `debug: getStripeErrorMessage(error)` ao cliente — vaza detalhe interno; remover em produção.
 - ☐ Endpoints de IA sem zod (cast manual): `chat/reply`, `gemini/*`, `pitch/bank`, `tts/*`, `script/generate` — `gemini/generate` aceita prompt de 20KB.

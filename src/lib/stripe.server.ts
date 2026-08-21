@@ -6,12 +6,26 @@ const getEnv = (key: string): string => {
   return value;
 };
 
-export type StripeEnv = "sandbox" | "live";
+export type StripeEnv = "live";
+
+const LIVE_SECRET_KEY = /^(?:sk|rk)_live_/;
+
+export function getStripeEnvironment(): StripeEnv {
+  const key = process.env.STRIPE_SECRET_KEY || process.env.STRIPE_LIVE_API_KEY;
+  if (!key) throw new Error("STRIPE_SECRET_KEY is not configured");
+  if (!LIVE_SECRET_KEY.test(key)) {
+    throw new Error("Stripe test mode is disabled; configure a live secret or restricted key");
+  }
+  return "live";
+}
 
 export function getConnectionApiKey(env: StripeEnv): string {
-  const direct = process.env.STRIPE_SECRET_KEY;
-  if (direct) return direct;
-  return env === "sandbox" ? getEnv("STRIPE_SANDBOX_API_KEY") : getEnv("STRIPE_LIVE_API_KEY");
+  if (env !== "live") throw new Error("Stripe test mode is disabled");
+  const key = process.env.STRIPE_SECRET_KEY || getEnv("STRIPE_LIVE_API_KEY");
+  if (!LIVE_SECRET_KEY.test(key)) {
+    throw new Error("Stripe test mode is disabled; configure a live secret or restricted key");
+  }
+  return key;
 }
 
 export function createStripeClient(env: StripeEnv): Stripe {
@@ -33,13 +47,10 @@ export async function verifyWebhook(
   req: Request,
   env: StripeEnv,
 ): Promise<{ type: string; data: { object: any } }> {
+  if (env !== "live") throw new Error("Stripe test mode is disabled");
   const signature = req.headers.get("stripe-signature");
   const body = await req.text();
-  const secret =
-    process.env.STRIPE_WEBHOOK_SECRET ||
-    (env === "sandbox"
-      ? getEnv("PAYMENTS_SANDBOX_WEBHOOK_SECRET")
-      : getEnv("PAYMENTS_LIVE_WEBHOOK_SECRET"));
+  const secret = process.env.STRIPE_LIVE_WEBHOOK_SECRET || getEnv("PAYMENTS_LIVE_WEBHOOK_SECRET");
 
   if (!signature || !body) throw new Error("Missing signature or body");
 

@@ -37,6 +37,7 @@ export const createCheckoutSession = createServerFn({ method: "POST" })
   .middleware([requireFirebaseAuth])
   .validator((data: { priceId: string; returnUrl: string; environment: StripeEnv }) => {
     if (!/^[a-zA-Z0-9_-]+$/.test(data.priceId)) throw new Error("Invalid priceId");
+    if (data.environment !== "live") throw new Error("Stripe test mode is disabled");
     return data;
   })
   .handler(async ({ data, context }): Promise<CheckoutResult> => {
@@ -70,7 +71,10 @@ export const createCheckoutSession = createServerFn({ method: "POST" })
 
 export const createPortalSession = createServerFn({ method: "POST" })
   .middleware([requireFirebaseAuth])
-  .validator((data: { returnUrl?: string; environment: StripeEnv }) => data)
+  .validator((data: { returnUrl?: string; environment: StripeEnv }) => {
+    if (data.environment !== "live") throw new Error("Stripe test mode is disabled");
+    return data;
+  })
   .handler(async ({ data, context }): Promise<PortalResult> => {
     try {
       const userId = context.userId;

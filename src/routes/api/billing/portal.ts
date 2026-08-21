@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { getSubscription, verifyFirebaseIdToken } from "@/lib/firebase.server";
 import { throttle } from "@/lib/live/rate-limit.server";
-import { createStripeClient } from "@/lib/stripe.server";
+import { createStripeClient, getStripeEnvironment } from "@/lib/stripe.server";
 
 // Portal de faturamento do Stripe: trocar cartão, baixar faturas e cancelar a
 // assinatura sem sair do fluxo do Pitch AI. O limite por conta evita loop de
@@ -36,9 +36,7 @@ export const Route = createFileRoute("/api/billing/portal")({
             );
           }
 
-          const stripeEnv = process.env.STRIPE_SECRET_KEY?.startsWith("sk_live_")
-            ? ("live" as const)
-            : ("sandbox" as const);
+          const stripeEnv = getStripeEnvironment();
           const stripe = createStripeClient(stripeEnv);
 
           const body = await request.json().catch(() => ({}));
