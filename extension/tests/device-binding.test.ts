@@ -57,9 +57,10 @@ describe("vínculo de navegador (1 extensão por conta)", () => {
     expect(posMismatch).toBeLessThan(posGenerico);
   });
 
-  it("recusa por navegador não manda o vendedor para a tela de assinatura", () => {
-    expect(content).toContain("Desvincular navegador ↗");
-    expect(content).toContain("DEVICE_RELEASE_PATH");
+  it("recusa por navegador é comunicada no painel, sem faixa sobre a página", () => {
+    expect(content).not.toContain('banner.id = "pitchai-lock-banner"');
+    expect(panel).toContain("Desvincular navegador ↗");
+    expect(panel).toContain('new URL("/app?desvincular=1", API_BASE)');
   });
 
   it("o painel mostra o vínculo e não desvincula sozinho", () => {

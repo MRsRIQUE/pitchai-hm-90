@@ -47,6 +47,7 @@ describe("painel distribuído", () => {
     expect(contentSource).toContain("if (chatEditorValue(editor).trim()) return false;");
     expect(contentSource).toContain("let chatSendChain = Promise.resolve()");
     expect(contentSource).toContain("if (!current.responderNoChat || extSecurity.isLocked)");
+    expect(contentSource).not.toContain('banner.id = "pitchai-lock-banner"');
     expect(contentSource).not.toContain("chatState.sentReplies.delete(normalizedReplyText(value))");
     // intervalo anti-spam configurável no painel
     expect(contentSource).toContain("replyIntervalMs(cfg)");

@@ -12,7 +12,8 @@ const api = readFileSync(
 describe("banco econômico de pitches", () => {
   it("gera um lote horário limitado e contabiliza os tokens uma única vez", () => {
     expect(api).toContain('createFileRoute("/api/public/pitch/bank")');
-    expect(api).toMatch(/Math\.max\(10, Math\.min\(15,/);
+    expect(api).toContain("z.number().int().min(10).max(15).optional()");
+    expect(api).toContain("Math.round(body.count ?? 12)");
     expect(api).toContain("recordAiUsageTokens(guard, tokensInput, tokensOutput)");
     expect(api).toContain("Date.now() + 60 * 60 * 1000");
   });

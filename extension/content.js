@@ -528,8 +528,6 @@
   // sabe do vínculo é o content.js, e ele publica — mesmo caminho que o uso de
   // tokens já usa.
   const DEVICE_MISMATCH = "device_mismatch";
-  // Rede de segurança: servidor antigo ainda não manda actionUrl.
-  const DEVICE_RELEASE_PATH = "/app?desvincular=1";
   const DEVICE_STATUS_STORAGE_KEY = "pitchai.device.status";
 
   function publishDeviceBinding() {
@@ -684,53 +682,9 @@
     try {
       scanFx.setLicensed(!extSecurity.isLocked);
     } catch {}
-    let banner = document.getElementById("pitchai-lock-banner");
-    if (extSecurity.isLocked) {
-      if (!banner) {
-        banner = document.createElement("div");
-        banner.id = "pitchai-lock-banner";
-        banner.style.cssText =
-          "position:fixed;top:0;left:0;right:0;z-index:9999999;background:#854d0e;color:#fef08a;padding:8px 16px;font-family:sans-serif;font-size:13px;font-weight:600;display:flex;align-items:center;justify-content:space-between;box-shadow:0 4px 12px rgba(0,0,0,0.4);border-bottom:2px solid #eab308;";
-        const text = document.createElement("span");
-        text.id = "pitchai-lock-text";
-        const btn = document.createElement("button");
-        btn.id = "pitchai-lock-action";
-        btn.textContent = "Desbloquear no Pitch AI ↗";
-        btn.style.cssText =
-          "background:#eab308;color:#000;border:none;padding:4px 12px;border-radius:4px;font-weight:700;cursor:pointer;";
-        banner.append(text, btn);
-        document.body?.prepend(banner);
-      }
-      const text = document.getElementById("pitchai-lock-text");
-      if (text)
-        text.textContent =
-          extSecurity.reason === DEVICE_MISMATCH
-            ? `🔗 LICENÇA EM OUTRO NAVEGADOR · ${extSecurity.message}`
-            : `🔒 EXTENSÃO TRAVADA · ${extSecurity.message || "Insira seu Sync token válido."}`;
-      const btn = document.getElementById("pitchai-lock-action");
-      if (btn) {
-        const isQuota = extSecurity.reason === "quota_exceeded";
-        const isDevice = extSecurity.reason === DEVICE_MISMATCH;
-        // Recusa por navegador não é falta de plano: mandar para "Desbloquear"
-        // faria o vendedor procurar assinatura que ele já tem. O destino é a
-        // tela de Conta, onde fica o botão de desvincular.
-        btn.textContent = isDevice
-          ? "Desvincular navegador ↗"
-          : isQuota
-            ? extSecurity.upgrade?.cta || "Ver plano com mais tokens ↗"
-            : "Desbloquear no Pitch AI ↗";
-        btn.onclick = () => {
-          const target = isDevice
-            ? DEVICE_RELEASE_PATH
-            : isQuota
-              ? extSecurity.upgrade?.url || "/planos"
-              : "/app";
-          window.open(new URL(target, API_BASE).href, "_blank");
-        };
-      }
-    } else if (banner) {
-      banner.remove();
-    }
+    // A extensão já comunica o estado da licença no próprio painel. Removemos
+    // qualquer faixa antiga injetada sobre a página para não duplicar o aviso.
+    document.getElementById("pitchai-lock-banner")?.remove();
 
     // Low token warning banner (10% threshold, reset at 15%)
     const limit = Number(extSecurity.tokenLimit) || 0;
