@@ -33,7 +33,7 @@ export const ONBOARDING_STEPS: {
     id: "roteiros",
     title: "Gerar roteiros",
     description:
-      "Gere pitches para cada produto — a IA vai rotacionar essas frases enquanto a live acontece.",
+      "Abra Roteiros, escolha o produto e gere uma fala completa no estilo e duração desejados.",
   },
   {
     id: "iniciar",

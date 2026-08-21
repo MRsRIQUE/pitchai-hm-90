@@ -47,6 +47,7 @@ import { LiveSection } from "./sections/LiveSection";
 import { ProdutosSection } from "./sections/ProdutosSection";
 import { ProtecaoSection } from "./sections/ProtecaoSection";
 import { QuentesSection } from "./sections/QuentesSection";
+import { RoteirosSection } from "./sections/RoteirosSection";
 import { VozSection } from "./sections/VozSection";
 import { sectionDisponivel, sectionsDoModo, type SectionId } from "./sections/sections";
 import { useExtensionInstalled } from "./sections/useExtensionInstalled";
@@ -421,6 +422,7 @@ function LiveDashboardContent() {
 
         {active === "desempenho" ? <DesempenhoSection /> : null}
         {active === "produtos" ? <ProdutosSection /> : null}
+        {active === "roteiros" ? <RoteirosSection /> : null}
         {active === "quentes" ? <QuentesSection /> : null}
         {active === "ia" ? <IaSection /> : null}
         {active === "voz" ? (

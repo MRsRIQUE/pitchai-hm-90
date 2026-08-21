@@ -5,6 +5,7 @@ import {
   Flame,
   Home,
   KeyRound,
+  FileText,
   Radio,
   ShieldCheck,
   ShoppingBag,
@@ -26,6 +27,7 @@ export type SectionId =
   | "live"
   | "desempenho"
   | "produtos"
+  | "roteiros"
   | "quentes"
   | "ia"
   | "voz"
@@ -73,6 +75,13 @@ export const SECTIONS: SectionDef[] = [
     subtitle: "Catálogo, produto ativo e rodízio automático",
   },
   {
+    id: "roteiros",
+    label: "Roteiros",
+    icon: FileText,
+    title: "Roteiros de venda",
+    subtitle: "Crie falas naturais e persuasivas para cada produto",
+  },
+  {
     id: "quentes",
     label: "Quentes",
     icon: Flame,
@@ -84,7 +93,7 @@ export const SECTIONS: SectionDef[] = [
     label: "IA",
     icon: Brain,
     title: "IA",
-    subtitle: "Contexto da marca, roteiros e laboratório",
+    subtitle: "Contexto da marca e laboratório",
     avancada: true,
   },
   {
