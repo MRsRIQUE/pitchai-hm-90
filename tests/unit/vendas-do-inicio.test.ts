@@ -204,8 +204,8 @@ describe("topProdutos", () => {
   });
 
   it("não inventa ranking quando a sessão não apresentou nenhum produto", () => {
-    expect(topProdutos([sessao({ sales_snapshot: [{ at: HOJE.toISOString() }] })], catalogo)).toEqual(
-      [],
-    );
+    expect(
+      topProdutos([sessao({ sales_snapshot: [{ at: HOJE.toISOString() }] })], catalogo),
+    ).toEqual([]);
   });
 });
