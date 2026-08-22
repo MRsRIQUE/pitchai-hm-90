@@ -25,6 +25,7 @@ import { Route as ApiHotProductsRouteImport } from './routes/api/hot-products'
 import { Route as CheckoutReturnRouteImport } from './routes/checkout.return'
 import { Route as ApiAccountDeviceBindingRouteImport } from './routes/api/account/device-binding'
 import { Route as ApiAccountEnsureRouteImport } from './routes/api/account/ensure'
+import { Route as ApiAccountExtensionDownloadRouteImport } from './routes/api/account/extension-download'
 import { Route as ApiAccountSyncTokenRouteImport } from './routes/api/account/sync-token'
 import { Route as ApiAdminCheckRouteImport } from './routes/api/admin/check'
 import { Route as ApiAdminCourtesyRouteImport } from './routes/api/admin/courtesy'
@@ -125,6 +126,12 @@ const ApiAccountEnsureRoute = ApiAccountEnsureRouteImport.update({
   path: '/api/account/ensure',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiAccountExtensionDownloadRoute =
+  ApiAccountExtensionDownloadRouteImport.update({
+    id: '/api/account/extension-download',
+    path: '/api/account/extension-download',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 const ApiAccountSyncTokenRoute = ApiAccountSyncTokenRouteImport.update({
   id: '/api/account/sync-token',
   path: '/api/account/sync-token',
@@ -240,6 +247,7 @@ export interface FileRoutesByFullPath {
   '/checkout/return': typeof CheckoutReturnRoute
   '/api/account/device-binding': typeof ApiAccountDeviceBindingRoute
   '/api/account/ensure': typeof ApiAccountEnsureRoute
+  '/api/account/extension-download': typeof ApiAccountExtensionDownloadRoute
   '/api/account/sync-token': typeof ApiAccountSyncTokenRoute
   '/api/admin/check': typeof ApiAdminCheckRoute
   '/api/admin/courtesy': typeof ApiAdminCourtesyRoute
@@ -277,6 +285,7 @@ export interface FileRoutesByTo {
   '/checkout/return': typeof CheckoutReturnRoute
   '/api/account/device-binding': typeof ApiAccountDeviceBindingRoute
   '/api/account/ensure': typeof ApiAccountEnsureRoute
+  '/api/account/extension-download': typeof ApiAccountExtensionDownloadRoute
   '/api/account/sync-token': typeof ApiAccountSyncTokenRoute
   '/api/admin/check': typeof ApiAdminCheckRoute
   '/api/admin/courtesy': typeof ApiAdminCourtesyRoute
@@ -315,6 +324,7 @@ export interface FileRoutesById {
   '/checkout/return': typeof CheckoutReturnRoute
   '/api/account/device-binding': typeof ApiAccountDeviceBindingRoute
   '/api/account/ensure': typeof ApiAccountEnsureRoute
+  '/api/account/extension-download': typeof ApiAccountExtensionDownloadRoute
   '/api/account/sync-token': typeof ApiAccountSyncTokenRoute
   '/api/admin/check': typeof ApiAdminCheckRoute
   '/api/admin/courtesy': typeof ApiAdminCourtesyRoute
@@ -354,6 +364,7 @@ export interface FileRouteTypes {
     | '/checkout/return'
     | '/api/account/device-binding'
     | '/api/account/ensure'
+    | '/api/account/extension-download'
     | '/api/account/sync-token'
     | '/api/admin/check'
     | '/api/admin/courtesy'
@@ -391,6 +402,7 @@ export interface FileRouteTypes {
     | '/checkout/return'
     | '/api/account/device-binding'
     | '/api/account/ensure'
+    | '/api/account/extension-download'
     | '/api/account/sync-token'
     | '/api/admin/check'
     | '/api/admin/courtesy'
@@ -428,6 +440,7 @@ export interface FileRouteTypes {
     | '/checkout/return'
     | '/api/account/device-binding'
     | '/api/account/ensure'
+    | '/api/account/extension-download'
     | '/api/account/sync-token'
     | '/api/admin/check'
     | '/api/admin/courtesy'
@@ -466,6 +479,7 @@ export interface RootRouteChildren {
   CheckoutReturnRoute: typeof CheckoutReturnRoute
   ApiAccountDeviceBindingRoute: typeof ApiAccountDeviceBindingRoute
   ApiAccountEnsureRoute: typeof ApiAccountEnsureRoute
+  ApiAccountExtensionDownloadRoute: typeof ApiAccountExtensionDownloadRoute
   ApiAccountSyncTokenRoute: typeof ApiAccountSyncTokenRoute
   ApiAdminCheckRoute: typeof ApiAdminCheckRoute
   ApiAdminCourtesyRoute: typeof ApiAdminCourtesyRoute
@@ -599,6 +613,13 @@ declare module '@tanstack/react-router' {
       path: '/api/account/ensure'
       fullPath: '/api/account/ensure'
       preLoaderRoute: typeof ApiAccountEnsureRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/account/extension-download': {
+      id: '/api/account/extension-download'
+      path: '/api/account/extension-download'
+      fullPath: '/api/account/extension-download'
+      preLoaderRoute: typeof ApiAccountExtensionDownloadRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/account/sync-token': {
@@ -754,6 +775,7 @@ const rootRouteChildren: RootRouteChildren = {
   CheckoutReturnRoute: CheckoutReturnRoute,
   ApiAccountDeviceBindingRoute: ApiAccountDeviceBindingRoute,
   ApiAccountEnsureRoute: ApiAccountEnsureRoute,
+  ApiAccountExtensionDownloadRoute: ApiAccountExtensionDownloadRoute,
   ApiAccountSyncTokenRoute: ApiAccountSyncTokenRoute,
   ApiAdminCheckRoute: ApiAdminCheckRoute,
   ApiAdminCourtesyRoute: ApiAdminCourtesyRoute,

@@ -17,6 +17,15 @@ import { MAX_IMAGE_URL_LEN, MAX_PRODUCT_NAME_LEN } from "../utils/string";
  * valor em centavos, que é o que o painel formata. Os dois convivem: o texto
  * atende o catálogo antigo, já gravado, que não tem os campos numéricos.
  */
+export const ProductAISalesContextSchema = z.object({
+  hook: z.string().max(4_000).default(""),
+  painDesire: z.string().max(4_000).default(""),
+  benefits: z.string().max(4_000).default(""),
+  objectionResponse: z.string().max(4_000).default(""),
+  chatInteraction: z.string().max(4_000).default(""),
+  cta: z.string().max(4_000).default(""),
+});
+
 export const ProductSchema = z.object({
   pid: z.string().max(64).optional(),
   id: z.string().max(64).optional(),
@@ -31,6 +40,7 @@ export const ProductSchema = z.object({
   description: z.string().max(2_500).optional(),
   aiKnowledge: z.string().max(2_000).optional(),
   aiLearnedAt: z.string().optional(),
+  aiSalesContext: ProductAISalesContextSchema.optional(),
   stock: z.number().optional(),
   /** URL absoluta http(s) da foto. Ver `isUsableImageUrl`. */
   imageUrl: z.string().max(MAX_IMAGE_URL_LEN).optional(),
@@ -204,6 +214,7 @@ export const ConfigSchema = z.object({
 
   // Dados dinâmicos
   produtos: z.array(ProductSchema).default([]),
+  productAiSalesContexts: z.record(ProductAISalesContextSchema).default({}),
   roteirosPorProduto: z.record(z.string()).default({}),
   ultimoRoteiro: z.string().optional(),
 
@@ -291,6 +302,7 @@ export const DEFAULT_CONFIG: Config = {
     extraContext: "",
   },
   produtos: [],
+  productAiSalesContexts: {},
   roteirosPorProduto: {},
   ultimoRoteiro: "",
   version: "0.16.5",

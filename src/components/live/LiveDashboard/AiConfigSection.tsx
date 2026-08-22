@@ -5,11 +5,18 @@
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { Brain, CheckCircle2, Package } from "lucide-react";
+import { Brain, CheckCircle2, Loader2, Package, Save, Sparkles } from "lucide-react";
+import { useState } from "react";
+import { toast } from "sonner";
 import { useLiveStore } from "@/stores/useLiveStore";
 import { useShallow } from "zustand/react/shallow";
 import { PresetPicker } from "../PresetPicker";
-import { type AIContext } from "@/lib/live/config";
+import {
+  EMPTY_PRODUCT_AI_SALES_CONTEXT,
+  type AIContext,
+  type ProductAISalesContext,
+} from "@/lib/live/config";
+import { pushLiveConfigFields } from "@/lib/live/sync";
 import { formatarPreco } from "./sections/produto";
 
 export interface AiConfigSectionProps {
@@ -17,6 +24,7 @@ export interface AiConfigSectionProps {
 }
 
 export function AiConfigSection({ compact = false }: AiConfigSectionProps) {
+  const [saving, setSaving] = useState(false);
   const { config, updateConfig } = useLiveStore(
     useShallow((state) => ({
       config: state.config,
@@ -40,6 +48,55 @@ export function AiConfigSection({ compact = false }: AiConfigSectionProps) {
         active: produto.id === productId,
       })),
     }));
+  };
+
+  const selectedProduct =
+    config.produtos.find((produto) => produto.active) ?? config.produtos[0] ?? null;
+
+  const updateProductContext = (key: keyof ProductAISalesContext, value: string) => {
+    if (!selectedProduct) return;
+    updateConfig((current) => {
+      const previous = {
+        ...EMPTY_PRODUCT_AI_SALES_CONTEXT,
+        ...(current.productAiSalesContexts[selectedProduct.id] ?? {}),
+        ...(current.produtos.find((produto) => produto.id === selectedProduct.id)?.aiSalesContext ??
+          {}),
+      };
+      const nextContext = { ...previous, [key]: value };
+      return {
+        ...current,
+        productAiSalesContexts: {
+          ...current.productAiSalesContexts,
+          [selectedProduct.id]: nextContext,
+        },
+        produtos: current.produtos.map((produto) =>
+          produto.id === selectedProduct.id
+            ? { ...produto, active: true, aiSalesContext: nextContext }
+            : { ...produto, active: false },
+        ),
+      };
+    });
+  };
+
+  const saveAiContext = async () => {
+    setSaving(true);
+    try {
+      const latest = useLiveStore.getState().config;
+      const saved = await pushLiveConfigFields({
+        aiContext: latest.aiContext,
+        productAiSalesContexts: latest.productAiSalesContexts,
+      });
+      if (!saved) throw new Error("Entre novamente para sincronizar com a extensão.");
+      toast.success("Contexto da IA salvo", {
+        description: "A marca e as fichas por produto foram salvas na nuvem para sincronização.",
+      });
+    } catch (error) {
+      toast.error("Não foi possível salvar o contexto", {
+        description: error instanceof Error ? error.message : "Tente novamente em instantes.",
+      });
+    } finally {
+      setSaving(false);
+    }
   };
 
   if (compact) {
@@ -84,12 +141,23 @@ export function AiConfigSection({ compact = false }: AiConfigSectionProps) {
 
   return (
     <div>
-      <h4 className="mb-3 font-display text-sm font-semibold">
-        Contexto da IA
-        <span className="ml-2 font-sans text-xs font-normal text-muted-foreground">
-          a IA usa isso em toda resposta e em cada roteiro
-        </span>
-      </h4>
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+        <h4 className="font-display text-sm font-semibold">
+          Contexto da IA
+          <span className="ml-2 font-sans text-xs font-normal text-muted-foreground">
+            a IA usa isso em toda resposta e em cada roteiro
+          </span>
+        </h4>
+        <button
+          type="button"
+          className="app-btn app-btn--primary app-btn--sm"
+          onClick={() => void saveAiContext()}
+          disabled={saving}
+        >
+          {saving ? <Loader2 className="animate-spin" /> : <Save />}
+          {saving ? "Salvando..." : "Salvar contexto da IA"}
+        </button>
+      </div>
 
       <div className="mb-3">
         <PresetPicker cfg={config} setCfg={updateConfig} />
@@ -146,6 +214,68 @@ export function AiConfigSection({ compact = false }: AiConfigSectionProps) {
             </p>
           )}
         </div>
+
+        {selectedProduct ? (
+          <div className="mb-5 rounded-xl border border-primary/25 bg-primary/[0.04] p-4">
+            <div className="mb-4 flex items-start gap-3">
+              <Sparkles className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
+              <div>
+                <div className="text-sm font-semibold">
+                  Contexto de venda: {selectedProduct.name}
+                </div>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Cada campo pertence somente a este produto. O botão da aba Roteiros preenche
+                  estas partes automaticamente.
+                </p>
+              </div>
+            </div>
+            <div className="grid gap-3 sm:grid-cols-2">
+              {(
+                [
+                  ["hook", "Gancho", "Abertura curta para capturar atenção."],
+                  [
+                    "painDesire",
+                    "Dor ou desejo",
+                    "Situação que conecta o produto à necessidade da pessoa.",
+                  ],
+                  [
+                    "benefits",
+                    "Demonstração e benefícios",
+                    "Ganhos, usos e diferenciais confirmados.",
+                  ],
+                  [
+                    "objectionResponse",
+                    "Objeção e resposta",
+                    "Dúvidas comuns e respostas honestas.",
+                  ],
+                  [
+                    "chatInteraction",
+                    "Interação com o chat",
+                    "Perguntas e convites para envolver o público.",
+                  ],
+                  ["cta", "Fechamento e CTA", "Forma natural de conduzir para o clique."],
+                ] as const
+              ).map(([key, label, placeholder]) => (
+                <div className="app-field" key={key}>
+                  <label htmlFor={`produto-ia-${key}`}>{label}</label>
+                  <Textarea
+                    id={`produto-ia-${key}`}
+                    className="app-input"
+                    rows={4}
+                    maxLength={4_000}
+                    value={
+                      selectedProduct.aiSalesContext?.[key] ??
+                      config.productAiSalesContexts[selectedProduct.id]?.[key] ??
+                      EMPTY_PRODUCT_AI_SALES_CONTEXT[key]
+                    }
+                    onChange={(event) => updateProductContext(key, event.currentTarget.value)}
+                    placeholder={placeholder}
+                  />
+                </div>
+              ))}
+            </div>
+          </div>
+        ) : null}
 
         <div className="grid gap-3 sm:grid-cols-2">
           <div>

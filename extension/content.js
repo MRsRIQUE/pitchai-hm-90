@@ -1090,6 +1090,7 @@
     saudacoes: { enabled: true, minIntervalSec: 35 },
     cta: { enabled: true },
     produtos: [],
+    productAiSalesContexts: {},
     aiContext: {},
     ultimoRoteiro: "",
     roteirosPorProduto: {},
@@ -1123,6 +1124,10 @@
       cta: { ...DEFAULTS.cta, ...(stored.cta || {}) },
       somVenda: { ...DEFAULTS.somVenda, ...(stored.somVenda || {}) },
       demo: { ...DEFAULTS.demo, ...(stored.demo || {}) },
+      productAiSalesContexts: {
+        ...DEFAULTS.productAiSalesContexts,
+        ...(stored.productAiSalesContexts || {}),
+      },
       produtos: Array.isArray(stored.produtos) ? stored.produtos : [],
     };
   }
@@ -2566,17 +2571,32 @@
         .trim()
         .slice(0, max);
     const produtos = cfg.produtos || [];
+    const salesContext = (product) => {
+      const context =
+        product?.aiSalesContext || cfg.productAiSalesContexts?.[product?.id || product?.pid];
+      if (!context || typeof context !== "object") return "";
+      return [
+        context.hook && `Gancho: ${brainFact(context.hook, 700)}`,
+        context.painDesire && `Dor ou desejo: ${brainFact(context.painDesire, 900)}`,
+        context.benefits && `Benefícios: ${brainFact(context.benefits, 1200)}`,
+        context.objectionResponse && `Objeção e resposta: ${brainFact(context.objectionResponse, 1000)}`,
+        context.chatInteraction && `Interação: ${brainFact(context.chatInteraction, 700)}`,
+        context.cta && `CTA: ${brainFact(context.cta, 700)}`,
+      ]
+        .filter(Boolean)
+        .join(" · ");
+    };
     // O destaque vem do produto FIXADO na vitrine quando existe; senão o ativo.
     const destaque = featured || produtos.find((p) => p.active);
     // Com produto em destaque a IA vende SÓ ele — catálogo completo só entra
     // quando não sabemos o que está fixado.
     const catalog = destaque
-      ? `${brainFact(destaque.name, 200)}${destaque.price ? " — " + brainFact(destaque.price, 60) : ""}${destaque.description ? " · " + brainFact(destaque.description, 800) : ""}${destaque.aiKnowledge ? " · Ficha aprendida: " + brainFact(destaque.aiKnowledge, 1800) : ""}`
+      ? `${brainFact(destaque.name, 200)}${destaque.price ? " — " + brainFact(destaque.price, 60) : ""}${destaque.description ? " · " + brainFact(destaque.description, 800) : ""}${destaque.aiKnowledge ? " · Ficha aprendida: " + brainFact(destaque.aiKnowledge, 1800) : ""}${salesContext(destaque) ? " · Estratégia do produto: " + salesContext(destaque) : ""}`
       : produtos
           .slice(0, 12)
           .map(
             (p, i) =>
-              `${i + 1}. ${brainFact(p.name, 160)}${p.price ? " — " + brainFact(p.price, 60) : ""}${p.active ? " [ATIVO]" : ""}${p.description ? " · " + brainFact(p.description, 300) : ""}${p.aiKnowledge ? " · IA: " + brainFact(p.aiKnowledge, 400) : ""}`,
+              `${i + 1}. ${brainFact(p.name, 160)}${p.price ? " — " + brainFact(p.price, 60) : ""}${p.active ? " [ATIVO]" : ""}${p.description ? " · " + brainFact(p.description, 300) : ""}${p.aiKnowledge ? " · IA: " + brainFact(p.aiKnowledge, 400) : ""}${salesContext(p) ? " · Venda: " + salesContext(p) : ""}`,
           )
           .join("\n");
     let espectadores = "";
@@ -3131,7 +3151,7 @@
     const question = normalizedReplyQuestion(text);
     if (!question || question.length < 4) return "";
     return stableHash(
-      `${product?.id || product?.name || "sem-produto"}|${product?.price || "sem-preco"}|${product?.description || ""}|${product?.aiKnowledge || ""}|${conversationKey(author)}|${question}|${JSON.stringify(cfg.aiContext || {})}`,
+      `${product?.id || product?.name || "sem-produto"}|${product?.price || "sem-preco"}|${product?.description || ""}|${product?.aiKnowledge || ""}|${JSON.stringify(product?.aiSalesContext || cfg.productAiSalesContexts?.[product?.id || product?.pid] || {})}|${conversationKey(author)}|${question}|${JSON.stringify(cfg.aiContext || {})}`,
     );
   }
 
@@ -3196,6 +3216,10 @@
         price: product?.price || "",
         description: product?.description || "",
         aiKnowledge: product?.aiKnowledge || "",
+        aiSalesContext:
+          product?.aiSalesContext ||
+          cfg?.productAiSalesContexts?.[product?.id || product?.pid] ||
+          {},
         context: cfg?.aiContext || {},
       }),
     );
@@ -3294,6 +3318,9 @@
             price: product.price,
             description: product.description,
             aiKnowledge: product.aiKnowledge,
+            aiSalesContext:
+              product.aiSalesContext ||
+              cfg.productAiSalesContexts?.[product.id || product.pid],
           },
           systemPrompt: buildSystemPrompt(cfg, product),
         }),

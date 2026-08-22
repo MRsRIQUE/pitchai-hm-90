@@ -15,9 +15,19 @@ const BodySchema = z.object({
       price: z.string().max(80).optional(),
       description: z.string().max(1200).optional(),
       aiKnowledge: z.string().max(2000).optional(),
+      aiSalesContext: z
+        .object({
+          hook: z.string().max(4_000).default(""),
+          painDesire: z.string().max(4_000).default(""),
+          benefits: z.string().max(4_000).default(""),
+          objectionResponse: z.string().max(4_000).default(""),
+          chatInteraction: z.string().max(4_000).default(""),
+          cta: z.string().max(4_000).default(""),
+        })
+        .optional(),
     })
     .optional(),
-  systemPrompt: z.string().max(5000).optional(),
+  systemPrompt: z.string().max(12_000).optional(),
 });
 
 const PitchStageSchema = z.enum([
@@ -141,7 +151,7 @@ export const Route = createFileRoute("/api/public/pitch/bank")({
         const count = Math.round(body.count ?? 12);
         const systemInstruction = String(body.systemPrompt ?? "")
           .trim()
-          .slice(0, 5000);
+          .slice(0, 12_000);
         const prompt = [
           `Crie exatamente ${count} variações independentes de pitch para uma live de vendas.`,
           `Produto: ${productName}.`,
@@ -153,6 +163,9 @@ export const Route = createFileRoute("/api/public/pitch/bank")({
             : "",
           body.product?.aiKnowledge
             ? `Conhecimento aprendido: ${String(body.product.aiKnowledge).slice(0, 2000)}.`
+            : "",
+          body.product?.aiSalesContext
+            ? `Estratégia específica deste produto: ${JSON.stringify(body.product.aiSalesContext).slice(0, 6000)}.`
             : "",
           "Cada item deve ter entre 45 e 180 caracteres, formar uma frase completa, soar natural quando falado e funcionar isoladamente.",
           "Monte um mini funil equilibrado: descoberta desperta curiosidade; consideração explica benefício e uso; confiança responde objeção/FAQ sem inventar; engagement faz uma pergunta simples; conversion usa CTA curto.",

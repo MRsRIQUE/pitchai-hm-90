@@ -38,7 +38,42 @@ export type Product = {
   aiKnowledge?: string;
   /** ISO date da última atualização da ficha de conhecimento. */
   aiLearnedAt?: string;
+  /** Estrutura de venda exclusiva deste produto, editável na aba IA. */
+  aiSalesContext?: ProductAISalesContext;
 };
+
+export type ProductAISalesContext = {
+  hook: string;
+  painDesire: string;
+  benefits: string;
+  objectionResponse: string;
+  chatInteraction: string;
+  cta: string;
+};
+
+export const EMPTY_PRODUCT_AI_SALES_CONTEXT: ProductAISalesContext = {
+  hook: "",
+  painDesire: "",
+  benefits: "",
+  objectionResponse: "",
+  chatInteraction: "",
+  cta: "",
+};
+
+export function productAiSalesContextText(product: Product): string {
+  const context = product.aiSalesContext;
+  if (!context) return "";
+  return [
+    context.hook && `Gancho: ${context.hook}`,
+    context.painDesire && `Dor ou desejo: ${context.painDesire}`,
+    context.benefits && `Demonstração e benefícios: ${context.benefits}`,
+    context.objectionResponse && `Objeção e resposta: ${context.objectionResponse}`,
+    context.chatInteraction && `Interação com o chat: ${context.chatInteraction}`,
+    context.cta && `Fechamento e CTA: ${context.cta}`,
+  ]
+    .filter(Boolean)
+    .join("\n");
+}
 
 export type AIContext = {
   brandName: string;
@@ -135,6 +170,8 @@ export type LiveConfig = {
   syncToken?: string;
 
   produtos: Product[];
+  /** Contextos por ID, sincronizados sem substituir o array da vitrine. */
+  productAiSalesContexts: Record<string, ProductAISalesContext>;
   aiContext: AIContext;
   ultimoRoteiro: string;
   roteirosPorProduto: Record<string, string>;
@@ -187,6 +224,7 @@ export const DEFAULT_CONFIG: LiveConfig = {
   selectors: { chatContainer: [], productCard: [] },
   revisarAntesDeEnviar: false,
   produtos: [],
+  productAiSalesContexts: {},
   aiContext: DEFAULT_AI_CONTEXT,
   ultimoRoteiro: "",
   roteirosPorProduto: {},
@@ -204,6 +242,10 @@ export function loadConfig(): LiveConfig {
       ...DEFAULT_CONFIG,
       ...parsed,
       aiContext: { ...DEFAULT_AI_CONTEXT, ...(parsed.aiContext ?? {}) },
+      productAiSalesContexts: {
+        ...DEFAULT_CONFIG.productAiSalesContexts,
+        ...(parsed.productAiSalesContexts ?? {}),
+      },
       vozContextos: { ...DEFAULT_CONFIG.vozContextos, ...(parsed.vozContextos ?? {}) },
       filtros: {
         ...DEFAULT_CONFIG.filtros,
@@ -250,6 +292,7 @@ export type VitrineItemEntrada = {
   description?: string;
   aiKnowledge?: string;
   aiLearnedAt?: string;
+  aiSalesContext?: ProductAISalesContext;
 };
 
 /**
@@ -272,6 +315,9 @@ function camposDoItem(item: VitrineItemEntrada): Partial<Product> {
   if (item.description?.trim()) fields.description = item.description.trim();
   if (item.aiKnowledge?.trim()) fields.aiKnowledge = item.aiKnowledge.trim();
   if (item.aiLearnedAt?.trim()) fields.aiLearnedAt = item.aiLearnedAt.trim();
+  if (item.aiSalesContext && typeof item.aiSalesContext === "object") {
+    fields.aiSalesContext = { ...EMPTY_PRODUCT_AI_SALES_CONTEXT, ...item.aiSalesContext };
+  }
   return fields;
 }
 
@@ -437,8 +483,13 @@ export function buildSystemPrompt(cfg: LiveConfig): string {
   const active = produtos.find((p) => p.active);
   const catalog = produtos
     .map(
-      (p, i) =>
-        `${i + 1}. ${p.name}${p.price ? ` — ${p.price}` : ""}${p.active ? " [ATIVO]" : ""}\n   ${p.description || "(sem descrição)"}${p.aiKnowledge ? `\n   Ficha aprendida pela IA: ${p.aiKnowledge}` : ""}`,
+      (p, i) => {
+        const contextText = productAiSalesContextText({
+          ...p,
+          aiSalesContext: p.aiSalesContext ?? cfg.productAiSalesContexts[p.id],
+        });
+        return `${i + 1}. ${p.name}${p.price ? ` — ${p.price}` : ""}${p.active ? " [ATIVO]" : ""}\n   ${p.description || "(sem descrição)"}${p.aiKnowledge ? `\n   Ficha aprendida pela IA: ${p.aiKnowledge}` : ""}${contextText ? `\n   Contexto de venda do produto:\n${contextText}` : ""}`;
+      },
     )
     .join("\n");
 

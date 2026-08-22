@@ -33,6 +33,15 @@ const MidiaFields = {
     .catch(undefined),
 };
 
+const ProductAISalesContextSchema = z.object({
+  hook: z.string().max(4_000).default(""),
+  painDesire: z.string().max(4_000).default(""),
+  benefits: z.string().max(4_000).default(""),
+  objectionResponse: z.string().max(4_000).default(""),
+  chatInteraction: z.string().max(4_000).default(""),
+  cta: z.string().max(4_000).default(""),
+});
+
 /**
  * Schema para um item da vitrine
  */
@@ -43,6 +52,7 @@ export const VitrineItemSchema = z.object({
   description: z.string().optional(),
   aiKnowledge: z.string().max(4_000).optional(),
   aiLearnedAt: z.string().max(64).optional(),
+  aiSalesContext: ProductAISalesContextSchema.optional(),
   id: z.string().optional(),
   active: z.boolean().optional().default(false),
 });
@@ -64,6 +74,7 @@ export const VitrineProductSchema = z.object({
   description: z.string().optional(),
   aiKnowledge: z.string().max(4_000).optional(),
   aiLearnedAt: z.string().max(64).optional(),
+  aiSalesContext: ProductAISalesContextSchema.optional(),
   price: z.string().optional(),
   ...MidiaFields,
   active: z.boolean().optional(),

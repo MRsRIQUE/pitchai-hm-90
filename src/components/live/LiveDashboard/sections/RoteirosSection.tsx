@@ -1,10 +1,26 @@
 import { useEffect, useMemo, useState } from "react";
-import { Copy, FileText, Loader2, Package, RefreshCw, Search, Sparkles } from "lucide-react";
+import {
+  BrainCircuit,
+  Copy,
+  FileText,
+  Loader2,
+  Package,
+  RefreshCw,
+  Search,
+  Sparkles,
+} from "lucide-react";
 import { toast } from "sonner";
 import { useShallow } from "zustand/react/shallow";
 import { copyToClipboard } from "@/lib/clipboard";
 import { aiHeaders } from "@/lib/live/ai-headers";
-import { SCRIPT_OBJECTIVES, SCRIPT_STYLES, type ScriptStyle } from "@/lib/live/script-generation";
+import {
+  mergeScriptIntoProductContext,
+  parseScriptToProductContext,
+  SCRIPT_OBJECTIVES,
+  SCRIPT_STYLES,
+  type ScriptStyle,
+} from "@/lib/live/script-generation";
+import { pushLiveConfigFields } from "@/lib/live/sync";
 import { useLiveStore } from "@/stores/useLiveStore";
 import type { VitrineSyncOutcome } from "@/hooks/live/useVitrineSync";
 import { formatarPreco } from "./produto";
@@ -30,8 +46,10 @@ async function readError(response: Response): Promise<string> {
 
 export function RoteirosSection({
   onSyncProducts,
+  onOpenAi,
 }: {
   onSyncProducts: () => Promise<VitrineSyncOutcome>;
+  onOpenAi?: () => void;
 }) {
   const { config, loading, updateConfig, setLoading, vitrineStatus, vitrineAt } = useLiveStore(
     useShallow((state) => ({
@@ -51,6 +69,7 @@ export function RoteirosSection({
   const [cta, setCta] = useState("");
   const [productQuery, setProductQuery] = useState("");
   const [generatingId, setGeneratingId] = useState<string | null>(null);
+  const [applyingToAi, setApplyingToAi] = useState(false);
   const [batch, setBatch] = useState<{ done: number; total: number; failures: number } | null>(
     null,
   );
@@ -177,6 +196,54 @@ export function RoteirosSection({
   const copy = async (text: string) => {
     if (await copyToClipboard(text)) toast.success("Roteiro copiado");
     else toast.error("Não consegui copiar; selecione o texto manualmente.");
+  };
+
+  const applyScriptToSelectedProduct = async () => {
+    if (!selectedProduct || !currentScript) return;
+    const parsed = parseScriptToProductContext(currentScript);
+    const importedParts = Object.values(parsed).filter(Boolean).length;
+    if (!importedParts) {
+      toast.error("Não encontrei as partes do roteiro", {
+        description: "Mantenha os títulos Gancho, Benefícios, Objeção e CTA no texto.",
+      });
+      return;
+    }
+
+    setApplyingToAi(true);
+    try {
+      const latest = useLiveStore.getState().config;
+      const selectedContext = mergeScriptIntoProductContext(
+        latest.produtos.find((produto) => produto.id === selectedProduct.id)?.aiSalesContext ??
+          latest.productAiSalesContexts[selectedProduct.id],
+        currentScript,
+      );
+      const produtos = latest.produtos.map((produto) =>
+        produto.id === selectedProduct.id
+          ? {
+              ...produto,
+              active: true,
+              aiSalesContext: selectedContext,
+            }
+          : { ...produto, active: false },
+      );
+      const productAiSalesContexts = {
+        ...latest.productAiSalesContexts,
+        [selectedProduct.id]: selectedContext,
+      };
+      updateConfig({ ...latest, produtos, productAiSalesContexts });
+      const saved = await pushLiveConfigFields({ productAiSalesContexts });
+      if (!saved) throw new Error("Não foi possível sincronizar com a extensão.");
+      toast.success("Roteiro adicionado à IA do produto", {
+        description: `${importedParts} parte(s) preenchida(s) em ${selectedProduct.name}.`,
+      });
+      onOpenAi?.();
+    } catch (error) {
+      toast.error("Não foi possível adicionar o roteiro à IA", {
+        description: error instanceof Error ? error.message : "Tente novamente.",
+      });
+    } finally {
+      setApplyingToAi(false);
+    }
   };
 
   const busy = loading.script || generatingId !== null || batch !== null;
@@ -422,6 +489,16 @@ export function RoteirosSection({
                 onClick={() => void copy(currentScript)}
               >
                 <Copy /> Copiar
+              </button>
+              <button
+                type="button"
+                className="app-btn app-btn--sm app-btn--primary"
+                onClick={() => void applyScriptToSelectedProduct()}
+                disabled={busy || applyingToAi}
+                title="Preencher o contexto da IA deste produto parte por parte"
+              >
+                {applyingToAi ? <Loader2 className="animate-spin" /> : <BrainCircuit />}
+                {applyingToAi ? "Adicionando..." : "Adicionar à IA do produto"}
               </button>
             </div>
           </div>

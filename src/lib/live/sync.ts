@@ -11,7 +11,7 @@ import {
   getDocs,
 } from "firebase/firestore";
 import { getFirebaseAuth, getFirebaseDb } from "@/lib/firebase";
-import type { LiveConfig } from "./config";
+import type { LiveConfig, ProductAISalesContext } from "./config";
 
 export type LiveSessionRow = {
   id: string;
@@ -134,6 +134,7 @@ export type VitrineItem = {
   description?: string;
   aiKnowledge?: string;
   aiLearnedAt?: string;
+  aiSalesContext?: ProductAISalesContext;
 };
 
 /**
@@ -274,6 +275,10 @@ export async function pullVitrine(options?: { signal?: AbortSignal }): Promise<{
         const description = typeof p.description === "string" ? p.description : undefined;
         const aiKnowledge = texto(p.aiKnowledge);
         const aiLearnedAt = texto(p.aiLearnedAt);
+        const aiSalesContext =
+          p.aiSalesContext && typeof p.aiSalesContext === "object"
+            ? (p.aiSalesContext as ProductAISalesContext)
+            : undefined;
 
         if (id !== undefined) item.id = id;
         if (price !== undefined) item.price = price;
@@ -284,6 +289,7 @@ export async function pullVitrine(options?: { signal?: AbortSignal }): Promise<{
         if (description !== undefined) item.description = description;
         if (aiKnowledge !== undefined) item.aiKnowledge = aiKnowledge;
         if (aiLearnedAt !== undefined) item.aiLearnedAt = aiLearnedAt;
+        if (aiSalesContext !== undefined) item.aiSalesContext = aiSalesContext;
         return item;
       });
 

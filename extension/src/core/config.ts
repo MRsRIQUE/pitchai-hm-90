@@ -126,6 +126,10 @@ export function normalizeConfig(data: unknown): Config {
       },
       // Garante que produtos seja um array
       produtos: Array.isArray(parsed.produtos) ? parsed.produtos : [],
+      productAiSalesContexts: {
+        ...DEFAULT_CONFIG.productAiSalesContexts,
+        ...(parsed.productAiSalesContexts || {}),
+      },
       roteirosPorProduto: {
         ...DEFAULT_CONFIG.roteirosPorProduto,
         ...(parsed.roteirosPorProduto || {}),

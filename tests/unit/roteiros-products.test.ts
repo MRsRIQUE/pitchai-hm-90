@@ -24,10 +24,16 @@ const config = readFileSync(
   fileURLToPath(new URL("../../src/lib/live/config.ts", import.meta.url)),
   "utf8",
 );
+const aiSection = readFileSync(
+  fileURLToPath(
+    new URL("../../src/components/live/LiveDashboard/AiConfigSection.tsx", import.meta.url),
+  ),
+  "utf8",
+);
 
 describe("produtos no gerador de roteiros", () => {
   it("usa a sincronização canônica da vitrine e permite atualizar pela própria aba", () => {
-    expect(dashboard).toContain("<RoteirosSection onSyncProducts={syncVitrine} />");
+    expect(dashboard).toContain("<RoteirosSection onSyncProducts={syncVitrine}");
     expect(section).toContain("onSyncProducts: () => Promise<VitrineSyncOutcome>");
     expect(section).toContain("Puxar lista de produtos");
     expect(section).toContain("Atualizar produtos");
@@ -74,5 +80,20 @@ describe("produtos no gerador de roteiros", () => {
       description: "Descrição manual",
       aiKnowledge: "Benefícios e objeções aprendidos",
     });
+  });
+
+  it("aplica o roteiro na IA somente pelo id do produto selecionado", () => {
+    expect(section).toContain("Adicionar à IA do produto");
+    expect(section).toContain("produto.id === selectedProduct.id");
+    expect(section).toContain("mergeScriptIntoProductContext");
+    expect(section).toContain("pushLiveConfigFields({ productAiSalesContexts })");
+  });
+
+  it("oferece salvamento explícito e campos estruturados na aba IA", () => {
+    expect(aiSection).toContain("Salvar contexto da IA");
+    expect(aiSection).toContain("pushLiveConfigFields");
+    expect(aiSection).toContain("Contexto de venda:");
+    expect(aiSection).toContain("Demonstração e benefícios");
+    expect(aiSection).toContain("produto.id === selectedProduct.id");
   });
 });

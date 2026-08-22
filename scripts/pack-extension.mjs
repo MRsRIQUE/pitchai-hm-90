@@ -1,12 +1,20 @@
 /**
- * Empacota a extensão do Chrome em public/pitchai-extension.zip.
+ * Empacota a extensão do Chrome em private-assets/pitchai-extension.zip.
  *
  * IMPORTANTE: o zip é um arquivo BINÁRIO. Ele nunca deve ser editado ou
  * copiado por pipelines de texto (isso foi o que corrompeu a versão
  * anterior — todos os bytes não-ASCII foram substituídos por U+FFFD).
  * Sempre regenere com: npm run build:extension
  */
-import { existsSync, readFileSync, statSync, mkdtempSync, writeFileSync, rmSync } from "node:fs";
+import {
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  statSync,
+  mkdtempSync,
+  writeFileSync,
+  rmSync,
+} from "node:fs";
 import { execFileSync } from "node:child_process";
 import path from "node:path";
 import { tmpdir } from "node:os";
@@ -15,7 +23,9 @@ import { fileURLToPath } from "node:url";
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const rootDir = path.resolve(__dirname, "..");
 const extDir = path.join(rootDir, "extension");
-const outZip = path.join(rootDir, "public", "pitchai-extension.zip");
+const privateAssetsDir = path.join(rootDir, "private-assets");
+const outZip = path.join(privateAssetsDir, "pitchai-extension.zip");
+mkdirSync(privateAssetsDir, { recursive: true });
 
 // Arquivos distribuídos — exatamente os referenciados pelo manifest.json
 const FILES = [
@@ -140,8 +150,7 @@ try {
 // Versão única do produto: o manifest da extensão é a fonte da verdade.
 // O site lia uma constante escrita à mão que parou de ser bumpada e ficou 14
 // versões atrás. Além de mostrar o número errado no painel e na página de
-// download, ela congelava o cache-buster de /pitchai-extension.zip?v=… — o
-// usuário podia baixar um zip velho servido do cache.
+// download, ela congelava o nome da versão mostrado para o usuário.
 // ---------------------------------------------------------------------------
 const versionFile = path.join(rootDir, "src", "lib", "live", "version.ts");
 const versionSource = `/**
