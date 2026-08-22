@@ -1,4 +1,4 @@
-import { APP_VERSION } from "@/lib/live/version";
+import { getFirebaseAuth } from "@/lib/firebase";
 
 /**
  * Baixa o pacote .zip da extensão do Chrome.
@@ -11,8 +11,18 @@ import { APP_VERSION } from "@/lib/live/version";
  * avisar o usuário.
  */
 export async function downloadExtensionZip(): Promise<void> {
-  const res = await fetch(`/pitchai-extension.zip?v=${APP_VERSION}`);
-  if (!res.ok) throw new Error(`Download falhou: ${res.status}`);
+  const user = getFirebaseAuth().currentUser;
+  if (!user) throw new Error("Entre na sua conta para baixar a extensao.");
+
+  const idToken = await user.getIdToken();
+  const res = await fetch("/api/account/extension-download", {
+    headers: { Authorization: `Bearer ${idToken}` },
+    cache: "no-store",
+  });
+  if (!res.ok) {
+    const body = (await res.json().catch(() => null)) as { error?: string } | null;
+    throw new Error(body?.error || `Download falhou: ${res.status}`);
+  }
 
   const blob = await res.blob();
   const url = URL.createObjectURL(blob);

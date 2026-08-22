@@ -15,6 +15,7 @@ const BodySchema = z.object({
   text: z.string().max(TTS_MAX_CHARS),
   voice: z.string().max(80).optional(),
   speed: z.number().min(0.5).max(2).optional(),
+  context: z.enum(["default", "greeting", "offer", "farewell"]).optional(),
 });
 
 /**
@@ -79,6 +80,7 @@ export const Route = createFileRoute("/api/public/tts/speak")({
           text: validation.content,
           voice: body.voice,
           speed: body.speed,
+          context: body.context,
         });
 
         if (!result.ok) return ttsErrorResponse(result, CORS);

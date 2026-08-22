@@ -442,8 +442,14 @@ export function InicioSection({
                   icon={<Volume2 aria-hidden="true" />}
                   titulo="Avisar cada venda"
                   descricao="Toca o som de caixa registradora quando a extensão detecta um pedido."
-                  checked={config.notificacoesVenda}
-                  onChange={(v) => set("notificacoesVenda", v)}
+                  checked={config.notificacoesVenda && config.somVenda.enabled}
+                  onChange={(enabled) =>
+                    updateConfig((current) => ({
+                      ...current,
+                      notificacoesVenda: enabled,
+                      somVenda: { ...current.somVenda, enabled },
+                    }))
+                  }
                 />
               </div>
             </div>

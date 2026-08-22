@@ -17,6 +17,15 @@ import { MAX_IMAGE_URL_LEN, MAX_PRODUCT_NAME_LEN } from "../utils/string";
  * valor em centavos, que é o que o painel formata. Os dois convivem: o texto
  * atende o catálogo antigo, já gravado, que não tem os campos numéricos.
  */
+export const ProductAISalesContextSchema = z.object({
+  hook: z.string().max(4_000).default(""),
+  painDesire: z.string().max(4_000).default(""),
+  benefits: z.string().max(4_000).default(""),
+  objectionResponse: z.string().max(4_000).default(""),
+  chatInteraction: z.string().max(4_000).default(""),
+  cta: z.string().max(4_000).default(""),
+});
+
 export const ProductSchema = z.object({
   pid: z.string().max(64).optional(),
   id: z.string().max(64).optional(),
@@ -28,7 +37,10 @@ export const ProductSchema = z.object({
   priceMaxCents: z.number().int().nonnegative().optional(),
   /** ISO 4217. Ausente = o painel assume BRL. */
   currency: z.string().max(3).optional(),
-  description: z.string().max(400).optional(),
+  description: z.string().max(2_500).optional(),
+  aiKnowledge: z.string().max(2_000).optional(),
+  aiLearnedAt: z.string().optional(),
+  aiSalesContext: ProductAISalesContextSchema.optional(),
   stock: z.number().optional(),
   /** URL absoluta http(s) da foto. Ver `isUsableImageUrl`. */
   imageUrl: z.string().max(MAX_IMAGE_URL_LEN).optional(),
@@ -165,8 +177,8 @@ export const PitchBankConfigSchema = z.object({
   enabled: z.boolean().default(true),
   variants: z.number().min(10).max(15).default(12),
   ttlMinutes: z.number().min(30).max(180).default(60),
-  minIntervalSec: z.number().min(20).max(600).default(45),
-  maxIntervalSec: z.number().min(20).max(900).default(75),
+  minIntervalSec: z.number().min(15).max(600).default(28),
+  maxIntervalSec: z.number().min(15).max(900).default(48),
   cacheReplies: z.boolean().default(true),
 });
 
@@ -181,7 +193,7 @@ export const ConfigSchema = z.object({
   iaLigada: z.boolean().default(true),
   respostasIA: z.boolean().default(true),
   responderNoChat: z.boolean().default(false),
-  respostasIntervaloSec: z.number().min(4).max(300).default(15),
+  respostasIntervaloSec: z.number().min(3).max(300).default(5),
   pitchBank: PitchBankConfigSchema.default({}),
   revisarAntesDeEnviar: z.boolean().default(false),
   protecaoGeral: z.boolean().default(false),
@@ -202,6 +214,7 @@ export const ConfigSchema = z.object({
 
   // Dados dinâmicos
   produtos: z.array(ProductSchema).default([]),
+  productAiSalesContexts: z.record(ProductAISalesContextSchema).default({}),
   roteirosPorProduto: z.record(z.string()).default({}),
   ultimoRoteiro: z.string().optional(),
 
@@ -222,13 +235,13 @@ export const DEFAULT_CONFIG: Config = {
   iaLigada: true,
   respostasIA: true,
   responderNoChat: false,
-  respostasIntervaloSec: 15,
+  respostasIntervaloSec: 5,
   pitchBank: {
     enabled: true,
     variants: 12,
     ttlMinutes: 60,
-    minIntervalSec: 45,
-    maxIntervalSec: 75,
+    minIntervalSec: 28,
+    maxIntervalSec: 48,
     cacheReplies: true,
   },
   revisarAntesDeEnviar: false,
@@ -289,6 +302,7 @@ export const DEFAULT_CONFIG: Config = {
     extraContext: "",
   },
   produtos: [],
+  productAiSalesContexts: {},
   roteirosPorProduto: {},
   ultimoRoteiro: "",
   version: "0.16.5",

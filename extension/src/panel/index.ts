@@ -210,6 +210,7 @@ function normalizeConfig(raw: unknown): Config {
     vozContextos: { ...DEFAULT_CONFIG.vozContextos, ...(stored.vozContextos || {}) },
     filtros: { ...DEFAULT_CONFIG.filtros, ...(stored.filtros || {}) },
     demo: { ...DEFAULT_CONFIG.demo, ...(stored.demo || {}) },
+    somVenda: { ...DEFAULT_CONFIG.somVenda, ...(stored.somVenda || {}) },
     produtos: Array.isArray(stored.produtos) ? stored.produtos : [],
   };
 }
@@ -472,6 +473,45 @@ function renderProducts(): void {
       }
     };
 
+    const learn = document.createElement("button");
+    learn.className = "pnl-btn primary pnl-learn-product";
+    learn.textContent = prod.aiKnowledge ? "🧠 Reaprender" : "🧠 IA aprender";
+    learn.title = "Criar uma ficha para respostas, pitches e roteiros";
+    learn.onclick = async () => {
+      if (!cfg.syncToken) return setStatus("Cole seu código de conexão primeiro", "err");
+      learn.disabled = true;
+      learn.textContent = "⏳ Aprendendo…";
+      try {
+        const headers = await signRequest(cfg.syncToken, "chat_reply");
+        const response = await fetch(`${API_BASE}/api/product/learn`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", ...headers },
+          body: JSON.stringify({ product: prod, context: cfg.aiContext || {} }),
+        });
+        const data = (await response.json().catch(() => ({}))) as {
+          knowledge?: string;
+          learnedAt?: string;
+          error?: string;
+        };
+        if (!response.ok || !data.knowledge) {
+          throw new Error(data.error || `falha ${response.status}`);
+        }
+        prod.aiKnowledge = data.knowledge;
+        prod.aiLearnedAt = data.learnedAt || new Date().toISOString();
+        save(cfg, { products: true });
+        setStatus("A IA aprendeu este produto", "ok");
+        learn.textContent = "🧠 Reaprender";
+      } catch (error) {
+        setStatus(
+          `Não foi possível aprender: ${error instanceof Error ? error.message : String(error)}`,
+          "err",
+        );
+        learn.textContent = prod.aiKnowledge ? "🧠 Reaprender" : "🧠 IA aprender";
+      } finally {
+        learn.disabled = false;
+      }
+    };
+
     const del = document.createElement("button");
     del.className = "pnl-btn ghost";
     del.textContent = "✕";
@@ -483,7 +523,7 @@ function renderProducts(): void {
       render();
     };
 
-    row.append(wrap, input, del);
+    row.append(wrap, input, learn, del);
     box.appendChild(row);
   });
 }

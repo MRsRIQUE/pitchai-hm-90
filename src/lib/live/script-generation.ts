@@ -1,4 +1,80 @@
-import type { AIContext, Product } from "./config";
+import {
+  EMPTY_PRODUCT_AI_SALES_CONTEXT,
+  productAiSalesContextText,
+  type AIContext,
+  type Product,
+  type ProductAISalesContext,
+} from "./config";
+
+export const SCRIPT_SECTION_DEFINITIONS: ReadonlyArray<{
+  key: keyof ProductAISalesContext;
+  heading: string;
+  aliases: string[];
+}> = [
+  { key: "hook", heading: "Gancho", aliases: ["gancho"] },
+  {
+    key: "painDesire",
+    heading: "Conexão com a dor ou desejo",
+    aliases: ["conexao com a dor ou desejo", "dor ou desejo", "dor e desejo"],
+  },
+  {
+    key: "benefits",
+    heading: "Demonstração e benefícios",
+    aliases: ["demonstracao e beneficios", "beneficios", "ganhos"],
+  },
+  {
+    key: "objectionResponse",
+    heading: "Objeção e resposta",
+    aliases: ["objecao e resposta", "objecoes", "objecao"],
+  },
+  {
+    key: "chatInteraction",
+    heading: "Interação com o chat",
+    aliases: ["interacao com o chat", "interacao", "chat"],
+  },
+  {
+    key: "cta",
+    heading: "Fechamento e CTA",
+    aliases: ["fechamento e cta", "fechamento", "cta"],
+  },
+];
+
+const normalizeHeading = (value: string) =>
+  value
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[*_:`]/g, "")
+    .trim()
+    .toLowerCase();
+
+/** Separa o Markdown gerado e devolve somente as partes reconhecidas. */
+export function parseScriptToProductContext(script: string): Partial<ProductAISalesContext> {
+  const headings = Array.from(script.matchAll(/^#{1,6}\s+(.+?)\s*$/gm));
+  const parsed: Partial<ProductAISalesContext> = {};
+  headings.forEach((match, index) => {
+    const normalized = normalizeHeading(match[1] || "");
+    const definition = SCRIPT_SECTION_DEFINITIONS.find((item) =>
+      item.aliases.some((alias) => normalized === alias || normalized.startsWith(`${alias} `)),
+    );
+    if (!definition || match.index == null) return;
+    const start = match.index + match[0].length;
+    const end = headings[index + 1]?.index ?? script.length;
+    const content = script.slice(start, end).trim();
+    if (content) parsed[definition.key] = content;
+  });
+  return parsed;
+}
+
+export function mergeScriptIntoProductContext(
+  current: ProductAISalesContext | undefined,
+  script: string,
+): ProductAISalesContext {
+  return {
+    ...EMPTY_PRODUCT_AI_SALES_CONTEXT,
+    ...(current ?? {}),
+    ...parseScriptToProductContext(script),
+  };
+}
 
 export const SCRIPT_STYLE_IDS = ["natural", "energetic", "storytelling", "expert"] as const;
 export type ScriptStyle = (typeof SCRIPT_STYLE_IDS)[number];
@@ -51,6 +127,8 @@ export function buildScriptPrompt(input: ScriptGenerationInput): ScriptPrompt {
     name: product.name,
     price: product.price || null,
     description: product.description || null,
+    learnedKnowledge: product.aiKnowledge || null,
+    productSalesContext: productAiSalesContextText(product) || null,
   });
 
   const systemInstruction = [

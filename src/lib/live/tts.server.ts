@@ -139,6 +139,7 @@ export interface TtsInput {
   text: string;
   voice?: string;
   speed?: number;
+  context?: "default" | "greeting" | "offer" | "farewell";
 }
 
 // ---------------------------------------------------------------------------
@@ -201,14 +202,24 @@ function isAlreadyContainerized(bytes: Uint8Array, mimeType: string | undefined)
  * linguagem natural, como prefixo. O modelo executa a instrução sem lê-la em voz
  * alta. Assim o `speed` que o front já envia continua tendo efeito.
  */
-function buildStyledPrompt(text: string, speed: number): string {
+function buildStyledPrompt(
+  text: string,
+  speed: number,
+  context: TtsInput["context"] = "default",
+): string {
   const pace =
     speed <= 0.85
       ? "em ritmo pausado e calmo"
       : speed >= 1.15
         ? "em ritmo acelerado e enérgico"
         : "em ritmo natural";
-  return `Fale em português do Brasil, ${pace}, com entonação de apresentador de live vendendo um produto. Fale apenas o texto a seguir, sem comentar nem repetir esta instrução:\n\n${text}`;
+  const delivery = {
+    greeting: "com acolhimento espontâneo, sorriso na voz e sem tom de anúncio",
+    offer: "com energia comercial natural, destacando as palavras importantes sem gritar",
+    farewell: "com calor humano e ritmo levemente mais calmo",
+    default: "como uma pessoa conversando ao vivo, próxima, segura e sem cadência de locução",
+  }[context || "default"];
+  return `Fale em português do Brasil, ${pace}, ${delivery}. Respeite a pontuação, use pequenas pausas naturais e pronuncie preços e números por extenso. Fale apenas o texto a seguir, sem comentar nem repetir esta instrução:\n\n${text}`;
 }
 
 // ---------------------------------------------------------------------------
@@ -273,7 +284,7 @@ function isAuthError(error: unknown): boolean {
 
 async function synthesizeWithGemini(
   apiKey: string,
-  input: { text: string; voice: string; speed: number },
+  input: { text: string; voice: string; speed: number; context?: TtsInput["context"] },
 ): Promise<TtsResult> {
   const ai = new GoogleGenAI({
     apiKey,
@@ -282,7 +293,7 @@ async function synthesizeWithGemini(
 
   const configured = process.env.GEMINI_TTS_MODEL?.trim();
   const models = configured ? [configured] : GEMINI_TTS_MODELS;
-  const prompt = buildStyledPrompt(input.text, input.speed);
+  const prompt = buildStyledPrompt(input.text, input.speed, input.context);
 
   let lastFailure: TtsFailure | null = null;
 
@@ -417,6 +428,7 @@ export async function synthesizeSpeech(input: TtsInput): Promise<TtsResult> {
     text,
     voice: resolveGeminiVoice(input.voice),
     speed,
+    context: input.context,
   });
 }
 

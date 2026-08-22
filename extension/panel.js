@@ -363,21 +363,22 @@
     iaLigada: true,
     respostasIA: true,
     responderNoChat: false,
-    respostasIntervaloSec: 8,
+    respostasIntervaloSec: 5,
     revisarAntesDeEnviar: false,
     pitchBank: {
       enabled: true,
       variants: 12,
       ttlMinutes: 60,
-      minIntervalSec: 45,
-      maxIntervalSec: 75,
+      minIntervalSec: 28,
+      maxIntervalSec: 48,
       cacheReplies: true,
     },
     protecaoGeral: false,
     violacao: true,
     autoMod: true,
     notificacoesVenda: true,
-    saudacoes: { enabled: true, minIntervalSec: 60 },
+    somVenda: { enabled: true, volume: 0.8 },
+    saudacoes: { enabled: true, minIntervalSec: 35 },
     cta: { enabled: true },
     autoFixar: { enabled: false, query: "", minSec: 20, maxSec: 60, ids: [], names: [] },
     encerrarTempo: { enabled: false, minutes: 120 },
@@ -432,7 +433,11 @@
         // Config antiga (sem a chave) nasce com o abaixamento ligado.
         duckIA: { ...DEFAULTS.midia.duckIA, ...(stored.midia?.duckIA || {}) },
       },
+      somVenda: { ...DEFAULTS.somVenda, ...(stored.somVenda || {}) },
       vozContextos: { ...DEFAULTS.vozContextos, ...(stored.vozContextos || {}) },
+      pitchBank: { ...DEFAULTS.pitchBank, ...(stored.pitchBank || {}) },
+      saudacoes: { ...DEFAULTS.saudacoes, ...(stored.saudacoes || {}) },
+      cta: { ...DEFAULTS.cta, ...(stored.cta || {}) },
       filtros: {
         ...DEFAULTS.filtros,
         ...(stored.filtros || {}),
@@ -701,6 +706,7 @@
       else if (el.type === "checkbox") el.checked = !!val;
       else el.value = val ?? "";
     });
+
     document.getElementById("pnl-voice").value = cfg.voz.id;
     document.getElementById("pnl-speed").value = cfg.voz.speed;
     document.getElementById("pnl-speed-val").textContent = Number(cfg.voz.speed).toFixed(2) + "x";
@@ -855,6 +861,37 @@
         save(["produtos", "autoFixar.names"]);
         renderAutofixHint();
       };
+      const learn = document.createElement("button");
+      learn.className = "pnl-btn primary pnl-learn-product";
+      learn.textContent = prod.aiKnowledge ? "🧠 Reaprender" : "🧠 IA aprender";
+      learn.title = "Criar uma ficha para respostas, pitches e roteiros";
+      learn.onclick = async () => {
+        if (!cfg.syncToken) return setStatus("Cole seu código de conexão primeiro", "err");
+        learn.disabled = true;
+        learn.textContent = "⏳ Aprendendo…";
+        try {
+          const headers = await signRequest(cfg.syncToken, "chat_reply");
+          const response = await fetch(`${API_BASE}/api/product/learn`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json", ...headers },
+            body: JSON.stringify({ product: prod, context: cfg.aiContext || {} }),
+          });
+          const data = await response.json().catch(() => ({}));
+          if (!response.ok || !data.knowledge) {
+            throw new Error(data.error || `falha ${response.status}`);
+          }
+          prod.aiKnowledge = data.knowledge;
+          prod.aiLearnedAt = data.learnedAt || new Date().toISOString();
+          save(["produtos"]);
+          setStatus("A IA aprendeu este produto", "ok");
+          learn.textContent = "🧠 Reaprender";
+        } catch (error) {
+          setStatus(`Não foi possível aprender: ${error?.message || error}`, "err");
+          learn.textContent = prod.aiKnowledge ? "🧠 Reaprender" : "🧠 IA aprender";
+        } finally {
+          learn.disabled = false;
+        }
+      };
       const del = document.createElement("button");
       del.className = "pnl-btn ghost";
       del.textContent = "✕";
@@ -865,7 +902,7 @@
         save(["produtos", "autoFixar.ids", "autoFixar.names"]);
         render();
       };
-      row.append(wrap, input, del);
+      row.append(wrap, input, learn, del);
       box.appendChild(row);
     });
   }
@@ -997,6 +1034,18 @@
           save(key);
         });
       }
+    });
+
+    document.getElementById("pnl-test-sale-sound")?.addEventListener("click", async () => {
+      const result = await chrome.runtime.sendMessage({
+        type: "PITCHAI_PLAY_SALE_SOUND",
+        volume: cfg.somVenda?.volume ?? 0.8,
+      });
+      const button = document.getElementById("pnl-test-sale-sound");
+      if (button) button.textContent = result?.ok ? "Som tocado ✓" : "Não foi possível tocar";
+      setTimeout(() => {
+        if (button) button.textContent = "Testar som";
+      }, 1800);
     });
 
     document.getElementById("pnl-autofix-pick")?.addEventListener("change", (e) => {

@@ -1,9 +1,23 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Activity, MessageSquare, RefreshCw, ShoppingBag, Users, WalletCards } from "lucide-react";
+import {
+  Activity,
+  AlertTriangle,
+  BarChart3,
+  Clock3,
+  Lightbulb,
+  MessageSquare,
+  MousePointerClick,
+  RefreshCw,
+  ShoppingBag,
+  Target,
+  Users,
+  WalletCards,
+} from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { listMySessions, type LiveSessionRow } from "@/lib/live/sync";
+import { analyzeLivePerformance } from "@/lib/live/performance-analysis";
 
 type Timeframe = "live" | "today" | "24h" | "7d";
 
@@ -18,6 +32,18 @@ function thresholdFor(timeframe: Timeframe) {
 
 const asArray = (value: unknown): any[] => (Array.isArray(value) ? value : []);
 const shown = (value?: string) => (value?.trim() ? value : "—");
+const pct = (value: number | null) => (value === null ? "—" : `${value.toFixed(1)}%`);
+const brl = (value: number | null) =>
+  value === null
+    ? "—"
+    : new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(value);
+const duration = (seconds: number | null) => {
+  if (seconds === null) return "—";
+  const rounded = Math.round(seconds);
+  const minutes = Math.floor(rounded / 60);
+  const rest = rounded % 60;
+  return minutes ? `${minutes}min ${rest}s` : `${rest}s`;
+};
 
 export function AiAutomationsDashboard() {
   const [timeframe, setTimeframe] = useState<Timeframe>("live");
@@ -56,8 +82,7 @@ export function AiAutomationsDashboard() {
   }, [verifiedSessions, timeframe]);
 
   const metrics = selected[0]?.live_metrics;
-  const answered = selected.reduce((sum, row) => sum + (Number(row.messages_answered) || 0), 0);
-  const orders = selected.reduce((sum, row) => sum + asArray(row.sales_snapshot).length, 0);
+  const analysis = useMemo(() => analyzeLivePerformance(selected), [selected]);
   const active = Boolean(verifiedSessions[0] && !verifiedSessions[0].ended_at);
   const capturedAt = metrics?.captured_at ? new Date(metrics.captured_at) : null;
 
@@ -84,16 +109,20 @@ export function AiAutomationsDashboard() {
   );
 
   const cards = [
-    { label: "GMV", value: shown(metrics?.gmv), icon: WalletCards },
-    { label: "Espectadores atuais", value: shown(metrics?.viewers), icon: Users },
+    { label: "GMV confirmado", value: brl(analysis.gmv), icon: WalletCards },
+    {
+      label: timeframe === "live" ? "Espectadores atuais" : "Pico de espectadores",
+      value: analysis.viewersPeak === null ? "—" : String(Math.round(analysis.viewersPeak)),
+      icon: Users,
+    },
     {
       label: "Pedidos detectados",
-      value: selected.length ? String(orders) : "—",
+      value: selected.length ? String(analysis.orders) : "—",
       icon: ShoppingBag,
     },
     {
       label: "Mensagens respondidas",
-      value: selected.length ? String(answered) : "—",
+      value: selected.length ? String(analysis.answered) : "—",
       icon: MessageSquare,
     },
   ];
@@ -162,6 +191,88 @@ export function AiAutomationsDashboard() {
         ))}
       </div>
 
+      <div className="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1.1fr)_minmax(0,1.9fr)]">
+        <Card className="p-4">
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <h3 className="flex items-center gap-2 text-sm font-semibold">
+                <BarChart3 className="h-4 w-4 text-primary" /> Diagnóstico da operação
+              </h3>
+              <p className="mt-1 text-[11px] text-muted-foreground">
+                Indicadores calculados apenas quando existe base real suficiente.
+              </p>
+            </div>
+            <Badge variant="outline">{analysis.dataCoverage}% dos dados</Badge>
+          </div>
+          <div className="mt-4 grid grid-cols-2 gap-3 text-xs">
+            <Metric
+              label="Conversão clique → pedido"
+              value={pct(analysis.conversionRate)}
+              icon={Target}
+            />
+            <Metric
+              label="Cliques por espectador"
+              value={pct(analysis.clickRate)}
+              icon={MousePointerClick}
+            />
+            <Metric
+              label="Cobertura do chat"
+              value={pct(analysis.responseRate)}
+              icon={MessageSquare}
+            />
+            <Metric
+              label="Duração média assistida"
+              value={duration(analysis.avgWatchSeconds)}
+              icon={Clock3}
+            />
+            <Metric label="Ticket médio" value={brl(analysis.averageTicket)} icon={WalletCards} />
+            <Metric
+              label="Vendas por hora"
+              value={analysis.salesPerHour === null ? "—" : analysis.salesPerHour.toFixed(1)}
+              icon={ShoppingBag}
+            />
+          </div>
+        </Card>
+
+        <Card className="p-4">
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <h3 className="flex items-center gap-2 text-sm font-semibold">
+                <Lightbulb className="h-4 w-4 text-amber-400" /> Recomendações para a próxima ação
+              </h3>
+              <p className="mt-1 text-[11px] text-muted-foreground">
+                Priorizadas pelas métricas e eventos confirmados deste período.
+              </p>
+            </div>
+            <Badge variant="outline">{analysis.recommendations.length} análise(s)</Badge>
+          </div>
+          <div className="mt-3 space-y-2">
+            {analysis.recommendations.map((recommendation) => (
+              <div
+                key={recommendation.id}
+                className="rounded-lg border border-border/60 bg-background/30 p-3"
+              >
+                <div className="flex flex-wrap items-center gap-2">
+                  {recommendation.priority === "alta" ? (
+                    <AlertTriangle className="h-3.5 w-3.5 text-amber-400" />
+                  ) : (
+                    <Target className="h-3.5 w-3.5 text-primary" />
+                  )}
+                  <strong className="text-xs">{recommendation.title}</strong>
+                  <Badge variant="secondary" className="text-[9px] uppercase">
+                    {recommendation.priority}
+                  </Badge>
+                </div>
+                <p className="mt-1 text-xs text-muted-foreground">{recommendation.detail}</p>
+                <p className="mt-1.5 text-[10px] text-muted-foreground/80">
+                  Base: {recommendation.evidence}
+                </p>
+              </div>
+            ))}
+          </div>
+        </Card>
+      </div>
+
       <div className="grid grid-cols-1 gap-4 2xl:grid-cols-[minmax(0,2fr)_minmax(320px,1fr)]">
         <Card className="p-4">
           <h3 className="text-sm font-semibold">Leitura do Gerenciador</h3>
@@ -181,6 +292,24 @@ export function AiAutomationsDashboard() {
             <div>
               <span className="block text-muted-foreground">Visitantes</span>
               <strong>{shown(metrics?.visitor_percent)}</strong>
+            </div>
+          </div>
+          <div className="mt-3 grid grid-cols-2 gap-3 border-t border-border/60 pt-3 text-xs sm:grid-cols-4">
+            <div>
+              <span className="block text-muted-foreground">Entradas percebidas</span>
+              <strong>{analysis.audienceJoins || "—"}</strong>
+            </div>
+            <div>
+              <span className="block text-muted-foreground">Novos follows</span>
+              <strong>{analysis.audienceFollows || "—"}</strong>
+            </div>
+            <div>
+              <span className="block text-muted-foreground">Mensagens recebidas</span>
+              <strong>{analysis.messagesReceived || "—"}</strong>
+            </div>
+            <div>
+              <span className="block text-muted-foreground">Pitches falados</span>
+              <strong>{analysis.pitchesSpoken || "—"}</strong>
             </div>
           </div>
           <p className="mt-4 text-[11px] text-muted-foreground">
@@ -215,6 +344,25 @@ export function AiAutomationsDashboard() {
           </div>
         </Card>
       </div>
+    </div>
+  );
+}
+
+function Metric({
+  label,
+  value,
+  icon: Icon,
+}: {
+  label: string;
+  value: string;
+  icon: typeof Activity;
+}) {
+  return (
+    <div className="rounded-lg border border-border/60 p-3">
+      <span className="flex items-center gap-1.5 text-[10px] text-muted-foreground">
+        <Icon className="h-3.5 w-3.5 text-primary" /> {label}
+      </span>
+      <strong className="mt-1 block font-display text-lg">{value}</strong>
     </div>
   );
 }

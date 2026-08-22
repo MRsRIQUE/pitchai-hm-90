@@ -384,10 +384,8 @@ function LiveDashboardContent() {
         shortcuts={shortcuts}
         actions={
           <>
-            {/* Não existe botão de salvar: a store grava a cada alteração. O
-                indicador é o que conta isso para quem procura o botão. Some no
-                celular enquanto ainda não há hora para mostrar — ali ele seria
-                só uma frase ocupando a largura que o título precisa. */}
+            {/* A topbar mostra o autosave geral. A aba IA também oferece uma
+                confirmação explícita que publica contexto e fichas na nuvem. */}
             {compacta && !salvoEm ? null : (
               <span className="app-tag" data-tone={salvoEm ? "ok" : undefined}>
                 {salvoEm ? <Check aria-hidden="true" /> : null}
@@ -454,7 +452,9 @@ function LiveDashboardContent() {
 
         {active === "desempenho" ? <DesempenhoSection /> : null}
         {active === "produtos" ? <ProdutosSection /> : null}
-        {active === "roteiros" ? <RoteirosSection /> : null}
+        {active === "roteiros" ? (
+          <RoteirosSection onSyncProducts={syncVitrine} onOpenAi={() => setActive("ia")} />
+        ) : null}
         {active === "quentes" ? <QuentesSection /> : null}
         {active === "ia" ? <IaSection /> : null}
         {active === "voz" ? (

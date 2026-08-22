@@ -1,8 +1,6 @@
 import { onAuthStateChanged } from "firebase/auth";
 import {
   doc,
-  getDoc,
-  setDoc,
   deleteDoc,
   collection,
   query,
@@ -11,7 +9,8 @@ import {
   getDocs,
 } from "firebase/firestore";
 import { getFirebaseAuth, getFirebaseDb } from "@/lib/firebase";
-import type { LiveConfig } from "./config";
+import type { LiveConfig, ProductAISalesContext } from "./config";
+import { inferSyncSections, SYNC_SECTIONS, type SyncSection } from "./sync-contract";
 
 export type LiveSessionRow = {
   id: string;
@@ -20,6 +19,10 @@ export type LiveSessionRow = {
   messages_answered: number;
   messages_ignored: number;
   messages_blocked: number;
+  messages_received?: number;
+  audience_joins?: number;
+  audience_follows?: number;
+  pitches_spoken?: number;
   products_pitched: Array<{ name: string; id?: string | null; at?: string }> | null;
   tokens_in: number;
   tokens_out: number;
@@ -91,23 +94,53 @@ export async function ensureMyLiveConfig(): Promise<{
   return requestSyncToken(false);
 }
 
+type SyncMeta = {
+  schemaVersion: number;
+  revision: number;
+  updatedAt: string | null;
+  sectionUpdatedAt: Partial<Record<SyncSection, string>>;
+};
+
+type SyncResponse = {
+  ok?: boolean;
+  success?: boolean;
+  error?: string;
+  message?: string;
+  config?: Partial<LiveConfig>;
+  meta?: SyncMeta;
+};
+
+async function syncRequest(
+  token: string,
+  body: Record<string, unknown>,
+  signal?: AbortSignal,
+): Promise<SyncResponse> {
+  const response = await fetch("/api/public/live/config", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ token, ...body }),
+    signal,
+  });
+  const data = (await response.json().catch(() => ({}))) as SyncResponse;
+  if (!response.ok) {
+    throw new Error(data.message || data.error || "Falha ao sincronizar com a extensão.");
+  }
+  return data;
+}
+
 /** Envia a config atual para o Firestore (doc público por token). */
 export async function pushMyLiveConfig(config: LiveConfig): Promise<void> {
-  const uid = (await currentUser())?.uid ?? null;
-  if (!uid) return;
   const existing = await ensureMyLiveConfig();
   const token = existing?.sync_token;
   if (!token) return;
-  const db = getFirebaseDb();
-  await setDoc(
-    doc(db, "live_configs_by_token", token),
-    {
-      uid,
-      config: config as unknown as Record<string, unknown>,
-      updatedAt: new Date().toISOString(),
-    },
-    { merge: true },
-  );
+  const { syncToken: _syncToken, ...fields } = config;
+  await syncRequest(token, {
+    action: "patch",
+    config: fields,
+    sections: [...SYNC_SECTIONS],
+    source: "web",
+    requestId: crypto.randomUUID(),
+  });
 }
 
 export type VitrineItem = {
@@ -128,6 +161,9 @@ export type VitrineItem = {
   /** URL absoluta http(s) da foto. */
   imageUrl?: string;
   description?: string;
+  aiKnowledge?: string;
+  aiLearnedAt?: string;
+  aiSalesContext?: ProductAISalesContext;
 };
 
 /**
@@ -189,22 +225,19 @@ export async function pushLiveConfigFields(fields: Partial<LiveConfig>): Promise
   const entries = Object.entries(fields).filter(([, v]) => v !== undefined);
   if (entries.length === 0) return true;
 
-  const uid = (await currentUser())?.uid ?? null;
-  if (!uid) return false;
   const existing = await ensureMyLiveConfig();
   const token = existing?.sync_token;
   if (!token) return false;
-
-  const db = getFirebaseDb();
-  await setDoc(
-    doc(db, "live_configs_by_token", token),
-    {
-      uid,
-      config: Object.fromEntries(entries),
-      updatedAt: new Date().toISOString(),
-    },
-    { merge: true },
-  );
+  const config = Object.fromEntries(entries);
+  const sections = inferSyncSections(config);
+  if (sections.length === 0) return false;
+  await syncRequest(token, {
+    action: "patch",
+    config,
+    sections,
+    source: "web",
+    requestId: crypto.randomUUID(),
+  });
   return true;
 }
 
@@ -239,13 +272,11 @@ export async function pullVitrine(options?: { signal?: AbortSignal }): Promise<{
   try {
     const existing = await ensureMyLiveConfig();
     if (!existing?.sync_token) return null;
-    const db = getFirebaseDb();
-    const cfgDoc = await getDoc(doc(db, "live_configs_by_token", existing.sync_token));
-
-    if (signal?.aborted) return null;
-    if (!cfgDoc.exists()) return null;
-
-    const data = cfgDoc.data() as any;
+    const data = await syncRequest(
+      existing.sync_token,
+      { action: "pull", sections: ["products", "controls"], source: "web" },
+      signal,
+    );
     const remote = data.config ?? {};
     const produtos: any[] = Array.isArray(remote.produtos) ? remote.produtos : [];
 
@@ -266,6 +297,12 @@ export async function pullVitrine(options?: { signal?: AbortSignal }): Promise<{
         const currency = texto(p.currency);
         const imageUrl = texto(p.imageUrl);
         const description = typeof p.description === "string" ? p.description : undefined;
+        const aiKnowledge = texto(p.aiKnowledge);
+        const aiLearnedAt = texto(p.aiLearnedAt);
+        const aiSalesContext =
+          p.aiSalesContext && typeof p.aiSalesContext === "object"
+            ? (p.aiSalesContext as ProductAISalesContext)
+            : undefined;
 
         if (id !== undefined) item.id = id;
         if (price !== undefined) item.price = price;
@@ -274,12 +311,15 @@ export async function pullVitrine(options?: { signal?: AbortSignal }): Promise<{
         if (currency !== undefined) item.currency = currency;
         if (imageUrl !== undefined) item.imageUrl = imageUrl;
         if (description !== undefined) item.description = description;
+        if (aiKnowledge !== undefined) item.aiKnowledge = aiKnowledge;
+        if (aiLearnedAt !== undefined) item.aiLearnedAt = aiLearnedAt;
+        if (aiSalesContext !== undefined) item.aiSalesContext = aiSalesContext;
         return item;
       });
 
     return {
       items,
-      updatedAt: data.updatedAt ?? null,
+      updatedAt: data.meta?.updatedAt ?? null,
       controls: extractLiveControls(remote),
     };
   } catch (error) {

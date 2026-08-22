@@ -81,7 +81,7 @@
 
 - ☐ **DOM frágil**: seletores `data-tid`/`data-e2e`/classes do TikTok quebram com frequência; fallbacks heurísticos existem (`dom-map.js` score, `hasMultipleProductRows`) mas podem gerar falso positivo. Monitorar a cada mudança do TikTok.
 - ☒ ~~Permissão `microphone` ausente no manifest~~ — **não existe** essa permissão no MV3 (gerava `Permission microphone is unknown.` no console). O mic é pedido em runtime via `getUserMedia` + `allow="microphone"` no iframe do painel. Removida do manifest em 2026-08-21.
-- ☐ **Voz virtual exige driver no SO** (VB-Cable) + fonte de áudio selecionada no TikTok — limitação conhecida, documentar para o usuário no painel/onboarding.
+- ☐ **Validar mídia virtual nativa da extensão** — confirmar câmera e microfone Pitch AI selecionados na página da live, sem instalação de programa externo.
 - ☐ Erros silenciosos: `hook.js:183-185` e `hook.js:258-260` engolem falhas de parse/rede.
 - ☐ Sem onboarding guiado no popup (`popup.html` só links).
 - ☐ Auto-fixar não deixa claro que casa por **nome** na vitrine (`panel.js:554-572`).

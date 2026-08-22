@@ -88,27 +88,7 @@ export function LiveStudioCard({ compact = false }: { compact?: boolean } = {}) 
   const [agendar, setAgendar] = useState(false);
   const [agendadoEm, setAgendadoEm] = useState<string>("");
   const [agora, setAgora] = useState(() => Date.now());
-  const [virtualCam, setVirtualCam] = useState<string | null>(null);
   const [monitor, setMonitor] = useState(false);
-
-  const detectVirtualCam = async () => {
-    try {
-      const devs = await navigator.mediaDevices.enumerateDevices();
-      const cam = devs.find(
-        (d) => d.kind === "videoinput" && /obs|virtual|manycam|droidcam/i.test(d.label),
-      );
-      setVirtualCam(cam?.label ?? null);
-    } catch {
-      setVirtualCam(null);
-    }
-  };
-
-  useEffect(() => {
-    if (typeof navigator === "undefined" || !navigator.mediaDevices) return;
-    void detectVirtualCam();
-    navigator.mediaDevices.addEventListener?.("devicechange", detectVirtualCam);
-    return () => navigator.mediaDevices.removeEventListener?.("devicechange", detectVirtualCam);
-  }, []);
 
   const stopTracks = () => {
     streamRef.current?.getTracks().forEach((t) => t.stop());
@@ -228,12 +208,6 @@ export function LiveStudioCard({ compact = false }: { compact?: boolean } = {}) 
       });
       return;
     }
-    if (!virtualCam) {
-      toast.warning("Câmera virtual não detectada", {
-        description:
-          "O Studio vai rodar aqui, mas o TikTok só recebe o vídeo com a câmera virtual do OBS ligada.",
-      });
-    }
     setElapsed(0);
     setRecordingUrl(null);
     await videoRef.current?.play().catch(() => undefined);
@@ -262,9 +236,8 @@ export function LiveStudioCard({ compact = false }: { compact?: boolean } = {}) 
 
     setLive(true);
     toast.success("Studio no ar", {
-      description: virtualCam
-        ? "Selecione a câmera virtual do OBS dentro do TikTok."
-        : "Ligue a câmera virtual do OBS para o TikTok receber o vídeo.",
+      description:
+        "Na página da live, selecione Pitch AI — Câmera Virtual. A extensão publica a fonte automaticamente.",
     });
   };
 
@@ -320,7 +293,7 @@ export function LiveStudioCard({ compact = false }: { compact?: boolean } = {}) 
             <h2 className="font-display text-base font-bold">Studio da live</h2>
             <p className="text-xs text-muted-foreground">
               Fonte de vídeo da sua live: escolha, inicie e pare por aqui. O TikTok recebe a imagem
-              pela câmera virtual.
+              pela câmera virtual criada pela extensão.
             </p>
           </div>
         </div>
@@ -425,7 +398,7 @@ export function LiveStudioCard({ compact = false }: { compact?: boolean } = {}) 
         </div>
       )}
 
-      {/* Câmera virtual — como o vídeo chega no TikTok */}
+      {/* Mídia virtual nativa da extensão */}
       {!compact && (
         <div className="space-y-2 rounded-xl border border-border/60 p-3">
           <div className="flex items-center justify-between gap-3">
@@ -433,57 +406,21 @@ export function LiveStudioCard({ compact = false }: { compact?: boolean } = {}) 
               <MonitorUp className="h-4 w-4 text-primary" />
               <span className="text-sm font-medium">Enviar para o TikTok</span>
             </div>
-            <span
-              className={cn(
-                "rounded-full px-2 py-0.5 text-[11px] font-semibold",
-                virtualCam ? "bg-success/15 text-success" : "bg-muted text-muted-foreground",
-              )}
-            >
-              {virtualCam ? "câmera virtual pronta" : "câmera virtual não detectada"}
+            <span className="rounded-full bg-success/15 px-2 py-0.5 text-[11px] font-semibold text-success">
+              extensão pronta
             </span>
           </div>
           <p className="text-xs text-muted-foreground">
-            O navegador não envia vídeo direto para o TikTok. Use uma câmera virtual — o TikTok
-            enxerga ela como se fosse uma webcam.
+            A extensão transforma a fonte escolhida em câmera e microfone virtuais para a página da
+            live.
           </p>
           <ol className="list-decimal space-y-1 pl-4 text-xs text-muted-foreground">
-            <li>Instale o OBS Studio (gratuito, Windows e Mac).</li>
-            <li>No OBS, adicione a fonte "Captura de janela" e escolha esta aba do Pitch AI.</li>
-            <li>Clique em "Iniciar câmera virtual" no canto inferior direito do OBS.</li>
-            <li>Aqui no Studio, escolha sua fonte e clique em "Iniciar live".</li>
-            <li>No TikTok, selecione a câmera "OBS Virtual Camera" como entrada de vídeo.</li>
+            <li>Mantenha a extensão Pitch AI ativada e abra a página da live.</li>
+            <li>
+              Selecione <b>Pitch AI — Câmera Virtual</b> e <b>Pitch AI — Microfone Virtual</b>.
+            </li>
+            <li>Aqui no Studio, escolha Câmera, Tela ou Vídeo e clique em "Iniciar live".</li>
           </ol>
-          <div className="flex flex-wrap gap-2 pt-1">
-            <Button variant="outline" size="sm" asChild>
-              <a href="https://obsproject.com/download" target="_blank" rel="noreferrer">
-                <Download className="mr-1.5 h-4 w-4" /> Baixar OBS
-              </a>
-            </Button>
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => {
-                void navigator.clipboard
-                  ?.writeText(
-                    [
-                      "Como enviar o vídeo do Pitch AI para o TikTok:",
-                      "1. Instale o OBS Studio (obsproject.com/download).",
-                      "2. No OBS, adicione a fonte 'Captura de janela' e escolha a aba do Pitch AI.",
-                      "3. Clique em 'Iniciar câmera virtual' no OBS.",
-                      "4. No Pitch AI, escolha a fonte e clique em 'Iniciar live'.",
-                      "5. No TikTok, selecione 'OBS Virtual Camera' como câmera.",
-                    ].join("\n"),
-                  )
-                  .then(() => toast.success("Passo a passo copiado"))
-                  .catch(() => toast.error("Não foi possível copiar"));
-              }}
-            >
-              Copiar passo a passo
-            </Button>
-            <Button variant="ghost" size="sm" onClick={() => void detectVirtualCam()}>
-              Verificar novamente
-            </Button>
-          </div>
         </div>
       )}
 

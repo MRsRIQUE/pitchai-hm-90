@@ -349,9 +349,9 @@ export function SetupWizard({
                           {audioOk === false ? (
                             <div className="app-alert" data-tone="warn">
                               <span>
-                                Não ouviu nada? Confira o volume do computador. Para mandar a voz
-                                para dentro da live você escolhe o cabo virtual (VB-Cable no
-                                Windows, BlackHole no Mac) na seção <b>Voz</b> do painel.
+                                Não ouviu nada? Confira o volume do computador e, na página do
+                                TikTok, selecione <b>Pitch AI — Microfone Virtual</b>. A extensão
+                                publica essa entrada automaticamente.
                               </span>
                             </div>
                           ) : null}

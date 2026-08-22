@@ -11,8 +11,19 @@ const ProductSchema = z.object({
   id: z.string().min(1).max(120),
   name: z.string().min(1).max(240),
   description: z.string().max(2_500).default(""),
+  aiKnowledge: z.string().max(2_000).optional(),
   price: z.string().max(100).default(""),
   active: z.boolean().default(false),
+  aiSalesContext: z
+    .object({
+      hook: z.string().max(4_000).default(""),
+      painDesire: z.string().max(4_000).default(""),
+      benefits: z.string().max(4_000).default(""),
+      objectionResponse: z.string().max(4_000).default(""),
+      chatInteraction: z.string().max(4_000).default(""),
+      cta: z.string().max(4_000).default(""),
+    })
+    .optional(),
 });
 
 const AiContextSchema = z.object({

@@ -1,17 +1,19 @@
 /**
  * Empacota a extensão do Chrome.
  *
- *   node scripts/pack-extension.mjs                 → public/pitchai-extension.zip
- *     Distribuição manual (/download): o manifest mantém o campo `key`, então o
- *     ID da extensão fica fixo em qualquer pasta em que o zip for extraído.
+ *   node scripts/pack-extension.mjs                 → private-assets/pitchai-extension.zip
+ *     Distribuição pelo site (/download). O zip fica fora de public/ e é servido
+ *     pela rota autenticada, para a URL estática não contornar a licença. O
+ *     manifest mantém o campo `key`, então o ID da extensão fica fixo em
+ *     qualquer pasta em que o zip for extraído.
  *
  *   node scripts/pack-extension.mjs --webstore      → dist/pitchai-extension-webstore.zip
  *     Upload na Chrome Web Store, que REJEITA o campo `key` ("O campo key não é
  *     permitido no manifesto"). A Store assina o pacote com a chave dela; o ID
- *     só continua o mesmo da distribuição manual se a chave privada for enviada
+ *     só continua o mesmo da distribuição pelo site se a chave privada for enviada
  *     no PRIMEIRO upload do item: `--key-pem <caminho>` inclui o arquivo como
  *     `key.pem` na raiz do zip (esse zip contém a chave privada — não distribua).
- *     O alvo --webstore não toca no zip público nem no version.ts.
+ *     O alvo --webstore não toca no zip do site nem no version.ts.
  *
  * IMPORTANTE: o zip é um arquivo BINÁRIO. Ele nunca deve ser editado ou
  * copiado por pipelines de texto (isso foi o que corrompeu a versão
@@ -55,7 +57,7 @@ if (keyPemPath && !WEBSTORE) {
 
 const outZip = WEBSTORE
   ? path.join(rootDir, "dist", "pitchai-extension-webstore.zip")
-  : path.join(rootDir, "public", "pitchai-extension.zip");
+  : path.join(rootDir, "private-assets", "pitchai-extension.zip");
 
 // Arquivos distribuídos — exatamente os referenciados pelo manifest.json
 const FILES = [
@@ -65,6 +67,8 @@ const FILES = [
   "product-bridge.js",
   "product-scrape.js",
   "background.js",
+  "offscreen.html",
+  "offscreen.js",
   "content.js",
   "dom-map.js",
   "hook.js",
@@ -230,8 +234,7 @@ try {
 // Versão única do produto: o manifest da extensão é a fonte da verdade.
 // O site lia uma constante escrita à mão que parou de ser bumpada e ficou 14
 // versões atrás. Além de mostrar o número errado no painel e na página de
-// download, ela congelava o cache-buster de /pitchai-extension.zip?v=… — o
-// usuário podia baixar um zip velho servido do cache.
+// download, ela congelava o nome da versão mostrado para o usuário.
 // (Só no alvo padrão: o build da Web Store não mexe no código-fonte do site.)
 // ---------------------------------------------------------------------------
 if (!WEBSTORE) {

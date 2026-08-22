@@ -60,9 +60,9 @@ export function derivarPassos(
     },
     {
       id: "voz",
-      titulo: "Mandar a voz para a live",
-      descricao: "Escolha o cabo virtual como saída, senão a IA fala só na sua caixa de som.",
-      feito: Boolean(config.voz.outputDeviceId),
+      titulo: "Ativar a voz virtual da extensão",
+      descricao: "No TikTok, selecione Pitch AI — Microfone Virtual e faça um teste de voz.",
+      feito: config.respostasIA,
       destino: "voz",
     },
     {

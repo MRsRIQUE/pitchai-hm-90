@@ -22,7 +22,16 @@ const BodySchema = z.object({
       "sale",
       "metrics",
       "violation",
+      "counters",
     ])
+    .optional(),
+  counters: z
+    .object({
+      messages_received: num(10_000),
+      audience_joins: num(10_000),
+      audience_follows: num(10_000),
+      pitches_spoken: num(10_000),
+    })
     .optional(),
   metrics: z
     .object({
@@ -113,6 +122,10 @@ export const Route = createFileRoute("/api/public/live/session")({
                 messages_answered: 0,
                 messages_ignored: 0,
                 messages_blocked: 0,
+                messages_received: 0,
+                audience_joins: 0,
+                audience_follows: 0,
+                pitches_spoken: 0,
                 products_pitched: [],
                 tokens_in: 0,
                 tokens_out: 0,
@@ -210,6 +223,13 @@ export const Route = createFileRoute("/api/public/live/session")({
               };
             } else if (body.kind === "violation") {
               patch.violation_count = (data.violation_count ?? 0) + 1;
+            } else if (body.kind === "counters" && body.counters) {
+              for (const [key, increment] of Object.entries(body.counters)) {
+                if (typeof increment === "number" && increment > 0) {
+                  patch[key] = (Number(data[key]) || 0) + increment;
+                }
+              }
+              if (!Object.keys(patch).length) return j(400, { error: "empty_counters" });
             } else {
               return j(400, { error: "unknown_kind" });
             }

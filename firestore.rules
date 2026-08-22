@@ -98,14 +98,14 @@ service cloud.firestore {
           && get(/databases/$(database)/documents/sync_tokens/$(token)).data.uid == request.auth.uid
           && hasAccessRecord(request.auth.uid)
           && request.resource.data.diff({}).affectedKeys()
-            .hasOnly(['uid', 'config', 'updatedAt']));
+            .hasOnly(['uid', 'config', 'updatedAt', 'revision', 'sectionUpdatedAt']));
       allow update: if isPrivileged()
         || (isSignedIn()
           && get(/databases/$(database)/documents/sync_tokens/$(token)).data.uid == request.auth.uid
           && hasAccessRecord(request.auth.uid)
           && request.resource.data.uid == resource.data.uid
           && request.resource.data.diff(resource.data).affectedKeys()
-            .hasOnly(['uid', 'config', 'updatedAt']));
+            .hasOnly(['uid', 'config', 'updatedAt', 'revision', 'sectionUpdatedAt']));
       allow delete: if isPrivileged()
         || (isSignedIn() && resource.data.uid == request.auth.uid);
     }

@@ -316,7 +316,7 @@
                     <label
                       >Intervalo entre respostas (s)<input
                         type="number"
-                        min="4"
+                        min="3"
                         max="300"
                         data-key="respostasIntervaloSec"
                     /></label>
@@ -351,14 +351,14 @@
                     <label
                       >Mín (s)<input
                         type="number"
-                        min="20"
+                        min="15"
                         max="600"
                         data-key="pitchBank.minIntervalSec"
                     /></label>
                     <label
                       >Máx (s)<input
                         type="number"
-                        min="20"
+                        min="15"
                         max="900"
                         data-key="pitchBank.maxIntervalSec"
                     /></label>
@@ -395,6 +395,30 @@
                 </div>
                 <button class="pnl-toggle" data-key="notificacoesVenda"></button>
               </div>
+
+              <div class="pnl-row">
+                <div>
+                  <h3>Som ao detectar venda</h3>
+                  <p>
+                    Toca o alerta pela própria extensão, mesmo quando a página bloqueia autoplay.
+                  </p>
+                  <label class="pnl-inline-range">
+                    Volume
+                    <input
+                      type="range"
+                      min="0"
+                      max="1"
+                      step="0.05"
+                      data-key="somVenda.volume"
+                      aria-label="Volume do som de venda"
+                    />
+                  </label>
+                  <button class="pnl-btn ghost" id="pnl-test-sale-sound" type="button">
+                    Testar som
+                  </button>
+                </div>
+                <button class="pnl-toggle" data-key="somVenda.enabled"></button>
+              </div>
             </div>
           </section>
 
@@ -427,7 +451,7 @@
                     <label
                       >Mín (s)<input
                         type="number"
-                        min="30"
+                        min="20"
                         max="600"
                         data-key="saudacoes.minIntervalSec"
                     /></label>

@@ -18,7 +18,17 @@ export default defineConfig(({ command }) => ({
         client: { files: ["**/server/**"], specifiers: ["server-only"] },
       },
     }),
-    nitro({ preset: command === "build" ? "vercel" : undefined, prerender: { routes: ["/"] } }),
+    nitro({
+      preset: command === "build" ? "vercel" : undefined,
+      prerender: { routes: ["/"] },
+      serverAssets: [
+        {
+          baseName: "extension",
+          dir: "./private-assets",
+          pattern: "pitchai-extension.zip",
+        },
+      ],
+    }),
     viteReact(),
     VitePWA({
       disable: process.env.NODE_ENV === "production",

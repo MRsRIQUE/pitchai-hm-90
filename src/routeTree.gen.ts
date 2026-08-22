@@ -25,12 +25,14 @@ import { Route as ApiHotProductsRouteImport } from './routes/api/hot-products'
 import { Route as CheckoutReturnRouteImport } from './routes/checkout.return'
 import { Route as ApiAccountDeviceBindingRouteImport } from './routes/api/account/device-binding'
 import { Route as ApiAccountEnsureRouteImport } from './routes/api/account/ensure'
+import { Route as ApiAccountExtensionDownloadRouteImport } from './routes/api/account/extension-download'
 import { Route as ApiAccountSyncTokenRouteImport } from './routes/api/account/sync-token'
 import { Route as ApiAdminCheckRouteImport } from './routes/api/admin/check'
 import { Route as ApiAdminCourtesyRouteImport } from './routes/api/admin/courtesy'
 import { Route as ApiBillingPortalRouteImport } from './routes/api/billing/portal'
 import { Route as ApiCheckoutStartRouteImport } from './routes/api/checkout/start'
 import { Route as ApiCheckoutStatusRouteImport } from './routes/api/checkout/status'
+import { Route as ApiProductLearnRouteImport } from './routes/api/product/learn'
 import { Route as ApiScriptGenerateRouteImport } from './routes/api/script/generate'
 import { Route as ApiTtsPreviewRouteImport } from './routes/api/tts/preview'
 import { Route as ApiPublicChatReplyRouteImport } from './routes/api/public/chat/reply'
@@ -124,6 +126,12 @@ const ApiAccountEnsureRoute = ApiAccountEnsureRouteImport.update({
   path: '/api/account/ensure',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiAccountExtensionDownloadRoute =
+  ApiAccountExtensionDownloadRouteImport.update({
+    id: '/api/account/extension-download',
+    path: '/api/account/extension-download',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 const ApiAccountSyncTokenRoute = ApiAccountSyncTokenRouteImport.update({
   id: '/api/account/sync-token',
   path: '/api/account/sync-token',
@@ -152,6 +160,11 @@ const ApiCheckoutStartRoute = ApiCheckoutStartRouteImport.update({
 const ApiCheckoutStatusRoute = ApiCheckoutStatusRouteImport.update({
   id: '/api/checkout/status',
   path: '/api/checkout/status',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiProductLearnRoute = ApiProductLearnRouteImport.update({
+  id: '/api/product/learn',
+  path: '/api/product/learn',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ApiScriptGenerateRoute = ApiScriptGenerateRouteImport.update({
@@ -234,12 +247,14 @@ export interface FileRoutesByFullPath {
   '/checkout/return': typeof CheckoutReturnRoute
   '/api/account/device-binding': typeof ApiAccountDeviceBindingRoute
   '/api/account/ensure': typeof ApiAccountEnsureRoute
+  '/api/account/extension-download': typeof ApiAccountExtensionDownloadRoute
   '/api/account/sync-token': typeof ApiAccountSyncTokenRoute
   '/api/admin/check': typeof ApiAdminCheckRoute
   '/api/admin/courtesy': typeof ApiAdminCourtesyRoute
   '/api/billing/portal': typeof ApiBillingPortalRoute
   '/api/checkout/start': typeof ApiCheckoutStartRoute
   '/api/checkout/status': typeof ApiCheckoutStatusRoute
+  '/api/product/learn': typeof ApiProductLearnRoute
   '/api/script/generate': typeof ApiScriptGenerateRoute
   '/api/tts/preview': typeof ApiTtsPreviewRoute
   '/api/public/chat/reply': typeof ApiPublicChatReplyRoute
@@ -270,12 +285,14 @@ export interface FileRoutesByTo {
   '/checkout/return': typeof CheckoutReturnRoute
   '/api/account/device-binding': typeof ApiAccountDeviceBindingRoute
   '/api/account/ensure': typeof ApiAccountEnsureRoute
+  '/api/account/extension-download': typeof ApiAccountExtensionDownloadRoute
   '/api/account/sync-token': typeof ApiAccountSyncTokenRoute
   '/api/admin/check': typeof ApiAdminCheckRoute
   '/api/admin/courtesy': typeof ApiAdminCourtesyRoute
   '/api/billing/portal': typeof ApiBillingPortalRoute
   '/api/checkout/start': typeof ApiCheckoutStartRoute
   '/api/checkout/status': typeof ApiCheckoutStatusRoute
+  '/api/product/learn': typeof ApiProductLearnRoute
   '/api/script/generate': typeof ApiScriptGenerateRoute
   '/api/tts/preview': typeof ApiTtsPreviewRoute
   '/api/public/chat/reply': typeof ApiPublicChatReplyRoute
@@ -307,12 +324,14 @@ export interface FileRoutesById {
   '/checkout/return': typeof CheckoutReturnRoute
   '/api/account/device-binding': typeof ApiAccountDeviceBindingRoute
   '/api/account/ensure': typeof ApiAccountEnsureRoute
+  '/api/account/extension-download': typeof ApiAccountExtensionDownloadRoute
   '/api/account/sync-token': typeof ApiAccountSyncTokenRoute
   '/api/admin/check': typeof ApiAdminCheckRoute
   '/api/admin/courtesy': typeof ApiAdminCourtesyRoute
   '/api/billing/portal': typeof ApiBillingPortalRoute
   '/api/checkout/start': typeof ApiCheckoutStartRoute
   '/api/checkout/status': typeof ApiCheckoutStatusRoute
+  '/api/product/learn': typeof ApiProductLearnRoute
   '/api/script/generate': typeof ApiScriptGenerateRoute
   '/api/tts/preview': typeof ApiTtsPreviewRoute
   '/api/public/chat/reply': typeof ApiPublicChatReplyRoute
@@ -345,12 +364,14 @@ export interface FileRouteTypes {
     | '/checkout/return'
     | '/api/account/device-binding'
     | '/api/account/ensure'
+    | '/api/account/extension-download'
     | '/api/account/sync-token'
     | '/api/admin/check'
     | '/api/admin/courtesy'
     | '/api/billing/portal'
     | '/api/checkout/start'
     | '/api/checkout/status'
+    | '/api/product/learn'
     | '/api/script/generate'
     | '/api/tts/preview'
     | '/api/public/chat/reply'
@@ -381,12 +402,14 @@ export interface FileRouteTypes {
     | '/checkout/return'
     | '/api/account/device-binding'
     | '/api/account/ensure'
+    | '/api/account/extension-download'
     | '/api/account/sync-token'
     | '/api/admin/check'
     | '/api/admin/courtesy'
     | '/api/billing/portal'
     | '/api/checkout/start'
     | '/api/checkout/status'
+    | '/api/product/learn'
     | '/api/script/generate'
     | '/api/tts/preview'
     | '/api/public/chat/reply'
@@ -417,12 +440,14 @@ export interface FileRouteTypes {
     | '/checkout/return'
     | '/api/account/device-binding'
     | '/api/account/ensure'
+    | '/api/account/extension-download'
     | '/api/account/sync-token'
     | '/api/admin/check'
     | '/api/admin/courtesy'
     | '/api/billing/portal'
     | '/api/checkout/start'
     | '/api/checkout/status'
+    | '/api/product/learn'
     | '/api/script/generate'
     | '/api/tts/preview'
     | '/api/public/chat/reply'
@@ -454,12 +479,14 @@ export interface RootRouteChildren {
   CheckoutReturnRoute: typeof CheckoutReturnRoute
   ApiAccountDeviceBindingRoute: typeof ApiAccountDeviceBindingRoute
   ApiAccountEnsureRoute: typeof ApiAccountEnsureRoute
+  ApiAccountExtensionDownloadRoute: typeof ApiAccountExtensionDownloadRoute
   ApiAccountSyncTokenRoute: typeof ApiAccountSyncTokenRoute
   ApiAdminCheckRoute: typeof ApiAdminCheckRoute
   ApiAdminCourtesyRoute: typeof ApiAdminCourtesyRoute
   ApiBillingPortalRoute: typeof ApiBillingPortalRoute
   ApiCheckoutStartRoute: typeof ApiCheckoutStartRoute
   ApiCheckoutStatusRoute: typeof ApiCheckoutStatusRoute
+  ApiProductLearnRoute: typeof ApiProductLearnRoute
   ApiScriptGenerateRoute: typeof ApiScriptGenerateRoute
   ApiTtsPreviewRoute: typeof ApiTtsPreviewRoute
   ApiPublicChatReplyRoute: typeof ApiPublicChatReplyRoute
@@ -588,6 +615,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiAccountEnsureRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/account/extension-download': {
+      id: '/api/account/extension-download'
+      path: '/api/account/extension-download'
+      fullPath: '/api/account/extension-download'
+      preLoaderRoute: typeof ApiAccountExtensionDownloadRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/account/sync-token': {
       id: '/api/account/sync-token'
       path: '/api/account/sync-token'
@@ -628,6 +662,13 @@ declare module '@tanstack/react-router' {
       path: '/api/checkout/status'
       fullPath: '/api/checkout/status'
       preLoaderRoute: typeof ApiCheckoutStatusRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/product/learn': {
+      id: '/api/product/learn'
+      path: '/api/product/learn'
+      fullPath: '/api/product/learn'
+      preLoaderRoute: typeof ApiProductLearnRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/script/generate': {
@@ -734,12 +775,14 @@ const rootRouteChildren: RootRouteChildren = {
   CheckoutReturnRoute: CheckoutReturnRoute,
   ApiAccountDeviceBindingRoute: ApiAccountDeviceBindingRoute,
   ApiAccountEnsureRoute: ApiAccountEnsureRoute,
+  ApiAccountExtensionDownloadRoute: ApiAccountExtensionDownloadRoute,
   ApiAccountSyncTokenRoute: ApiAccountSyncTokenRoute,
   ApiAdminCheckRoute: ApiAdminCheckRoute,
   ApiAdminCourtesyRoute: ApiAdminCourtesyRoute,
   ApiBillingPortalRoute: ApiBillingPortalRoute,
   ApiCheckoutStartRoute: ApiCheckoutStartRoute,
   ApiCheckoutStatusRoute: ApiCheckoutStatusRoute,
+  ApiProductLearnRoute: ApiProductLearnRoute,
   ApiScriptGenerateRoute: ApiScriptGenerateRoute,
   ApiTtsPreviewRoute: ApiTtsPreviewRoute,
   ApiPublicChatReplyRoute: ApiPublicChatReplyRoute,

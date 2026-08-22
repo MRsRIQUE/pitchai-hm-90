@@ -7,6 +7,8 @@ import {
   Copy,
   HelpCircle,
   ChevronDown,
+  LockKeyhole,
+  LoaderCircle,
 } from "lucide-react";
 import { useState, type ReactNode } from "react";
 import { motion, type Variants } from "motion/react";
@@ -18,9 +20,12 @@ import { useReducedMotionSafe } from "@/hooks/use-reduced-motion-safe";
 import { APP_VERSION } from "@/lib/live/version";
 import { copyToClipboard } from "@/lib/clipboard";
 import { downloadExtensionZip } from "@/lib/live/download-extension";
+import { requireAuthBeforeLoad } from "@/lib/auth-guard";
+import { useUserSubscription } from "@/hooks/useUserSubscription";
 import "@/styles/landing-download.css";
 
 export const Route = createFileRoute("/download")({
+  beforeLoad: requireAuthBeforeLoad,
   head: () => ({
     meta: [
       { title: "Download Extensão · Pitch AI" },
@@ -36,8 +41,76 @@ export const Route = createFileRoute("/download")({
       },
     ],
   }),
-  component: DownloadPage,
+  component: DownloadAccessGate,
 });
+
+function DownloadAccessGate() {
+  const { loading, userId, isPaidActive, error, refetch } = useUserSubscription();
+
+  if (loading) {
+    return (
+      <SitePageFrame>
+        <div className="wrap" style={{ minHeight: "60vh", display: "grid", placeItems: "center" }}>
+          <div className="card" style={{ padding: 32, textAlign: "center" }}>
+            <LoaderCircle className="animate-spin" style={{ margin: "0 auto 14px" }} />
+            <p>Verificando sua licença...</p>
+          </div>
+        </div>
+      </SitePageFrame>
+    );
+  }
+
+  if (!userId) {
+    return (
+      <SitePageFrame>
+        <div className="wrap" style={{ minHeight: "60vh", display: "grid", placeItems: "center" }}>
+          <div className="card" style={{ maxWidth: 560, padding: 32, textAlign: "center" }}>
+            <LockKeyhole style={{ margin: "0 auto 14px" }} />
+            <h1>Entre para acessar o download</h1>
+            <p>Sua conta é necessária para confirmar a licença da extensão.</p>
+            <Link to="/entrar" search={{ next: "/download" }} className="btn btn-primary">
+              Entrar na minha conta
+            </Link>
+          </div>
+        </div>
+      </SitePageFrame>
+    );
+  }
+
+  if (error || !isPaidActive) {
+    return (
+      <SitePageFrame>
+        <div className="wrap" style={{ minHeight: "60vh", display: "grid", placeItems: "center" }}>
+          <div className="card" style={{ maxWidth: 620, padding: 32, textAlign: "center" }}>
+            <LockKeyhole style={{ margin: "0 auto 14px" }} />
+            <h1>{error ? "Não foi possível validar sua licença" : "Licença ativa necessária"}</h1>
+            <p>
+              {error
+                ? "Tente verificar novamente. Se o problema continuar, entre novamente na sua conta."
+                : "Compre uma licença do Pitch AI para liberar o download e todas as funções da extensão."}
+            </p>
+            <div style={{ display: "flex", gap: 12, justifyContent: "center", flexWrap: "wrap" }}>
+              {error ? (
+                <button type="button" onClick={() => void refetch()} className="btn btn-primary">
+                  Verificar novamente
+                </button>
+              ) : (
+                <Link to="/planos" className="btn btn-primary">
+                  Ver planos e comprar
+                </Link>
+              )}
+              <Link to="/app" className="btn btn-outline">
+                Voltar ao painel
+              </Link>
+            </div>
+          </div>
+        </div>
+      </SitePageFrame>
+    );
+  }
+
+  return <DownloadPage />;
+}
 
 /* ============================================================
    OS QUATRO WIDGETS DA GRADE

@@ -1097,7 +1097,7 @@
     respostasIA: true,
     responderNoChat: false,
     // Intervalo mínimo (segundos) entre respostas da IA no chat — anti-spam.
-    respostasIntervaloSec: 8,
+    respostasIntervaloSec: 5,
     autoFixar: { enabled: false, query: "", minSec: 20, maxSec: 60, ids: [], names: [] },
     encerrarTempo: { enabled: false, minutes: 120 },
     notificacoesVenda: true,
@@ -1116,11 +1116,14 @@
       enabled: true,
       variants: 12,
       ttlMinutes: 60,
-      minIntervalSec: 45,
-      maxIntervalSec: 75,
+      minIntervalSec: 28,
+      maxIntervalSec: 48,
       cacheReplies: true,
     },
+    saudacoes: { enabled: true, minIntervalSec: 35 },
+    cta: { enabled: true },
     produtos: [],
+    productAiSalesContexts: {},
     aiContext: {},
     ultimoRoteiro: "",
     roteirosPorProduto: {},
@@ -1150,8 +1153,14 @@
       vozContextos: { ...DEFAULTS.vozContextos, ...(stored.vozContextos || {}) },
       filtros: { ...DEFAULTS.filtros, ...(stored.filtros || {}) },
       pitchBank: { ...DEFAULTS.pitchBank, ...(stored.pitchBank || {}) },
+      saudacoes: { ...DEFAULTS.saudacoes, ...(stored.saudacoes || {}) },
+      cta: { ...DEFAULTS.cta, ...(stored.cta || {}) },
       somVenda: { ...DEFAULTS.somVenda, ...(stored.somVenda || {}) },
       demo: { ...DEFAULTS.demo, ...(stored.demo || {}) },
+      productAiSalesContexts: {
+        ...DEFAULTS.productAiSalesContexts,
+        ...(stored.productAiSalesContexts || {}),
+      },
       produtos: Array.isArray(stored.produtos) ? stored.produtos : [],
     };
   }
@@ -1163,7 +1172,7 @@
 
   /** Intervalo mínimo entre respostas no chat, configurável no painel (anti-spam). */
   function replyIntervalMs(cfg) {
-    const sec = Math.max(4, Math.min(300, Number(cfg?.respostasIntervaloSec) || 8));
+    const sec = Math.max(3, Math.min(300, Number(cfg?.respostasIntervaloSec) || 5));
     return sec * 1000;
   }
 
@@ -1209,30 +1218,144 @@
   async function updateConfig(mutate) {
     const fresh = await loadConfig();
     const out = (await mutate(fresh)) || fresh;
-    saveConfig(out);
+    await saveConfig(out);
     return out;
   }
 
   /** Envia a config (inclui produtos lidos da vitrine) para o painel web. */
-  let _lastPush = 0;
-  async function pushConfigToBackend(cfg) {
-    if (!cfg?.syncToken) return;
-    if (Date.now() - _lastPush < 5000) return;
-    _lastPush = Date.now();
-    try {
-      await fetch(`${API_BASE}/api/public/live/config`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json", ...(await installHeaders()) },
-        body: JSON.stringify({ action: "push", token: cfg.syncToken, config: cfg }),
-      });
-    } catch (e) {
-      console.warn("[Pitchai] push config falhou", e);
+  let _queuedProductPush = null;
+  let _productPushTimer = null;
+  let _productPushInFlight = null;
+  let _productRetryScheduled = false;
+  let _lastRemoteRevision = 0;
+
+  function pushConfigToBackend(cfg) {
+    if (!cfg?.syncToken) return Promise.resolve(false);
+    _queuedProductPush = {
+      token: cfg.syncToken,
+      produtos: Array.isArray(cfg.produtos) ? cfg.produtos : [],
+    };
+    clearTimeout(_productPushTimer);
+    _productPushTimer = setTimeout(() => flushProductPush(), 700);
+    _productRetryScheduled = false;
+    return Promise.resolve(true);
+  }
+
+  async function flushProductPush(attempt = 0) {
+    _productPushTimer = null;
+    _productRetryScheduled = false;
+    if (_productPushInFlight) {
+      await _productPushInFlight;
+      if (_queuedProductPush && !_productPushTimer && !_productRetryScheduled) {
+        _productPushTimer = setTimeout(() => flushProductPush(), 700);
+      }
+      return true;
     }
+    const queued = _queuedProductPush;
+    if (!queued) return true;
+    _queuedProductPush = null;
+
+    _productPushInFlight = (async () => {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 12000);
+      try {
+        const response = await fetch(`${API_BASE}/api/public/live/config`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", ...(await installHeaders()) },
+          body: JSON.stringify({
+            action: "patch",
+            token: queued.token,
+            config: { produtos: queued.produtos },
+            sections: ["products"],
+            source: "extension",
+            requestId: crypto.randomUUID(),
+          }),
+          signal: controller.signal,
+        });
+        const data = await response.json().catch(() => ({}));
+        if (!response.ok || !data?.ok) {
+          throw new Error(data?.message || data?.error || `HTTP ${response.status}`);
+        }
+        _lastRemoteRevision = Math.max(_lastRemoteRevision, Number(data.revision) || 0);
+        return true;
+      } catch (error) {
+        _queuedProductPush = _queuedProductPush || queued;
+        const delay = Math.min(30000, 1500 * 2 ** attempt);
+        clearTimeout(_productPushTimer);
+        _productRetryScheduled = true;
+        _productPushTimer = setTimeout(() => flushProductPush(attempt + 1), delay);
+        console.warn(`[Pitchai] sync de produtos falhou; nova tentativa em ${delay}ms`, error);
+        return false;
+      } finally {
+        clearTimeout(timeout);
+        _productPushInFlight = null;
+        if (_queuedProductPush && !_productPushTimer && !_productRetryScheduled) {
+          _productPushTimer = setTimeout(() => flushProductPush(), 700);
+        }
+      }
+    })();
+    return _productPushInFlight;
+  }
+
+  let _configPullInFlight = null;
+  async function pullPanelContent({ force = false } = {}) {
+    if (_configPullInFlight) return _configPullInFlight;
+    _configPullInFlight = (async () => {
+      const current = await loadConfig();
+      if (!current?.syncToken) return false;
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 12000);
+      try {
+        const response = await fetch(`${API_BASE}/api/public/live/config`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", ...(await installHeaders()) },
+          body: JSON.stringify({
+            action: "pull",
+            token: current.syncToken,
+            sections: ["texts", "products"],
+            source: "extension",
+          }),
+          signal: controller.signal,
+        });
+        const data = await response.json().catch(() => ({}));
+        if (!response.ok || !data?.ok) {
+          throw new Error(data?.message || data?.error || `HTTP ${response.status}`);
+        }
+        const revision = Number(data?.meta?.revision) || 0;
+        if (!force && revision <= _lastRemoteRevision) return false;
+        const remote = data.config || {};
+        await updateConfig((fresh) => {
+          if (remote.aiContext && typeof remote.aiContext === "object") {
+            fresh.aiContext = { ...(fresh.aiContext || {}), ...remote.aiContext };
+          }
+          if (remote.productAiSalesContexts && typeof remote.productAiSalesContexts === "object") {
+            fresh.productAiSalesContexts = {
+              ...(fresh.productAiSalesContexts || {}),
+              ...remote.productAiSalesContexts,
+            };
+          }
+          for (const key of ["ultimoRoteiro", "roteirosPorProduto"]) {
+            if (Object.prototype.hasOwnProperty.call(remote, key)) fresh[key] = remote[key];
+          }
+          if (Array.isArray(remote.produtos)) fresh.produtos = remote.produtos;
+          return fresh;
+        });
+        _lastRemoteRevision = revision;
+        return true;
+      } catch (error) {
+        console.warn("[Pitchai] pull de textos/produtos falhou", error);
+        return false;
+      } finally {
+        clearTimeout(timeout);
+        _configPullInFlight = null;
+      }
+    })();
+    return _configPullInFlight;
   }
 
   // ---------- Som de caixa registradora ----------
   let _saleCtx = null;
-  function playSaleSound(volume) {
+  function playSaleSoundFallback(volume) {
     try {
       const Ctor = window.AudioContext || window.webkitAudioContext;
       if (!Ctor) return;
@@ -1285,7 +1408,39 @@
     starting: null,
     lastMetricsFingerprint: "",
     lastMetricsAt: 0,
+    counterTimer: null,
+    counters: {
+      messages_received: 0,
+      audience_joins: 0,
+      audience_follows: 0,
+      pitches_spoken: 0,
+    },
   };
+
+  function queueSessionCounter(key, amount = 1) {
+    if (!Object.prototype.hasOwnProperty.call(session.counters, key)) return;
+    session.counters[key] += Math.max(0, Number(amount) || 0);
+    if (session.counterTimer) return;
+    session.counterTimer = setTimeout(() => {
+      session.counterTimer = null;
+      flushSessionCounters().catch(() => {});
+    }, 15000);
+  }
+
+  async function flushSessionCounters() {
+    clearTimeout(session.counterTimer);
+    session.counterTimer = null;
+    if (!session.id || !session.token) return;
+    const counters = Object.fromEntries(
+      Object.entries(session.counters).filter(([, value]) => Number(value) > 0),
+    );
+    if (!Object.keys(counters).length) return;
+    for (const key of Object.keys(counters)) session.counters[key] = 0;
+    const saved = await sessionEvent({ kind: "counters", counters });
+    if (!saved) {
+      for (const [key, value] of Object.entries(counters)) session.counters[key] += value;
+    }
+  }
   async function sessionStart() {
     if (demo?.isOn?.()) return null;
     const cfg = await loadConfigWithPendingSync();
@@ -1318,6 +1473,7 @@
   }
   async function sessionEnd() {
     if (!session.id || !session.token) return;
+    await flushSessionCounters();
     try {
       await fetch(`${API_BASE}/api/public/live/session`, {
         method: "POST",
@@ -1330,12 +1486,15 @@
     session.startedAt = 0;
     session.lastMetricsFingerprint = "";
     session.lastMetricsAt = 0;
+    clearTimeout(session.counterTimer);
+    session.counterTimer = null;
+    for (const key of Object.keys(session.counters)) session.counters[key] = 0;
   }
   async function sessionEvent(payload) {
-    if (demo?.isOn?.()) return;
-    if (!session.id || !session.token) return;
+    if (demo?.isOn?.()) return false;
+    if (!session.id || !session.token) return false;
     try {
-      await fetch(`${API_BASE}/api/public/live/session`, {
+      const response = await fetch(`${API_BASE}/api/public/live/session`, {
         method: "POST",
         headers: { "Content-Type": "application/json", ...(await installHeaders()) },
         body: JSON.stringify({
@@ -1346,7 +1505,10 @@
         }),
         keepalive: true,
       });
-    } catch {}
+      return response.ok;
+    } catch {
+      return false;
+    }
   }
   window.addEventListener("beforeunload", () => {
     if (session.id) sessionEnd();
@@ -2582,19 +2744,37 @@
 
   function buildSystemPrompt(cfg, featured) {
     const ctx = cfg.aiContext || {};
-    const brainFact = (value, max = 900) => String(value || "").trim().slice(0, max);
+    const brainFact = (value, max = 900) =>
+      String(value || "")
+        .trim()
+        .slice(0, max);
     const produtos = cfg.produtos || [];
+    const salesContext = (product) => {
+      const context =
+        product?.aiSalesContext || cfg.productAiSalesContexts?.[product?.id || product?.pid];
+      if (!context || typeof context !== "object") return "";
+      return [
+        context.hook && `Gancho: ${brainFact(context.hook, 700)}`,
+        context.painDesire && `Dor ou desejo: ${brainFact(context.painDesire, 900)}`,
+        context.benefits && `Benefícios: ${brainFact(context.benefits, 1200)}`,
+        context.objectionResponse && `Objeção e resposta: ${brainFact(context.objectionResponse, 1000)}`,
+        context.chatInteraction && `Interação: ${brainFact(context.chatInteraction, 700)}`,
+        context.cta && `CTA: ${brainFact(context.cta, 700)}`,
+      ]
+        .filter(Boolean)
+        .join(" · ");
+    };
     // O destaque vem do produto FIXADO na vitrine quando existe; senão o ativo.
     const destaque = featured || produtos.find((p) => p.active);
     // Com produto em destaque a IA vende SÓ ele — catálogo completo só entra
     // quando não sabemos o que está fixado.
     const catalog = destaque
-      ? `${brainFact(destaque.name, 200)}${destaque.price ? " — " + brainFact(destaque.price, 60) : ""}${destaque.description ? " · " + brainFact(destaque.description, 700) : ""}`
+      ? `${brainFact(destaque.name, 200)}${destaque.price ? " — " + brainFact(destaque.price, 60) : ""}${destaque.description ? " · " + brainFact(destaque.description, 800) : ""}${destaque.aiKnowledge ? " · Ficha aprendida: " + brainFact(destaque.aiKnowledge, 1800) : ""}${salesContext(destaque) ? " · Estratégia do produto: " + salesContext(destaque) : ""}`
       : produtos
           .slice(0, 12)
           .map(
             (p, i) =>
-              `${i + 1}. ${brainFact(p.name, 160)}${p.price ? " — " + brainFact(p.price, 60) : ""}${p.active ? " [ATIVO]" : ""}${p.description ? " · " + brainFact(p.description, 220) : ""}`,
+              `${i + 1}. ${brainFact(p.name, 160)}${p.price ? " — " + brainFact(p.price, 60) : ""}${p.active ? " [ATIVO]" : ""}${p.description ? " · " + brainFact(p.description, 300) : ""}${p.aiKnowledge ? " · IA: " + brainFact(p.aiKnowledge, 400) : ""}${salesContext(p) ? " · Venda: " + salesContext(p) : ""}`,
           )
           .join("\n");
     let espectadores = "";
@@ -2613,8 +2793,7 @@
       ctx.policies && `Políticas confirmadas: ${brainFact(ctx.policies, 650)}`,
       ctx.frequentQuestions &&
         `Perguntas e objeções frequentes: ${brainFact(ctx.frequentQuestions, 1000)}`,
-      ctx.salesPlaybook &&
-        `Estratégia comercial preferida: ${brainFact(ctx.salesPlaybook, 650)}`,
+      ctx.salesPlaybook && `Estratégia comercial preferida: ${brainFact(ctx.salesPlaybook, 650)}`,
       ctx.extraContext && `Contexto: ${brainFact(ctx.extraContext, 600)}`,
       espectadores ? `Publico atual na live: ${espectadores} espectadores.` : "",
       catalog ? `Catálogo:\n${catalog}` : "",
@@ -2648,7 +2827,7 @@
     }
     return monitorEl;
   }
-  /** Aplica o dispositivo de saída da live (VB-Cable) na voz da IA. */
+  /** Aplica a saída local opcional usada para monitorar a voz da IA. */
   async function applySink(el, cfg) {
     const id = cfg?.voz?.outputDeviceId;
     if (!id || typeof el.setSinkId !== "function") return;
@@ -2659,13 +2838,13 @@
 
   // ---------- Ponte de voz com a fonte virtual (media-injector.js) ----------
   // Numa live com vídeo gravado o TikTok captura UM microfone só. Se a voz da IA
-  // sair por um dispositivo do sistema (VB-Cable), ela e o áudio do vídeo se
+  // sair pela reprodução local, ela e o áudio do vídeo se
   // atropelam. Com o Estúdio publicando, a fala vai DENTRO do microfone virtual:
   // o media-injector abaixa o vídeo (duck), fala por cima e devolve o volume.
   // O ACK do "speak" só chega QUANDO A FALA TERMINA.
   const MEDIA_CONTROL = "__pitchai_media_control__";
   const MEDIA_ACK = "__pitchai_media_ack__";
-  const MEDIA_INACTIVE = "media-inactive"; // fonte publicada mas sem captura: cai no VB-Cable
+  const MEDIA_INACTIVE = "media-inactive"; // fonte publicada mas sem captura: cai na reprodução local
   const MEDIA_ASK_MS = 2500; // status/stopSpeak: ida e volta curta
   const VOICE_TIMEOUT_MIN = 30000;
   const VOICE_TIMEOUT_MAX = 175000; // logo abaixo do teto interno do injector (180s)
@@ -2745,7 +2924,7 @@
    * Toca a voz da IA dentro do microfone virtual. O ACK do "speak" só volta
    * quando a fala termina, então este await É o fim da fala — é o que mantém
    * isAudioBusy()/waitForAudioEnd() coerentes e a IA sem falar por cima de si.
-   * Devolve { ok, inactive }: "inactive" pede o caminho antigo (VB-Cable).
+   * Devolve { ok, inactive }: "inactive" pede a reprodução local de segurança.
    */
   async function speakThroughVirtualSource(blobOrBuffer, cfg, timeoutMs) {
     let buffer = null;
@@ -2780,7 +2959,7 @@
       return { ok: false, inactive: true };
     }
     // Estouro do timeout: o injector ainda pode estar falando. Cortar e desistir
-    // desta fala é melhor do que dobrar a voz saindo também pelo VB-Cable.
+    // desta fala é melhor do que dobrar a voz saindo também pela reprodução local.
     if (res.timedOut) sendMedia("stopSpeak");
     return { ok: false, inactive: false };
   }
@@ -2859,7 +3038,7 @@
   /**
    * Toca a voz da IA. Com a fonte virtual publicando, a fala entra no microfone
    * virtual e o media-injector abaixa o áudio do vídeo enquanto ela fala; sem
-   * ela, é o caminho de sempre: <audio> no dispositivo da live (VB-Cable).
+   * ela, usa o caminho de segurança: <audio> na saída local configurada.
    * Recebe a fonte de makeVoiceSource() — não mais uma URL solta.
    */
   async function playAudio(voice, cfg) {
@@ -2980,7 +3159,7 @@
             "Content-Type": "application/json",
             ...authHeaders,
           },
-          body: JSON.stringify({ text, voice: voice.id, speed: voice.speed }),
+          body: JSON.stringify({ text, voice: voice.id, speed: voice.speed, context: ctx }),
           signal: options.signal,
         });
         if (!r.ok) {
@@ -3070,8 +3249,8 @@
     lastAudienceAt: 0,
     recentPitchLines: [],
   };
-  const CHAT_SEND_INTERVAL_MS = 6000;
-  const PITCH_IDLE_MS = 18000;
+  const CHAT_SEND_INTERVAL_MS = 3500;
+  const PITCH_IDLE_MS = 10000;
   const NO_MSG_WARN_MS = 60000;
   const CHAT_DEDUPE_MS = 3 * 60 * 1000;
   const SENT_REPLY_TTL_MS = 10 * 60 * 1000;
@@ -3106,10 +3285,22 @@
       const now = Date.now();
       for (const [key, value] of Array.isArray(stored) ? stored : []) {
         if (!key || !value?.at || now - value.at > CONVERSATION_MEMORY_TTL_MS) continue;
-        const turns = Array.isArray(value.turns) ? value.turns.slice(-8) : [];
+        const turns = Array.isArray(value.turns) ? value.turns.slice(-12) : [];
         if (turns.length) chatState.historyByAuthor.set(key, { at: value.at, turns });
       }
     } catch {}
+  }
+
+  async function playSaleSound(volume) {
+    try {
+      const response = await chrome.runtime.sendMessage({
+        type: "PITCHAI_PLAY_SALE_SOUND",
+        volume: Math.max(0, Math.min(1, Number(volume) || 0.8)),
+      });
+      if (response?.ok) return true;
+    } catch {}
+    playSaleSoundFallback(volume);
+    return false;
   }
 
   function saveConversationMemory() {
@@ -3134,7 +3325,7 @@
       ...current,
       { role: "user", content: `${item?.author ? item.author + ": " : ""}${item?.text || ""}` },
       { role: "assistant", content: reply },
-    ].slice(-8);
+    ].slice(-12);
     chatState.historyByAuthor.set(key, { at: Date.now(), turns });
     if (chatState.historyByAuthor.size > 120) {
       const entries = Array.from(chatState.historyByAuthor.entries()).sort(
@@ -3153,7 +3344,7 @@
     const question = normalizedReplyQuestion(text);
     if (!question || question.length < 4) return "";
     return stableHash(
-      `${product?.id || product?.name || "sem-produto"}|${product?.price || "sem-preco"}|${conversationKey(author)}|${question}|${JSON.stringify(cfg.aiContext || {})}`,
+      `${product?.id || product?.name || "sem-produto"}|${product?.price || "sem-preco"}|${product?.description || ""}|${product?.aiKnowledge || ""}|${JSON.stringify(product?.aiSalesContext || cfg.productAiSalesContexts?.[product?.id || product?.pid] || {})}|${conversationKey(author)}|${question}|${JSON.stringify(cfg.aiContext || {})}`,
     );
   }
 
@@ -3199,14 +3390,14 @@
 
   function pitchBankSettings(cfg) {
     const raw = cfg?.pitchBank || {};
-    const minIntervalSec = Math.max(20, Math.min(600, Number(raw.minIntervalSec) || 45));
+    const minIntervalSec = Math.max(15, Math.min(600, Number(raw.minIntervalSec) || 28));
     return {
       enabled: raw.enabled !== false,
       variants: Math.max(10, Math.min(15, Math.round(Number(raw.variants) || 12))),
       ttlMs: Math.max(30, Math.min(180, Number(raw.ttlMinutes) || 60)) * 60 * 1000,
       minIntervalMs: minIntervalSec * 1000,
       maxIntervalMs:
-        Math.max(minIntervalSec, Math.min(900, Number(raw.maxIntervalSec) || 75)) * 1000,
+        Math.max(minIntervalSec, Math.min(900, Number(raw.maxIntervalSec) || 48)) * 1000,
     };
   }
 
@@ -3217,6 +3408,11 @@
         name: product?.name || "",
         price: product?.price || "",
         description: product?.description || "",
+        aiKnowledge: product?.aiKnowledge || "",
+        aiSalesContext:
+          product?.aiSalesContext ||
+          cfg?.productAiSalesContexts?.[product?.id || product?.pid] ||
+          {},
         context: cfg?.aiContext || {},
       }),
     );
@@ -3264,20 +3460,43 @@
     return clean;
   }
 
-  async function getActivePitchLines(cfg, signal) {
+  function sanitizePitchItems(items, limit) {
+    const allowedStages = new Set([
+      "discovery",
+      "consideration",
+      "trust",
+      "engagement",
+      "conversion",
+    ]);
+    const clean = [];
+    for (const item of Array.isArray(items) ? items : []) {
+      const lines = sanitizePitchLines([item?.text], 1);
+      if (!lines.length) continue;
+      clean.push({
+        text: lines[0],
+        stage: allowedStages.has(item?.stage) ? item.stage : "consideration",
+        angle: String(item?.angle || "benefit").slice(0, 24),
+        cta: item?.cta === true,
+      });
+      if (clean.length >= limit) break;
+    }
+    return clean;
+  }
+
+  async function getActivePitchBank(cfg, signal) {
     const settings = pitchBankSettings(cfg);
     // O pitch é SEMPRE do produto fixado no destaque; o "ativo" do painel é só
     // o fallback quando nada está fixado (ex.: começo da live).
     const pinned = await getPinnedProduct(cfg);
     const product = pinned || (cfg.produtos || []).find((p) => p.active) || cfg.produtos?.[0];
     const fallback = getFallbackPitchLines(cfg);
-    if (!product || !settings.enabled) return fallback;
+    if (!product || !settings.enabled) return { lines: fallback, items: [] };
 
     loadStoredPitchBanks();
     const key = pitchProductKey(cfg, product);
     const cached = chatState.pitchBanks.get(key);
     if (cached && Number(cached.expiresAt) > Date.now()) {
-      return cached.lines?.length ? cached.lines : fallback;
+      return cached.lines?.length ? cached : { lines: fallback, items: [] };
     }
 
     try {
@@ -3291,6 +3510,10 @@
             name: product.name,
             price: product.price,
             description: product.description,
+            aiKnowledge: product.aiKnowledge,
+            aiSalesContext:
+              product.aiSalesContext ||
+              cfg.productAiSalesContexts?.[product.id || product.pid],
           },
           systemPrompt: buildSystemPrompt(cfg, product),
         }),
@@ -3299,8 +3522,9 @@
       if (!response.ok) throw new Error(`banco ${response.status}`);
       const data = await response.json();
       const lines = sanitizePitchLines(data.pitches, settings.variants);
+      const items = sanitizePitchItems(data.items, settings.variants);
       if (lines.length < 5) throw new Error("banco incompleto");
-      const bank = { lines, expiresAt: Date.now() + settings.ttlMs };
+      const bank = { lines, items, expiresAt: Date.now() + settings.ttlMs };
       chatState.pitchBanks.set(key, bank);
       // Mantém uma live grande inteira em cache sem crescer para sempre.
       while (chatState.pitchBanks.size > 20) {
@@ -3317,7 +3541,7 @@
         text: `Banco econômico preparado: ${lines.length} variações para ${product.name}.`,
         ts: Date.now(),
       });
-      return lines;
+      return bank;
     } catch (error) {
       if (error?.name !== "AbortError") {
         // Evita martelar a API a cada ciclo quando ela estiver indisponível.
@@ -3332,7 +3556,7 @@
           ts: Date.now(),
         });
       }
-      return fallback;
+      return { lines: fallback, items: [] };
     }
   }
 
@@ -3346,7 +3570,6 @@
     "Quem já comprou, conta aqui no chat a experiência pra galera!",
     "Toca no produto fixado aí em cima pra ver todos os detalhes!",
   ];
-  const ctaState = { count: 0 };
 
   function pickFreshPitchLine(lines) {
     const available = (Array.isArray(lines) ? lines : []).filter(Boolean);
@@ -3358,8 +3581,50 @@
       line = available[0];
     }
     const key = normalizedReplyText(line);
-    if (key) chatState.recentPitchLines = [...chatState.recentPitchLines, key].slice(-5);
+    if (key) chatState.recentPitchLines = [...chatState.recentPitchLines, key].slice(-8);
     return line;
+  }
+
+  function desiredPitchStage() {
+    const sinceChat = Date.now() - Number(chatState.lastMsgAt || 0);
+    const sinceAudience = Date.now() - Number(chatState.lastAudienceAt || 0);
+    if (sinceChat < 45000 || sinceAudience < 45000) return "engagement";
+    const journey = [
+      "discovery",
+      "consideration",
+      "consideration",
+      "trust",
+      "engagement",
+      "consideration",
+      "conversion",
+      "trust",
+      "conversion",
+    ];
+    return journey[chatState.pitchIdx % journey.length];
+  }
+
+  function nextPitchDelay(settings) {
+    const recentActivity =
+      Date.now() -
+        Math.max(Number(chatState.lastMsgAt || 0), Number(chatState.lastAudienceAt || 0)) <
+      60000;
+    const activityFactor = recentActivity ? 0.75 : 1;
+    const min = Math.max(18000, settings.minIntervalMs * activityFactor);
+    const max = Math.max(min, settings.maxIntervalMs * activityFactor);
+    return min + Math.random() * Math.max(0, max - min);
+  }
+
+  function pickAdaptivePitch(bank, cfg) {
+    const items = Array.isArray(bank?.items) ? bank.items : [];
+    const stage = desiredPitchStage();
+    const ctaEnabled = cfg.cta?.enabled !== false;
+    let candidates = items.filter((item) => item.stage === stage && (ctaEnabled || !item.cta));
+    if (!candidates.length) candidates = items.filter((item) => ctaEnabled || !item.cta);
+    if (candidates.length) return pickFreshPitchLine(candidates.map((item) => item.text));
+    // Bancos antigos em cache continuam compatíveis. O CTA local só entra no
+    // estágio de engajamento, nunca interrompendo a progressão do mini funil.
+    if (stage === "engagement" && ctaEnabled) return pickFreshPitchLine(CTA_LINES);
+    return pickFreshPitchLine(bank?.lines || []);
   }
 
   async function pitchTick(runId) {
@@ -3373,27 +3638,23 @@
     if (Date.now() - chatState.lastAudienceAt < 12000) return "busy";
     const controller = new AbortController();
     chatState.pitchAbort = controller;
-    const lines = await getActivePitchLines(cfg, controller.signal);
+    const bank = await getActivePitchBank(cfg, controller.signal);
     if (runId !== chatState.pitchRunId || controller.signal.aborted) return "cancelled";
     if (isAudioBusy() || chatState.busy || chatState.queue.length) return "busy";
-    if (!lines.length) return "empty";
-    // A cada 4 ciclos troca o pitch por um CTA de engajamento (segue, like,
-    // carrinho) — variado e sem consumir tokens da IA.
-    ctaState.count++;
-    const ctaEnabled = cfg.cta?.enabled !== false;
-    const source = ctaEnabled && ctaState.count % 4 === 0 ? CTA_LINES : lines;
-    const line = pickFreshPitchLine(source);
+    if (!bank.lines?.length) return "empty";
+    const line = pickAdaptivePitch(bank, cfg);
     chatState.pitchIdx++;
     chatState.pitchIdx = chatState.pitchIdx % 1000000;
     chatState.lastReplyAt = Date.now();
     activity.log({ type: "pitch", text: line, ts: Date.now() });
     chatState.pitchAudioActive = true;
     try {
-      await speakText(line, cfg, {
+      const spoken = await speakText(line, cfg, {
         useCache: true,
         signal: controller.signal,
         isCancelled: () => runId !== chatState.pitchRunId,
       });
+      if (spoken) queueSessionCounter("pitches_spoken");
     } finally {
       chatState.pitchAudioActive = false;
       if (chatState.pitchAbort === controller) chatState.pitchAbort = null;
@@ -3422,11 +3683,7 @@
     if (runId !== chatState.pitchRunId || result === "disabled") return;
     const cfg = await loadConfig();
     const settings = pitchBankSettings(cfg);
-    const delay =
-      result === "busy"
-        ? 4000
-        : settings.minIntervalMs +
-          Math.random() * Math.max(0, settings.maxIntervalMs - settings.minIntervalMs);
+    const delay = result === "busy" ? 4000 : nextPitchDelay(settings);
     scheduleNextPitch(runId, delay);
   }
 
@@ -3545,6 +3802,29 @@
       .trim();
   }
 
+  function fitChatReply(value, maxChars = 96) {
+    let clean = String(value || "")
+      .replace(/\s+/g, " ")
+      .replace(/(?:\.{2,}|…)+\s*$/u, "")
+      .trim();
+    if (!clean) return "";
+    if (clean.length > maxChars) {
+      const complete = clean.match(/^.{1,}?[.!?](?=\s|$)/u)?.[0]?.trim();
+      if (complete && complete.length <= maxChars) clean = complete;
+      else {
+        const cut = clean.slice(0, maxChars - 1).trimEnd();
+        const lastSpace = cut.lastIndexOf(" ");
+        clean = (lastSpace >= Math.floor(maxChars * 0.55) ? cut.slice(0, lastSpace) : cut).trim();
+      }
+    }
+    clean = clean.replace(/(?:\.{2,}|…)+\s*$/u, "").trim();
+    if (!/[.!?]$/u.test(clean)) {
+      if (clean.length >= maxChars) clean = clean.slice(0, maxChars - 1).trimEnd();
+      clean += ".";
+    }
+    return clean.slice(0, maxChars);
+  }
+
   function rememberSentReply(value) {
     const normalized = normalizedReplyText(value);
     if (!normalized) return;
@@ -3616,16 +3896,9 @@
   async function sendChatReplyUnlocked(reply) {
     let editor = await mapNode("chatReply", true);
     if (!editor || !DM()?.util?.isVisible?.(editor)) return false;
-    // Limite de 100 chars do TikTok: corta na última palavra completa para a
-    // resposta nunca sair no meio de um termo ("...colocando no carri").
-    let value = String(reply || "")
-      .replace(/\s+/g, " ")
-      .trim();
-    if (value.length > 100) {
-      const cut = value.slice(0, 100);
-      const lastSpace = cut.lastIndexOf(" ");
-      value = ((lastSpace >= 50 ? cut.slice(0, lastSpace) : cut).trim() + "…").slice(0, 100);
-    }
+    // Reserva margem dentro do limite do TikTok e sempre envia uma frase
+    // fechada. Nunca publica texto cortado nem acrescenta reticências.
+    const value = fitChatReply(reply);
     if (!value) return false;
     // Nunca apaga uma mensagem que o apresentador esteja digitando manualmente.
     if (chatEditorValue(editor).trim()) return false;
@@ -3695,7 +3968,7 @@
     return sent;
   }
 
-  async function deliverReply(item, reply, cfg) {
+  async function deliverReply(item, reply, cfg, options = {}) {
     cfg = await loadConfig();
     if (!replyAutomationEnabled(cfg)) {
       activity.markStatus(item.id, "ignored", "automação de respostas desligada", reply);
@@ -3718,7 +3991,7 @@
     }
     // Os canais são independentes: uma falha no chat nunca impede a resposta por voz.
     if (cfg.respostasIA) {
-      const spoken = await speakText(reply, cfg);
+      const spoken = await speakText(reply, cfg, { useCache: options.useTtsCache === true });
       delivered ||= spoken;
     }
     if (delivered) {
@@ -3784,7 +4057,7 @@
         // Resposta FAQ repetida: entrega direto sem consumir tokens da IA.
         rememberConversationTurn(item, cachedReply);
         chatState.lastReplyAt = Date.now();
-        const delivered = await deliverReply(item, cachedReply, cfg);
+        const delivered = await deliverReply(item, cachedReply, cfg, { useTtsCache: true });
         if (!delivered) {
           chatState.busy = false;
           setTimeout(processQueue, 500);
@@ -3811,7 +4084,8 @@
           message: item.text,
           author: item.author,
           systemPrompt,
-          history: conversationHistory(item).slice(-6),
+          history: conversationHistory(item).slice(-12),
+          brief: true,
           blacklist: cfg.filtros?.blacklist || [],
           whitelist: cfg.filtros?.whitelist || [],
         }),
@@ -3944,6 +4218,7 @@
     }
 
     chatState.lastMsgAt = Date.now();
+    queueSessionCounter("messages_received");
     updateHealth();
 
     const id = Math.random().toString(36).slice(2, 10);
@@ -4081,8 +4356,15 @@
         if (now - at > 20 * 60 * 1000) welcome.seen.delete(k);
       }
     }
-    if (kind === "follow") welcome.follows.push(name);
-    else welcome.names.push(name);
+    if (kind === "follow") {
+      welcome.follows.push({ name, at: now });
+      welcome.follows = welcome.follows.slice(-12);
+      queueSessionCounter("audience_follows");
+    } else {
+      welcome.names.push({ name, at: now });
+      welcome.names = welcome.names.slice(-18);
+      queueSessionCounter("audience_joins");
+    }
     chatState.lastAudienceAt = now;
   }
 
@@ -4115,7 +4397,9 @@
     let candidates = [region];
     try {
       candidates = candidates.concat(
-        Array.from(region.querySelectorAll('[role="list"], .arco-list-content, [class*="activity" i]')),
+        Array.from(
+          region.querySelectorAll('[role="list"], .arco-list-content, [class*="activity" i]'),
+        ),
       );
     } catch {}
     const orders = findOrdersFeed(region);
@@ -4124,7 +4408,9 @@
       .map((node) => {
         const sample = (node.textContent || "").replace(/\s+/g, " ").slice(0, 3000);
         const events = (
-          sample.match(/entrou na|acabou de seguir|come[çc]ou a seguir|joined|started following/gi) || []
+          sample.match(
+            /entrou na|acabou de seguir|come[çc]ou a seguir|joined|started following/gi,
+          ) || []
         ).length;
         const label = /atividades? dos espectadores|todas as atividades/i.test(sample) ? 4 : 0;
         return { node, score: events * 5 + label };
@@ -4181,8 +4467,11 @@
 
   function buildWelcomeLine() {
     let line = "";
-    const follow = welcome.follows.splice(0, 2);
-    const names = welcome.names.splice(0, 3);
+    const freshAfter = Date.now() - 90000;
+    welcome.follows = welcome.follows.filter((entry) => Number(entry?.at || 0) >= freshAfter);
+    welcome.names = welcome.names.filter((entry) => Number(entry?.at || 0) >= freshAfter);
+    const follow = welcome.follows.splice(0, 2).map((entry) => entry.name);
+    const names = welcome.names.splice(0, 3).map((entry) => entry.name);
     if (follow.length) {
       line =
         follow.length === 1
@@ -4223,7 +4512,7 @@
     if (!cfg.respostasIA) return; // saudação é um recurso de voz
     if (isAudioBusy() || chatState.busy || chatState.queue.length) return;
     if (Date.now() - chatState.lastReplyAt < PITCH_IDLE_MS) return;
-    const intervalMs = Math.max(30, Number(cfg.saudacoes?.minIntervalSec) || 60) * 1000;
+    const intervalMs = Math.max(20, Number(cfg.saudacoes?.minIntervalSec) || 35) * 1000;
     if (Date.now() - welcome.lastAt < intervalMs) return;
     const line = buildWelcomeLine();
     if (!line) return;
@@ -4590,7 +4879,8 @@
       activity.log({ type: "pitch", text: "Pitch de demonstração iniciado.", ts: Date.now() });
       const result = await pitchTick(chatState.pitchRunId);
       if (result === "blocked") throw new Error(extSecurity.message || "IA indisponível");
-      if (result === "disabled") throw new Error("ative as respostas da IA e os pitches automáticos");
+      if (result === "disabled")
+        throw new Error("ative as respostas da IA e os pitches automáticos");
       return result;
     },
 
@@ -4808,6 +5098,8 @@
     pinIdx: 0,
     pinBusy: false,
     nextPinAt: 0,
+    currentPin: null,
+    pinnedAt: 0,
     saleObserver: null,
     saleBoot: null,
     saleSeen: new Set(),
@@ -5019,6 +5311,7 @@
   const UNPIN_RX = /desafixar|unpin|remover (do )?destaque|parar de apresentar|cancelar apresenta/i;
   const CONFIRM_RX = /^(confirmar|apresentar|fixar|sim|ok|continuar)$/i;
   const PINNED_RX = /(fixado|apresentando|em destaque|no topo|unpin|desafixar|cancelar apresenta)/i;
+  const PIN_HOLD_MS = 60 * 1000;
 
   function findPinButton(card) {
     // Prioriza a ação do card. Há outro botão visualmente idêntico no
@@ -5460,12 +5753,7 @@
    * fixaria o produto errado.
    */
   function cardBelongsToTarget(card, name, expectedPid = "") {
-    if (
-      !card ||
-      !card.isConnected ||
-      isNonProductContainer(card) ||
-      hasMultipleProductRows(card)
-    )
+    if (!card || !card.isConnected || isNonProductContainer(card) || hasMultipleProductRows(card))
       return false;
     const identity = productCardIdentity(card);
     if (!identity?.name) return false;
@@ -5475,13 +5763,48 @@
     return pinNamesMatch(identity.name, name);
   }
 
-  async function pinProduct(alvo) {
+  function pinTargetsMatch(left, right) {
+    if (!left || !right) return false;
+    if (left.pid && right.pid) return String(left.pid) === String(right.pid);
+    return pinNamesMatch(left.name || "", right.name || "");
+  }
+
+  async function unpinProduct(alvo, cfg) {
+    const card = await locateProductCard(alvo.name || "", alvo.pid || "");
+    if (!card || !cardBelongsToTarget(card, alvo.name, alvo.pid || "")) {
+      return { ok: false, reason: "produto fixado não localizado para desfixar" };
+    }
+    const button = findUnpinButton(card);
+    if (!button || !looksLikeUnpinAction(button)) {
+      return { ok: false, reason: "botão de desfixar não encontrado com segurança" };
+    }
+    // Uma única tentativa. Nunca repete o clique enquanto o TikTok troca o
+    // estado, pois uma segunda chamada poderia fixar o mesmo produto de novo.
+    realClick(button);
+    for (let attempt = 0; attempt < 20; attempt++) {
+      await sleep(250);
+      const current = await locateProductCard(alvo.name || "", alvo.pid || "");
+      if (current && cardBelongsToTarget(current, alvo.name, alvo.pid || "")) {
+        if (!isPinnedCard(current) && findPinButton(current)) {
+          return { ok: true, reason: "desfixado" };
+        }
+        continue;
+      }
+      const pinned = await getPinnedProduct(cfg);
+      if (!pinned || !pinTargetsMatch(pinned, alvo)) {
+        return { ok: true, reason: "desfixado" };
+      }
+    }
+    return { ok: false, reason: "o TikTok não confirmou a desfixação" };
+  }
+
+  async function pinProduct(alvo, { allowPinnedRetry = false } = {}) {
     const card = await locateProductCard(alvo.name || "", alvo.pid || "");
     if (!card) return { ok: false, reason: "card não encontrado na vitrine" };
     if (!cardBelongsToTarget(card, alvo.name, alvo.pid || "")) {
       return { ok: false, reason: "animação da vitrine: card encontrado não é o produto-alvo" };
     }
-    if (isPinnedCard(card)) {
+    if (isPinnedCard(card) && (!allowPinnedRetry || !findPinButton(card))) {
       return { ok: true, reason: "já estava fixado" };
     }
     const btn = findPinButton(card);
@@ -5556,6 +5879,25 @@
       return { ok: false, reason: "nenhum produto selecionado para fixar" };
     }
 
+    // Ao reconectar à página, adota o destaque atual sem clicar e começa um
+    // novo minuto de apresentação a partir da detecção.
+    if (!auto.currentPin && !demo.isOn()) {
+      const detected = await getPinnedProduct(cfg);
+      if (detected) {
+        auto.currentPin = detected;
+        auto.pinnedAt = Date.now();
+        const detectedIndex = produtos.findIndex((produto) => pinTargetsMatch(produto, detected));
+        if (detectedIndex >= 0) auto.pinIdx = detectedIndex + 1;
+        auto.nextPinAt = auto.pinnedAt + PIN_HOLD_MS;
+        return { ok: true, reason: "destaque atual detectado; aguardando 1 minuto" };
+      }
+    }
+
+    if (auto.currentPin && Date.now() - auto.pinnedAt < PIN_HOLD_MS) {
+      auto.nextPinAt = auto.pinnedAt + PIN_HOLD_MS;
+      return { ok: false, reason: "produto ainda está no minuto de apresentação" };
+    }
+
     const alvo = produtos[auto.pinIdx % produtos.length];
     auto.pinIdx++;
     try {
@@ -5565,15 +5907,33 @@
     let res = { ok: false, reason: "modo demo" };
     if (!demo.isOn()) {
       try {
-        // Somente fixa. Se já estiver fixado, pinProduct retorna sucesso sem
-        // clicar; se houver outro destaque, o próprio TikTok faz a substituição.
-        res = await pinProduct(alvo);
+        let unpin = { ok: true, reason: "nenhum destaque anterior" };
+        if (auto.currentPin) {
+          const previousPin = auto.currentPin;
+          unpin = await unpinProduct(previousPin, cfg);
+          activity.log({
+            type: "pin",
+            text: unpin.ok
+              ? `Produto desfixado após 1 minuto: ${previousPin.name}`
+              : `Desfixação não confirmada; tentando Fixar o próximo produto (${unpin.reason}).`,
+            ts: Date.now(),
+          });
+          if (unpin.ok) {
+            auto.currentPin = null;
+            auto.pinnedAt = 0;
+          }
+        }
+        // Mesmo sem confirmação de desfixação, tenta Fixar o alvo uma única
+        // vez. No TikTok isso substitui o destaque anterior automaticamente.
+        res = await pinProduct(alvo, { allowPinnedRetry: !unpin.ok });
       } catch (e) {
         res = { ok: false, reason: String(e?.message || e) };
       }
     }
     // Só anuncia o produto à IA depois de confirmar que ele foi realmente fixado.
     if (res.ok || demo.isOn()) {
+      auto.currentPin = alvo;
+      auto.pinnedAt = Date.now();
       await updateConfig((f) => {
         f.produtos = (f.produtos || []).map((p) => ({ ...p, active: p.id === alvo.id }));
       });
@@ -5593,7 +5953,11 @@
       ts: Date.now(),
     });
     // Intervalo conta do FIM do ciclo (a espera da animação já consumiu tempo).
-    auto.nextPinAt = Date.now() + (min + Math.random() * (max - min)) * 1000;
+    const configuredNext = Date.now() + (min + Math.random() * (max - min)) * 1000;
+    auto.nextPinAt =
+      res.ok || demo.isOn()
+        ? Math.max(configuredNext, auto.pinnedAt + PIN_HOLD_MS)
+        : configuredNext;
     return res;
   }
 
@@ -5675,7 +6039,7 @@
     sessionEvent({ kind: "sale", sale: { text: key.slice(0, 120) } });
 
     const cfg = await loadConfig();
-    if (cfg.somVenda?.enabled !== false) playSaleSound(cfg.somVenda?.volume ?? 0.8);
+    if (cfg.somVenda?.enabled !== false) void playSaleSound(cfg.somVenda?.volume ?? 0.8);
     if (!cfg.notificacoesVenda || (simulated && extSecurity.isLocked)) return true;
     const nome = (key.match(/^([\w.@-]{2,24})/) || [])[1] || "";
     const frase = nome
@@ -6935,6 +7299,10 @@
     }
 
     const cfg = await loadConfigWithPendingSync();
+    void pullPanelContent({ force: true });
+    window.setInterval(() => {
+      if (document.visibilityState === "visible") void pullPanelContent();
+    }, 15_000);
     scanFx.mount();
     const unlocked = await checkExtensionLock(cfg.syncToken);
     bindPushToTalk();
