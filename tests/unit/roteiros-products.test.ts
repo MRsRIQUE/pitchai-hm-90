@@ -96,4 +96,15 @@ describe("produtos no gerador de roteiros", () => {
     expect(aiSection).toContain("Demonstração e benefícios");
     expect(aiSection).toContain("produto.id === selectedProduct.id");
   });
+
+  it("separa o contexto automático maior do contexto manual em duas colunas responsivas", () => {
+    expect(aiSection).toContain('className="app-cols"');
+    expect(aiSection).toContain("Contexto automático");
+    expect(aiSection).toContain("Contexto manual");
+    expect(aiSection).toContain("Recebe o roteiro pronto");
+    expect(aiSection).toContain("rows={7}");
+    expect(aiSection.indexOf("Salvar contexto da IA")).toBeGreaterThan(
+      aiSection.indexOf("Contexto manual"),
+    );
+  });
 });
