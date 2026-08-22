@@ -38,7 +38,7 @@ describe("painel distribuído", () => {
   });
 
   it("protege o chat contra spam, auto-loop e sobrescrita de rascunho", () => {
-    expect(contentSource).toContain("CHAT_SEND_INTERVAL_MS = 6000");
+    expect(contentSource).toContain("CHAT_SEND_INTERVAL_MS = 3500");
     expect(contentSource).toContain("SENT_REPLY_TTL_MS = 10 * 60 * 1000");
     expect(contentSource).toContain("rememberSentReply(value);");
     expect(contentSource).toContain("chatState.sentReplies");
@@ -73,11 +73,15 @@ describe("painel distribuído", () => {
     expect(contentSource).toContain("NON_PRODUCT_LABEL_RX");
     expect(contentSource).toContain("NON_PRODUCT_NODE_RX");
     expect(contentSource).toContain("if (!hasVitrine || !inVitrine) continue");
-    expect(contentSource).toContain("res = await pinProduct(alvo)");
+    expect(contentSource).toContain(
+      "res = await pinProduct(alvo, { allowPinnedRetry: !unpin.ok })",
+    );
     expect(contentSource).not.toContain("clickAttempt < 2");
-    expect(contentSource).not.toContain("unpinCurrentProduct");
+    expect(contentSource).toContain("PIN_HOLD_MS = 60 * 1000");
+    expect(contentSource).toContain("unpinProduct(previousPin, cfg)");
+    expect(contentSource).toContain("allowPinnedRetry: !unpin.ok");
+    expect(contentSource).toContain("Uma única tentativa");
     expect(contentSource).not.toContain("findCurrentlyPinned");
-    expect(contentSource).not.toContain("Produto desfixado e fixado novamente");
   });
 
   it("controla o som do vídeo pelo painel sem cair no abaixamento manual", () => {
@@ -93,6 +97,14 @@ describe("painel distribuído", () => {
     expect(panelSource).toMatch(/DUCK_LEVEL_PADRAO = 0\.12/);
     expect(panelSource).toContain("duckAutoLevel: duckPct() / 100");
     expect(panelSource).toMatch(/midia:\s*\{ videoMuted: false, duckIA: \{ enabled: true/);
+  });
+
+  it("permite ativar e testar o som de venda pelo contexto da extensão", () => {
+    expect(panelHtml).toContain('data-key="somVenda.enabled"');
+    expect(panelHtml).toContain('id="pnl-test-sale-sound"');
+    expect(panelHtml).toContain('data-key="somVenda.volume"');
+    expect(panelSource).toContain('type: "PITCHAI_PLAY_SALE_SOUND"');
+    expect(panelSource).toContain("cfg.somVenda?.volume ?? 0.8");
   });
 
   it("restringe IA/autofixar a produtos marcados e encerra live em aviso", () => {

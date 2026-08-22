@@ -4,6 +4,7 @@ import { guardApiRequest, recordAiUsageTokens } from "@/lib/live/api-auth.server
 import { throttle } from "@/lib/live/rate-limit.server";
 import { corsHeaders } from "@/lib/live/cors.server";
 import {
+  finalizeLiveReply,
   isNonEmptyText,
   sanitizeReplyForPublish,
   validateContentForPublish,
@@ -266,7 +267,7 @@ export const Route = createFileRoute("/api/public/chat/reply")({
         const prioritized = whitelist.length > 0 && matchesAny(message, whitelist);
 
         const baseSystem =
-          (body.systemPrompt ?? "").toString().slice(0, 4000) ||
+          (body.systemPrompt ?? "").toString().slice(0, 8000) ||
           "Você é a IA vendedora de uma live no TikTok Shop.";
 
         const author = String(body.author ?? "")
@@ -363,7 +364,12 @@ export const Route = createFileRoute("/api/public/chat/reply")({
         // Se o marcador aparecer no meio de um texto, limpa e mantém a resposta.
         // Sanitização server-side: emojis, asteriscos e quebras duplicadas saem
         // antes de qualquer validação/publicação.
-        const rawReply = ignore ? "" : sanitizeReplyForPublish(raw.split(IGNORE_TAG).join(""));
+        const rawReply = ignore
+          ? ""
+          : finalizeLiveReply(
+              sanitizeReplyForPublish(raw.split(IGNORE_TAG).join("")),
+              brief ? 96 : 220,
+            );
         const validation = validateContentForPublish(rawReply);
 
         if (!ignore && !validation.valid) {

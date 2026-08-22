@@ -94,8 +94,9 @@ export function AutomacoesSection() {
                 Banco econômico de pitches
               </h2>
               <p className="app-card-desc">
-                Gera um pacote por hora e reaproveita texto e áudio. O agendador espera cada fala
-                terminar antes de começar a próxima.
+                Monta um mini funil por produto, alternando descoberta, benefícios, objeções,
+                interação e conversão. Escolhe a próxima fala pelo momento da live e reaproveita
+                texto e áudio por uma hora.
               </p>
             </div>
             <Switch
@@ -128,13 +129,13 @@ export function AutomacoesSection() {
                 id="pitchbank-min"
                 className="app-input"
                 type="number"
-                min={20}
+                min={15}
                 max={600}
                 value={config.pitchBank.minIntervalSec}
                 onChange={(e) =>
                   updatePitchBank({
                     ...config.pitchBank,
-                    minIntervalSec: Math.max(20, Number(e.target.value) || 45),
+                    minIntervalSec: Math.max(15, Number(e.target.value) || 28),
                   })
                 }
               />
@@ -145,13 +146,13 @@ export function AutomacoesSection() {
                 id="pitchbank-max"
                 className="app-input"
                 type="number"
-                min={20}
+                min={15}
                 max={900}
                 value={config.pitchBank.maxIntervalSec}
                 onChange={(e) =>
                   updatePitchBank({
                     ...config.pitchBank,
-                    maxIntervalSec: Math.max(20, Number(e.target.value) || 75),
+                    maxIntervalSec: Math.max(15, Number(e.target.value) || 48),
                   })
                 }
               />

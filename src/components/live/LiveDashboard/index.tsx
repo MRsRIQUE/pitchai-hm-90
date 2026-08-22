@@ -445,7 +445,7 @@ function LiveDashboardContent() {
 
         {active === "desempenho" ? <DesempenhoSection /> : null}
         {active === "produtos" ? <ProdutosSection /> : null}
-        {active === "roteiros" ? <RoteirosSection /> : null}
+        {active === "roteiros" ? <RoteirosSection onSyncProducts={syncVitrine} /> : null}
         {active === "quentes" ? <QuentesSection /> : null}
         {active === "ia" ? <IaSection /> : null}
         {active === "voz" ? (

@@ -25,6 +25,8 @@ const FILES = [
   "product-bridge.js",
   "product-scrape.js",
   "background.js",
+  "offscreen.html",
+  "offscreen.js",
   "content.js",
   "dom-map.js",
   "hook.js",

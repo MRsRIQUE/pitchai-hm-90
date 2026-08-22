@@ -895,7 +895,7 @@ textarea {
 /* ---------- Products List ---------- */
 .pnl-prod {
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto;
+  grid-template-columns: auto minmax(0, 1fr) auto auto;
   align-items: center;
   gap: 10px;
   padding: 10px;
@@ -903,6 +903,10 @@ textarea {
   border: 1px solid var(--line);
   border-radius: 10px;
   margin-top: 8px;
+}
+
+.pnl-learn-product {
+  white-space: nowrap;
 }
 
 .pnl-prod input[type="text"] {

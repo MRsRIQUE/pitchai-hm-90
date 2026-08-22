@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { sanitizeReplyForPublish } from "@/lib/live/validation.server";
+import { finalizeLiveReply, sanitizeReplyForPublish } from "@/lib/live/validation.server";
 
 describe("sanitizeReplyForPublish", () => {
   it("returns empty string for non-string input", () => {
@@ -39,5 +39,35 @@ describe("sanitizeReplyForPublish", () => {
 
   it("returns empty when only emojis and markdown remain", () => {
     expect(sanitizeReplyForPublish("😀🎉**")).toBe("");
+  });
+});
+
+describe("finalizeLiveReply", () => {
+  it("remove reticências finais e fecha a frase", () => {
+    expect(finalizeLiveReply("Esse produto é leve e muito prático...")).toBe(
+      "Esse produto é leve e muito prático.",
+    );
+    expect(finalizeLiveReply("Confere o tamanho no carrinho…")).toBe(
+      "Confere o tamanho no carrinho.",
+    );
+  });
+
+  it("preserva a primeira frase completa quando a resposta passa do limite", () => {
+    const result = finalizeLiveReply(
+      "Ele é compacto e fácil de levar. A segunda explicação seria longa demais para o chat da live.",
+      48,
+    );
+    expect(result).toBe("Ele é compacto e fácil de levar.");
+    expect(result.length).toBeLessThanOrEqual(48);
+  });
+
+  it("corta somente no limite de palavra e nunca termina em reticências", () => {
+    const result = finalizeLiveReply(
+      "Este produto combina praticidade conforto durabilidade e uso simples durante toda a rotina",
+      56,
+    );
+    expect(result.length).toBeLessThanOrEqual(56);
+    expect(result).toMatch(/[.!?]$/);
+    expect(result).not.toMatch(/(?:\.{2,}|…)$/u);
   });
 });

@@ -11,6 +11,7 @@ const ProductSchema = z.object({
   id: z.string().min(1).max(120),
   name: z.string().min(1).max(240),
   description: z.string().max(2_500).default(""),
+  aiKnowledge: z.string().max(2_000).optional(),
   price: z.string().max(100).default(""),
   active: z.boolean().default(false),
 });

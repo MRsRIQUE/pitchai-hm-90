@@ -7,6 +7,8 @@
 
 const PEDIDO = "PITCHAI_SCRAPE_PRODUCT";
 const PEDIDO_INSTALL_ID = "PITCHAI_GET_INSTALL_ID";
+const PEDIDO_SOM_VENDA = "PITCHAI_PLAY_SALE_SOUND";
+const OFFSCREEN_SOM_VENDA = "PITCHAI_OFFSCREEN_SALE_SOUND";
 const INSTALL_ID_KEY = "pitchai_install_id";
 const DEMO_CMD_KEY = "pitchai.demo.cmd";
 const DEMO_ACK_KEY = "pitchai.demo.ack";
@@ -36,6 +38,36 @@ const TENTATIVAS = 12;
 const INTERVALO_MS = 1_200;
 
 const dormir = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+let offscreenEmCurso = null;
+async function garantirAudioOffscreen() {
+  if (!chrome.offscreen) throw new Error("offscreen indisponível");
+  const url = chrome.runtime.getURL("offscreen.html");
+  const contextos = chrome.runtime.getContexts
+    ? await chrome.runtime.getContexts({
+        contextTypes: ["OFFSCREEN_DOCUMENT"],
+        documentUrls: [url],
+      })
+    : [];
+  if (contextos.length) return;
+  if (!offscreenEmCurso) {
+    offscreenEmCurso = chrome.offscreen
+      .createDocument({
+        url: "offscreen.html",
+        reasons: ["AUDIO_PLAYBACK"],
+        justification: "Tocar o alerta configurado quando uma venda real é detectada.",
+      })
+      .finally(() => {
+        offscreenEmCurso = null;
+      });
+  }
+  await offscreenEmCurso;
+}
+
+async function tocarSomDeVenda(volume) {
+  await garantirAudioOffscreen();
+  return chrome.runtime.sendMessage({ type: OFFSCREEN_SOM_VENDA, volume });
+}
 
 /**
  * O service worker é o único criador da identidade da instalação. Assim o
@@ -270,6 +302,13 @@ chrome.runtime.onMessage.addListener((mensagem, sender, sendResponse) => {
     garantirInstallId()
       .then((installId) => sendResponse({ ok: true, installId }))
       .catch(() => sendResponse({ ok: false, installId: "" }));
+    return true;
+  }
+
+  if (mensagem?.type === PEDIDO_SOM_VENDA) {
+    tocarSomDeVenda(mensagem.volume)
+      .then((resultado) => sendResponse(resultado?.ok ? resultado : { ok: false }))
+      .catch((error) => sendResponse({ ok: false, error: String(error?.message || error) }));
     return true;
   }
 

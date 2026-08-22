@@ -260,8 +260,8 @@ export function VoiceSettings({
               ))}
             </select>
             <p className="mt-1 text-[11px] text-muted-foreground">
-              Selecione o cabo virtual (VB-Cable / BlackHole) para mandar a voz da IA direto ao
-              microfone da live.
+              Opcional: escolha onde ouvir o retorno local. A voz da live entra pelo Pitch AI —
+              Microfone Virtual criado pela extensão.
             </p>
           </div>
 

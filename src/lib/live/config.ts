@@ -34,6 +34,10 @@ export type Product = {
   priceMaxCents?: number | null;
   /** ISO 4217. Ausente ou vazio = "BRL". */
   currency?: string | null;
+  /** Ficha comercial criada pela IA a partir dos dados confirmados do produto. */
+  aiKnowledge?: string;
+  /** ISO date da última atualização da ficha de conhecimento. */
+  aiLearnedAt?: string;
 };
 
 export type AIContext = {
@@ -164,8 +168,8 @@ export const DEFAULT_CONFIG: LiveConfig = {
     enabled: true,
     variants: 12,
     ttlMinutes: 60,
-    minIntervalSec: 45,
-    maxIntervalSec: 75,
+    minIntervalSec: 28,
+    maxIntervalSec: 48,
     cacheReplies: true,
   },
   notificacoesVenda: true,
@@ -244,25 +248,31 @@ export type VitrineItemEntrada = {
   currency?: string;
   imageUrl?: string;
   description?: string;
+  aiKnowledge?: string;
+  aiLearnedAt?: string;
 };
 
 /**
- * Só os campos de mídia do item, e só os que vieram preenchidos.
+ * Campos complementares sincronizados, somente quando vieram preenchidos.
  *
  * Chave omitida em vez de `undefined` explícito: o produto vai para o Firestore
  * no push da config, e `undefined` é rejeitado lá.
  */
-function midiaDoItem(item: VitrineItemEntrada): Partial<Product> {
-  const midia: Partial<Product> = {};
+function camposDoItem(item: VitrineItemEntrada): Partial<Product> {
+  const fields: Partial<Product> = {};
   if (typeof item.priceCents === "number" && Number.isFinite(item.priceCents)) {
-    midia.priceCents = item.priceCents;
+    fields.priceCents = item.priceCents;
   }
   if (typeof item.priceMaxCents === "number" && Number.isFinite(item.priceMaxCents)) {
-    midia.priceMaxCents = item.priceMaxCents;
+    fields.priceMaxCents = item.priceMaxCents;
   }
-  if (item.currency?.trim()) midia.currency = item.currency.trim();
-  if (item.imageUrl?.trim()) midia.imageUrl = item.imageUrl.trim();
-  return midia;
+  if (item.currency?.trim()) fields.currency = item.currency.trim();
+  if (item.imageUrl?.trim()) fields.imageUrl = item.imageUrl.trim();
+  if (item.price?.trim()) fields.price = item.price.trim();
+  if (item.description?.trim()) fields.description = item.description.trim();
+  if (item.aiKnowledge?.trim()) fields.aiKnowledge = item.aiKnowledge.trim();
+  if (item.aiLearnedAt?.trim()) fields.aiLearnedAt = item.aiLearnedAt.trim();
+  return fields;
 }
 
 /** Id utilizável, ou "". Id vazio nunca vira chave: dois produtos sem id casariam. */
@@ -312,7 +322,7 @@ export function vitrineItemsToNewProducts(
       price: String(item.price ?? "").trim(),
       description: String(item.description ?? "").trim(),
       active: false,
-      ...midiaDoItem(item),
+      ...camposDoItem(item),
     });
   }
 
@@ -320,16 +330,15 @@ export function vitrineItemsToNewProducts(
 }
 
 /**
- * Completa produtos já importados com a foto e o preço numérico que a vitrine
- * passou a mandar.
+ * Completa produtos já importados com os campos confirmados que a sincronização
+ * passou a mandar, incluindo mídia, preço, descrição e conhecimento da IA.
  *
  * Sem isso, quem importou a vitrine antes desses campos existirem ficaria sem
  * foto para sempre: o produto já está na lista, então a importação o trata como
  * duplicata e nunca mais o toca.
  *
- * Só PREENCHE LACUNA — nunca sobrescreve valor que já está lá. Nome, descrição e
- * o `price` em texto ficam intocados: o usuário pode ter editado à mão, e a
- * vitrine não tem autoridade para desfazer isso.
+ * Só PREENCHE LACUNA — nunca sobrescreve valor que já está lá. Assim uma
+ * descrição ou ficha editada à mão continua tendo prioridade.
  *
  * O id é quem casa produto com item; o nome é o desempate de quando falta id dos
  * dois lados. Casar só por nome deixaria sem foto para sempre justamente quem
@@ -357,9 +366,10 @@ export function enrichProductsFromVitrine(
     const item = (id ? porId.get(id) : undefined) ?? porNome.get(nomeChave(produto.name));
     if (!item) return produto;
 
-    const faltando = Object.entries(midiaDoItem(item)).filter(
-      ([campo]) => produto[campo as keyof Product] == null,
-    );
+    const faltando = Object.entries(camposDoItem(item)).filter(([campo]) => {
+      const atual = produto[campo as keyof Product];
+      return atual == null || (typeof atual === "string" && !atual.trim());
+    });
     if (faltando.length === 0) return produto;
 
     mudou = true;
@@ -428,7 +438,7 @@ export function buildSystemPrompt(cfg: LiveConfig): string {
   const catalog = produtos
     .map(
       (p, i) =>
-        `${i + 1}. ${p.name}${p.price ? ` — ${p.price}` : ""}${p.active ? " [ATIVO]" : ""}\n   ${p.description || "(sem descrição)"}`,
+        `${i + 1}. ${p.name}${p.price ? ` — ${p.price}` : ""}${p.active ? " [ATIVO]" : ""}\n   ${p.description || "(sem descrição)"}${p.aiKnowledge ? `\n   Ficha aprendida pela IA: ${p.aiKnowledge}` : ""}`,
     )
     .join("\n");
 
@@ -448,7 +458,7 @@ export function buildSystemPrompt(cfg: LiveConfig): string {
     active
       ? `Produto ATIVO no momento: "${active.name}". Priorize responder sobre ele quando fizer sentido.`
       : "Nenhum produto marcado como ativo.",
-    `Responda de forma curta (1-2 frases), natural, como se estivesse falando ao vivo.`,
+    `Responda em uma frase completa e natural, como se estivesse falando ao vivo. Nunca termine com reticências nem corte uma ideia no meio.`,
   ]
     .filter(Boolean)
     .join("\n\n");

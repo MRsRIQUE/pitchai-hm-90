@@ -20,6 +20,10 @@ export type LiveSessionRow = {
   messages_answered: number;
   messages_ignored: number;
   messages_blocked: number;
+  messages_received?: number;
+  audience_joins?: number;
+  audience_follows?: number;
+  pitches_spoken?: number;
   products_pitched: Array<{ name: string; id?: string | null; at?: string }> | null;
   tokens_in: number;
   tokens_out: number;
@@ -128,6 +132,8 @@ export type VitrineItem = {
   /** URL absoluta http(s) da foto. */
   imageUrl?: string;
   description?: string;
+  aiKnowledge?: string;
+  aiLearnedAt?: string;
 };
 
 /**
@@ -266,6 +272,8 @@ export async function pullVitrine(options?: { signal?: AbortSignal }): Promise<{
         const currency = texto(p.currency);
         const imageUrl = texto(p.imageUrl);
         const description = typeof p.description === "string" ? p.description : undefined;
+        const aiKnowledge = texto(p.aiKnowledge);
+        const aiLearnedAt = texto(p.aiLearnedAt);
 
         if (id !== undefined) item.id = id;
         if (price !== undefined) item.price = price;
@@ -274,6 +282,8 @@ export async function pullVitrine(options?: { signal?: AbortSignal }): Promise<{
         if (currency !== undefined) item.currency = currency;
         if (imageUrl !== undefined) item.imageUrl = imageUrl;
         if (description !== undefined) item.description = description;
+        if (aiKnowledge !== undefined) item.aiKnowledge = aiKnowledge;
+        if (aiLearnedAt !== undefined) item.aiLearnedAt = aiLearnedAt;
         return item;
       });
 

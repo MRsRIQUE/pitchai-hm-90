@@ -68,3 +68,36 @@ export function sanitizeReplyForPublish(text: unknown): string {
       .trim()
   );
 }
+
+/**
+ * Fecha a resposta em uma frase que cabe no chat da live. Nunca acrescenta
+ * reticências: quando o modelo passa do limite, preserva a primeira frase
+ * completa ou encerra no último limite de palavra com pontuação final.
+ */
+export function finalizeLiveReply(text: unknown, maxChars = 96): string {
+  const clean = sanitizeReplyForPublish(text)
+    .replace(/\s+/g, " ")
+    .replace(/(?:\.{2,}|…)+\s*$/u, "")
+    .trim();
+  if (!clean) return "";
+
+  const limit = Math.max(24, Math.min(500, Math.round(maxChars) || 96));
+  let result = clean;
+  if (result.length > limit) {
+    const complete = result.match(/^.{1,}?[.!?](?=\s|$)/u)?.[0]?.trim();
+    if (complete && complete.length <= limit) {
+      result = complete;
+    } else {
+      const cut = result.slice(0, limit - 1).trimEnd();
+      const lastSpace = cut.lastIndexOf(" ");
+      result = (lastSpace >= Math.floor(limit * 0.55) ? cut.slice(0, lastSpace) : cut).trim();
+    }
+  }
+
+  result = result.replace(/(?:\.{2,}|…)+\s*$/u, "").trim();
+  if (!/[.!?]$/u.test(result)) {
+    if (result.length >= limit) result = result.slice(0, limit - 1).trimEnd();
+    result += ".";
+  }
+  return result.slice(0, limit);
+}

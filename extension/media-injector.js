@@ -40,7 +40,7 @@
   // de cima, senão o status do topo diria "ninguém está usando o microfone".
   const OWNER_SOURCE = "__pitchai_media_owner__";
   const OWNER_TTL_MS = 12000;
-  const INACTIVE_CODE = "media-inactive"; // o content.js usa para cair no VB-Cable
+  const INACTIVE_CODE = "media-inactive"; // o content.js usa para cair na reprodução local
   const INACTIVE_MSG = "Fonte virtual de áudio inativa: toque a voz pelo dispositivo";
   // O content script roda no mesmo mundo isolado da página; o canal dele só
   // pode mexer em áudio. Ligar/desligar a fonte continua sendo só do painel.

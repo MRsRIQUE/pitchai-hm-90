@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import {
   ArrowLeft,
+  Brain,
   CheckCircle2,
   Eye,
   ImageIcon,
@@ -24,6 +25,7 @@ import { mergeVitrineProducts, newProduct, type Product } from "@/lib/live/confi
 import { useHotProducts, sendHotProduct } from "@/hooks/live/useHotProducts";
 import { ProdutoThumb } from "./ProdutoThumb";
 import { formatarPreco } from "./produto";
+import { aiHeaders } from "@/lib/live/ai-headers";
 
 /**
  * Catálogo + produto principal + rodízio automático.
@@ -44,6 +46,7 @@ export function ProdutosSection() {
   const [detailsId, setDetailsId] = useState<string | null>(null);
   const [editingDetails, setEditingDetails] = useState(false);
   const [importing, setImporting] = useState(false);
+  const [learningId, setLearningId] = useState<string | null>(null);
 
   const detailsProduct = config.produtos.find((p) => p.id === detailsId) ?? null;
 
@@ -169,6 +172,64 @@ export function ProdutosSection() {
     }
   };
 
+  const learnProduct = async (product: Product) => {
+    if (!product.name.trim()) {
+      toast.error("Cadastre o nome do produto antes de ensinar a IA");
+      return;
+    }
+    setLearningId(product.id);
+    try {
+      const response = await fetch("/api/product/learn", {
+        method: "POST",
+        headers: await aiHeaders(),
+        body: JSON.stringify({
+          product: {
+            id: product.id,
+            name: product.name,
+            price: product.price || "",
+            description: product.description || "",
+            aiKnowledge: product.aiKnowledge || "",
+          },
+          context: {
+            niche: config.aiContext.niche,
+            targetAudience: config.aiContext.targetAudience,
+            tone: config.aiContext.tone,
+            rules: config.aiContext.rules,
+          },
+        }),
+      });
+      const result = (await response.json().catch(() => null)) as {
+        error?: string;
+        knowledge?: string;
+        learnedAt?: string;
+      } | null;
+      if (!response.ok || !result?.knowledge) {
+        throw new Error(result?.error || `Falha ao aprender (${response.status}).`);
+      }
+      updateConfig((current) => ({
+        ...current,
+        produtos: current.produtos.map((item) =>
+          item.id === product.id
+            ? {
+                ...item,
+                aiKnowledge: result.knowledge,
+                aiLearnedAt: result.learnedAt || new Date().toISOString(),
+              }
+            : item,
+        ),
+      }));
+      toast.success("A IA aprendeu sobre este produto", {
+        description: "A ficha já será usada nas respostas, pitches e roteiros.",
+      });
+    } catch (error) {
+      toast.error("Não foi possível ensinar este produto", {
+        description: error instanceof Error ? error.message : "Tente novamente em instantes.",
+      });
+    } finally {
+      setLearningId(null);
+    }
+  };
+
   if (detailsProduct) {
     const preco = formatarPreco(detailsProduct);
 
@@ -180,6 +241,19 @@ export function ProdutosSection() {
             Voltar para produtos
           </button>
           <div className="app-product-detail-actions">
+            <button
+              type="button"
+              className="app-btn app-btn--primary"
+              disabled={learningId === detailsProduct.id}
+              onClick={() => void learnProduct(detailsProduct)}
+            >
+              {learningId === detailsProduct.id ? (
+                <Loader2 aria-hidden="true" className="animate-spin" />
+              ) : (
+                <Brain aria-hidden="true" />
+              )}
+              {detailsProduct.aiKnowledge ? "Reaprender produto" : "IA aprender produto"}
+            </button>
             {!detailsProduct.active ? (
               <button
                 type="button"
@@ -236,6 +310,13 @@ export function ProdutosSection() {
                     "Este produto ainda não possui uma descrição cadastrada."}
                 </p>
               </div>
+
+              {detailsProduct.aiKnowledge ? (
+                <div className="app-product-detail-description">
+                  <span>Conhecimento aprendido pela IA</span>
+                  <p className="whitespace-pre-line">{detailsProduct.aiKnowledge}</p>
+                </div>
+              ) : null}
 
               <div className="app-product-detail-metas" aria-label="Resumo do produto">
                 <div>
@@ -333,6 +414,17 @@ export function ProdutosSection() {
                     onChange={(e) => updateProductField("description", e.target.value)}
                     rows={5}
                     placeholder="A IA usa este texto para responder perguntas."
+                  />
+                </div>
+                <div className="app-field app-product-editor-wide">
+                  <label htmlFor="produto-ai-knowledge">Ficha aprendida pela IA</label>
+                  <Textarea
+                    id="produto-ai-knowledge"
+                    className="app-input"
+                    value={detailsProduct.aiKnowledge ?? ""}
+                    onChange={(e) => updateProductField("aiKnowledge", e.target.value)}
+                    rows={7}
+                    placeholder="Clique em IA aprender produto para gerar esta ficha automaticamente."
                   />
                 </div>
               </div>
@@ -467,6 +559,20 @@ export function ProdutosSection() {
                       <p>{p.description || "Sem descrição cadastrada."}</p>
                     </div>
                     <div className="app-product-card-actions">
+                      <button
+                        type="button"
+                        className="app-btn app-btn--sm app-btn--primary"
+                        disabled={learningId === p.id}
+                        title="Criar ficha de conhecimento para respostas, pitches e roteiros"
+                        onClick={() => void learnProduct(p)}
+                      >
+                        {learningId === p.id ? (
+                          <Loader2 aria-hidden="true" className="animate-spin" />
+                        ) : (
+                          <Brain aria-hidden="true" />
+                        )}
+                        {p.aiKnowledge ? "Reaprender" : "IA aprender"}
+                      </button>
                       <button
                         type="button"
                         className="app-btn app-btn--sm"

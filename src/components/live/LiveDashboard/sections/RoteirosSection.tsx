@@ -1,11 +1,12 @@
 import { useEffect, useMemo, useState } from "react";
-import { Copy, FileText, Loader2, RefreshCw, Sparkles } from "lucide-react";
+import { Copy, FileText, Loader2, Package, RefreshCw, Search, Sparkles } from "lucide-react";
 import { toast } from "sonner";
 import { useShallow } from "zustand/react/shallow";
 import { copyToClipboard } from "@/lib/clipboard";
 import { aiHeaders } from "@/lib/live/ai-headers";
 import { SCRIPT_OBJECTIVES, SCRIPT_STYLES, type ScriptStyle } from "@/lib/live/script-generation";
 import { useLiveStore } from "@/stores/useLiveStore";
+import type { VitrineSyncOutcome } from "@/hooks/live/useVitrineSync";
 import { formatarPreco } from "./produto";
 
 const ESTILO_ROTEIRO = {
@@ -27,13 +28,19 @@ async function readError(response: Response): Promise<string> {
   return String(body?.error || `Falha ao gerar roteiro (${response.status}).`);
 }
 
-export function RoteirosSection() {
-  const { config, loading, updateConfig, setLoading } = useLiveStore(
+export function RoteirosSection({
+  onSyncProducts,
+}: {
+  onSyncProducts: () => Promise<VitrineSyncOutcome>;
+}) {
+  const { config, loading, updateConfig, setLoading, vitrineStatus, vitrineAt } = useLiveStore(
     useShallow((state) => ({
       config: state.config,
       loading: state.loading,
       updateConfig: state.actions.updateConfig,
       setLoading: state.actions.setLoading,
+      vitrineStatus: state.vitrineStatus,
+      vitrineAt: state.vitrineAt,
     })),
   );
   const activeProduct = config.produtos.find((product) => product.active) ?? config.produtos[0];
@@ -42,6 +49,7 @@ export function RoteirosSection() {
   const [style, setStyle] = useState<ScriptStyle>("natural");
   const [duration, setDuration] = useState(3);
   const [cta, setCta] = useState("");
+  const [productQuery, setProductQuery] = useState("");
   const [generatingId, setGeneratingId] = useState<string | null>(null);
   const [batch, setBatch] = useState<{ done: number; total: number; failures: number } | null>(
     null,
@@ -57,6 +65,30 @@ export function RoteirosSection() {
     () => config.produtos.filter((product) => config.roteirosPorProduto[product.id]),
     [config.produtos, config.roteirosPorProduto],
   );
+  const visibleProducts = useMemo(() => {
+    const query = productQuery.trim().toLocaleLowerCase("pt-BR");
+    if (!query) return config.produtos;
+    return config.produtos.filter((product) =>
+      `${product.name} ${product.price || ""} ${product.description || ""}`
+        .toLocaleLowerCase("pt-BR")
+        .includes(query),
+    );
+  }, [config.produtos, productQuery]);
+
+  const syncProducts = async () => {
+    const outcome = await onSyncProducts();
+    if (outcome.ok) {
+      toast.success(
+        outcome.importedCount
+          ? `${outcome.importedCount} produto(s) novo(s) carregado(s)`
+          : `${outcome.items.length} produto(s) sincronizado(s)`,
+      );
+    } else if (outcome.busy) {
+      toast.info("A lista de produtos já está sendo atualizada");
+    } else {
+      toast.error("Não foi possível puxar os produtos", { description: outcome.error });
+    }
+  };
 
   const requestScript = async (targetProductId: string): Promise<ScriptResponse> => {
     const targetProduct = config.produtos.find((product) => product.id === targetProductId);
@@ -160,7 +192,27 @@ export function RoteirosSection() {
             Monte uma fala completa, pronta para narrar e vinculada ao produto escolhido.
           </p>
         </div>
+        <div className="app-table-actions">
+          <span className="app-tag" data-tone={config.produtos.length ? "ok" : undefined}>
+            <Package aria-hidden="true" /> {config.produtos.length} produto(s)
+          </span>
+          <button
+            type="button"
+            className="app-btn app-btn--sm"
+            onClick={() => void syncProducts()}
+            disabled={loading.vitrine}
+          >
+            <RefreshCw className={loading.vitrine ? "animate-spin" : undefined} />
+            {loading.vitrine ? "Puxando produtos…" : "Atualizar produtos"}
+          </button>
+        </div>
       </div>
+
+      <p className="app-section-desc" style={{ marginTop: -8 }}>
+        {vitrineStatus === "ok" && vitrineAt
+          ? `Lista sincronizada com a vitrine às ${new Date(vitrineAt).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}.`
+          : "A lista usa o mesmo catálogo da aba Produtos e pode ser atualizada diretamente aqui."}
+      </p>
 
       <div className="app-card">
         <div className="app-card-head">
@@ -178,7 +230,17 @@ export function RoteirosSection() {
         {!config.produtos.length ? (
           <div className="app-empty">
             <p className="app-empty-title">Nenhum produto cadastrado</p>
-            <p>Adicione ou importe produtos antes de gerar um roteiro.</p>
+            <p>Puxe os produtos da vitrine para escolher qual deles receberá o roteiro.</p>
+            <button
+              type="button"
+              className="app-btn app-btn--primary"
+              style={{ marginTop: 12 }}
+              onClick={() => void syncProducts()}
+              disabled={loading.vitrine}
+            >
+              {loading.vitrine ? <Loader2 className="animate-spin" /> : <RefreshCw />}
+              Puxar lista de produtos
+            </button>
           </div>
         ) : (
           <>
@@ -194,6 +256,7 @@ export function RoteirosSection() {
                   {config.produtos.map((product) => (
                     <option key={product.id} value={product.id}>
                       {product.name}
+                      {formatarPreco(product) ? ` · ${formatarPreco(product)}` : ""}
                       {product.active ? " · ativo" : ""}
                     </option>
                   ))}
@@ -244,6 +307,52 @@ export function RoteirosSection() {
                     </option>
                   ))}
                 </select>
+              </div>
+            </div>
+
+            <div className="app-field" style={{ marginTop: 16 }}>
+              <label htmlFor="script-product-search">Lista de produtos</label>
+              <div className="relative">
+                <Search
+                  aria-hidden="true"
+                  className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground"
+                />
+                <input
+                  id="script-product-search"
+                  className="app-input"
+                  style={{ paddingLeft: 36 }}
+                  value={productQuery}
+                  onChange={(event) => setProductQuery(event.currentTarget.value)}
+                  placeholder="Buscar por nome, preço ou descrição"
+                />
+              </div>
+              <div
+                className="app-steps"
+                style={{ marginTop: 10, maxHeight: 300, overflowY: "auto" }}
+              >
+                {visibleProducts.map((product) => (
+                  <button
+                    key={product.id}
+                    type="button"
+                    className="app-step"
+                    data-state={product.id === productId ? "current" : "pending"}
+                    onClick={() => setProductId(product.id)}
+                  >
+                    <Package aria-hidden="true" />
+                    <span className="min-w-0 text-left">
+                      <strong className="block truncate">{product.name}</strong>
+                      <small className="block truncate">
+                        {formatarPreco(product) || "Preço não informado"}
+                        {product.aiKnowledge ? " · IA já aprendeu" : " · ficha básica"}
+                      </small>
+                    </span>
+                  </button>
+                ))}
+                {!visibleProducts.length ? (
+                  <div className="app-empty">
+                    <p>Nenhum produto corresponde à busca.</p>
+                  </div>
+                ) : null}
               </div>
             </div>
 

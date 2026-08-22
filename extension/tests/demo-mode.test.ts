@@ -18,7 +18,11 @@ function backgroundHarness(existingTabs: Array<{ id: number }> = []) {
       onInstalled: { addListener: vi.fn() },
       onStartup: { addListener: vi.fn() },
       onMessage: { addListener: vi.fn() },
+      getURL: vi.fn((path: string) => `chrome-extension://test/${path}`),
+      getContexts: vi.fn(async () => []),
+      sendMessage: vi.fn(async () => ({ ok: true })),
     },
+    offscreen: { createDocument: vi.fn(async () => undefined) },
     storage: {
       local: {
         get: vi.fn(async () => ({})),
@@ -85,6 +89,15 @@ describe("transporte do modo demo", () => {
     await new Promise((resolve) => setTimeout(resolve, 0));
     expect(chrome.tabs.query).not.toHaveBeenCalled();
     expect(create).not.toHaveBeenCalled();
+  });
+});
+
+describe("som confiável de venda", () => {
+  it("toca fora da página para não depender do autoplay do TikTok", () => {
+    expect(backgroundSource).toContain('reasons: ["AUDIO_PLAYBACK"]');
+    expect(backgroundSource).toContain("PITCHAI_PLAY_SALE_SOUND");
+    expect(contentSource).toContain('type: "PITCHAI_PLAY_SALE_SOUND"');
+    expect(contentSource).toContain("playSaleSoundFallback(volume)");
   });
 });
 

@@ -41,6 +41,8 @@ export const VitrineItemSchema = z.object({
   price: z.string().optional(),
   ...MidiaFields,
   description: z.string().optional(),
+  aiKnowledge: z.string().max(4_000).optional(),
+  aiLearnedAt: z.string().max(64).optional(),
   id: z.string().optional(),
   active: z.boolean().optional().default(false),
 });
@@ -60,6 +62,8 @@ export const VitrineProductSchema = z.object({
   id: z.string(),
   name: z.string(),
   description: z.string().optional(),
+  aiKnowledge: z.string().max(4_000).optional(),
+  aiLearnedAt: z.string().max(64).optional(),
   price: z.string().optional(),
   ...MidiaFields,
   active: z.boolean().optional(),

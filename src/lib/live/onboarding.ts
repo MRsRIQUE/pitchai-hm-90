@@ -1,5 +1,5 @@
 export type OnboardingStep =
-  "extensao" | "vbcable" | "roteamento" | "catalogo" | "roteiros" | "iniciar";
+  "extensao" | "midiaVirtual" | "roteamento" | "catalogo" | "roteiros" | "iniciar";
 
 export const ONBOARDING_STEPS: {
   id: OnboardingStep;
@@ -13,15 +13,15 @@ export const ONBOARDING_STEPS: {
       "Baixe o zip, descompacte e carregue em chrome://extensions com Modo desenvolvedor.",
   },
   {
-    id: "vbcable",
-    title: "Instalar o VB-Cable (Windows) ou BlackHole (Mac)",
-    description: "Cria um cabo virtual pra levar a voz da IA até o TikTok Live Studio ou OBS.",
+    id: "midiaVirtual",
+    title: "Ativar a mídia virtual do Pitch AI",
+    description: "A extensão cria câmera e microfone virtuais automaticamente dentro do TikTok.",
   },
   {
     id: "roteamento",
-    title: "Testar roteamento de áudio",
+    title: "Selecionar as fontes Pitch AI",
     description:
-      "Escolha o CABLE Input como saída no Pitch AI e clique em Testar voz — o VU meter deve reagir.",
+      "No TikTok, escolha Pitch AI — Câmera Virtual e Pitch AI — Microfone Virtual e teste a voz.",
   },
   {
     id: "catalogo",
@@ -49,7 +49,7 @@ export type OnboardingState = Record<OnboardingStep, boolean>;
 export function loadOnboarding(): OnboardingState {
   const empty: OnboardingState = {
     extensao: false,
-    vbcable: false,
+    midiaVirtual: false,
     roteamento: false,
     catalogo: false,
     roteiros: false,

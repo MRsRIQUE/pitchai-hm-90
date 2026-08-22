@@ -51,6 +51,7 @@ export function buildScriptPrompt(input: ScriptGenerationInput): ScriptPrompt {
     name: product.name,
     price: product.price || null,
     description: product.description || null,
+    learnedKnowledge: product.aiKnowledge || null,
   });
 
   const systemInstruction = [

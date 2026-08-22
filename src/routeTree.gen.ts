@@ -31,6 +31,7 @@ import { Route as ApiAdminCourtesyRouteImport } from './routes/api/admin/courtes
 import { Route as ApiBillingPortalRouteImport } from './routes/api/billing/portal'
 import { Route as ApiCheckoutStartRouteImport } from './routes/api/checkout/start'
 import { Route as ApiCheckoutStatusRouteImport } from './routes/api/checkout/status'
+import { Route as ApiProductLearnRouteImport } from './routes/api/product/learn'
 import { Route as ApiScriptGenerateRouteImport } from './routes/api/script/generate'
 import { Route as ApiTtsPreviewRouteImport } from './routes/api/tts/preview'
 import { Route as ApiPublicChatReplyRouteImport } from './routes/api/public/chat/reply'
@@ -154,6 +155,11 @@ const ApiCheckoutStatusRoute = ApiCheckoutStatusRouteImport.update({
   path: '/api/checkout/status',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiProductLearnRoute = ApiProductLearnRouteImport.update({
+  id: '/api/product/learn',
+  path: '/api/product/learn',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiScriptGenerateRoute = ApiScriptGenerateRouteImport.update({
   id: '/api/script/generate',
   path: '/api/script/generate',
@@ -240,6 +246,7 @@ export interface FileRoutesByFullPath {
   '/api/billing/portal': typeof ApiBillingPortalRoute
   '/api/checkout/start': typeof ApiCheckoutStartRoute
   '/api/checkout/status': typeof ApiCheckoutStatusRoute
+  '/api/product/learn': typeof ApiProductLearnRoute
   '/api/script/generate': typeof ApiScriptGenerateRoute
   '/api/tts/preview': typeof ApiTtsPreviewRoute
   '/api/public/chat/reply': typeof ApiPublicChatReplyRoute
@@ -276,6 +283,7 @@ export interface FileRoutesByTo {
   '/api/billing/portal': typeof ApiBillingPortalRoute
   '/api/checkout/start': typeof ApiCheckoutStartRoute
   '/api/checkout/status': typeof ApiCheckoutStatusRoute
+  '/api/product/learn': typeof ApiProductLearnRoute
   '/api/script/generate': typeof ApiScriptGenerateRoute
   '/api/tts/preview': typeof ApiTtsPreviewRoute
   '/api/public/chat/reply': typeof ApiPublicChatReplyRoute
@@ -313,6 +321,7 @@ export interface FileRoutesById {
   '/api/billing/portal': typeof ApiBillingPortalRoute
   '/api/checkout/start': typeof ApiCheckoutStartRoute
   '/api/checkout/status': typeof ApiCheckoutStatusRoute
+  '/api/product/learn': typeof ApiProductLearnRoute
   '/api/script/generate': typeof ApiScriptGenerateRoute
   '/api/tts/preview': typeof ApiTtsPreviewRoute
   '/api/public/chat/reply': typeof ApiPublicChatReplyRoute
@@ -351,6 +360,7 @@ export interface FileRouteTypes {
     | '/api/billing/portal'
     | '/api/checkout/start'
     | '/api/checkout/status'
+    | '/api/product/learn'
     | '/api/script/generate'
     | '/api/tts/preview'
     | '/api/public/chat/reply'
@@ -387,6 +397,7 @@ export interface FileRouteTypes {
     | '/api/billing/portal'
     | '/api/checkout/start'
     | '/api/checkout/status'
+    | '/api/product/learn'
     | '/api/script/generate'
     | '/api/tts/preview'
     | '/api/public/chat/reply'
@@ -423,6 +434,7 @@ export interface FileRouteTypes {
     | '/api/billing/portal'
     | '/api/checkout/start'
     | '/api/checkout/status'
+    | '/api/product/learn'
     | '/api/script/generate'
     | '/api/tts/preview'
     | '/api/public/chat/reply'
@@ -460,6 +472,7 @@ export interface RootRouteChildren {
   ApiBillingPortalRoute: typeof ApiBillingPortalRoute
   ApiCheckoutStartRoute: typeof ApiCheckoutStartRoute
   ApiCheckoutStatusRoute: typeof ApiCheckoutStatusRoute
+  ApiProductLearnRoute: typeof ApiProductLearnRoute
   ApiScriptGenerateRoute: typeof ApiScriptGenerateRoute
   ApiTtsPreviewRoute: typeof ApiTtsPreviewRoute
   ApiPublicChatReplyRoute: typeof ApiPublicChatReplyRoute
@@ -630,6 +643,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiCheckoutStatusRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/product/learn': {
+      id: '/api/product/learn'
+      path: '/api/product/learn'
+      fullPath: '/api/product/learn'
+      preLoaderRoute: typeof ApiProductLearnRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/script/generate': {
       id: '/api/script/generate'
       path: '/api/script/generate'
@@ -740,6 +760,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiBillingPortalRoute: ApiBillingPortalRoute,
   ApiCheckoutStartRoute: ApiCheckoutStartRoute,
   ApiCheckoutStatusRoute: ApiCheckoutStatusRoute,
+  ApiProductLearnRoute: ApiProductLearnRoute,
   ApiScriptGenerateRoute: ApiScriptGenerateRoute,
   ApiTtsPreviewRoute: ApiTtsPreviewRoute,
   ApiPublicChatReplyRoute: ApiPublicChatReplyRoute,

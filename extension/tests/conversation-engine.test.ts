@@ -20,7 +20,7 @@ const aiConfigSource = readFileSync(
 describe("motor de conversa da live", () => {
   it("isola contexto e cache por espectador", () => {
     expect(contentSource).toContain("historyByAuthor: new Map()");
-    expect(contentSource).toContain("conversationHistory(item).slice(-6)");
+    expect(contentSource).toContain("conversationHistory(item).slice(-12)");
     expect(contentSource).toContain("replyCacheKey(cfg, item.text, item.author)");
     expect(contentSource).toContain("CONVERSATION_MEMORY_TTL_MS = 2 * 60 * 60 * 1000");
     expect(contentSource).toContain("saveConversationMemory()");
@@ -61,5 +61,14 @@ describe("motor de conversa da live", () => {
     expect(replyRouteSource).toContain('return "purchase"');
     expect(replyRouteSource).toContain('return "objection"');
     expect(replyRouteSource).toContain('return "comparison"');
+  });
+
+  it("publica respostas breves e completas, sem corte com reticências", () => {
+    expect(contentSource).toContain("function fitChatReply");
+    expect(contentSource).toContain("const value = fitChatReply(reply)");
+    expect(contentSource).toContain("brief: true");
+    expect(replyRouteSource).toContain("finalizeLiveReply(");
+    expect(replyRouteSource).toContain("brief ? 96 : 220");
+    expect(contentSource).not.toContain('+ "…").slice(0, 100)');
   });
 });
