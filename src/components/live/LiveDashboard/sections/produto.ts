@@ -105,20 +105,20 @@ export function trechoEhRuidoDaVitrine(trecho: string): boolean {
     .map((p) => p.replace(/^:+|:+$/g, ""))
     .filter(Boolean);
   if (palavras.length === 0) return true;
-  return palavras.every(
-    (p) => NUMERO_RX.test(p) || HORARIO_RX.test(p) || PALAVRA_DE_UI_RX.test(p),
-  );
+  return palavras.every((p) => NUMERO_RX.test(p) || HORARIO_RX.test(p) || PALAVRA_DE_UI_RX.test(p));
 }
 
 /** Descrição sem os restos da vitrine; `""` quando só havia ruído. */
 export function limparDescricao(texto: string | null | undefined): string {
-  return String(texto ?? "")
-    .split(/\s*(?:\r?\n|·|\|)\s*/)
-    // Tira só o separador que sobrou na ponta (": 0 …", "… ·"); o ponto final
-    // fica — ele é do texto do vendedor.
-    .map((t) => t.replace(/^[\s:;,·|•\-–—]+|[\s:;,·|•\-–—]+$/g, "").trim())
-    .filter((t) => t && !trechoEhRuidoDaVitrine(t))
-    .join(" · ");
+  return (
+    String(texto ?? "")
+      .split(/\s*(?:\r?\n|·|\|)\s*/)
+      // Tira só o separador que sobrou na ponta (": 0 …", "… ·"); o ponto final
+      // fica — ele é do texto do vendedor.
+      .map((t) => t.replace(/^[\s:;,·|•\-–—]+|[\s:;,·|•\-–—]+$/g, "").trim())
+      .filter((t) => t && !trechoEhRuidoDaVitrine(t))
+      .join(" · ")
+  );
 }
 
 /** Descrição pronta para a tela — ver `limparDescricao`. */

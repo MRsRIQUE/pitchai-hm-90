@@ -1588,9 +1588,7 @@
     // separado do Estúdio (#pitchai-studio-frame). Antes só o principal era
     // reconhecido — por isso a fonte virtual de áudio/vídeo parou de responder
     // quando o Estúdio foi movido para o card destacado.
-    const frames = document.querySelectorAll(
-      "#pitchai-frame iframe, #pitchai-studio-frame iframe",
-    );
+    const frames = document.querySelectorAll("#pitchai-frame iframe, #pitchai-studio-frame iframe");
     for (const frame of frames) {
       if (event.source !== frame.contentWindow) continue;
       try {

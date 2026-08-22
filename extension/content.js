@@ -1591,7 +1591,8 @@
       .filter(Boolean);
     if (!words.length) return true;
     return words.every(
-      (w) => /^\d+(?:[.,]\d+)?$/.test(w) || /^\d{1,2}:\d{2}(?::\d{2})?$/.test(w) || UI_WORD_RX.test(w),
+      (w) =>
+        /^\d+(?:[.,]\d+)?$/.test(w) || /^\d{1,2}:\d{2}(?::\d{2})?$/.test(w) || UI_WORD_RX.test(w),
     );
   }
   /** Alguma linha da descrição é só interface da vitrine? */
@@ -2757,7 +2758,8 @@
         context.hook && `Gancho: ${brainFact(context.hook, 700)}`,
         context.painDesire && `Dor ou desejo: ${brainFact(context.painDesire, 900)}`,
         context.benefits && `Benefícios: ${brainFact(context.benefits, 1200)}`,
-        context.objectionResponse && `Objeção e resposta: ${brainFact(context.objectionResponse, 1000)}`,
+        context.objectionResponse &&
+          `Objeção e resposta: ${brainFact(context.objectionResponse, 1000)}`,
         context.chatInteraction && `Interação: ${brainFact(context.chatInteraction, 700)}`,
         context.cta && `CTA: ${brainFact(context.cta, 700)}`,
       ]
@@ -3512,8 +3514,7 @@
             description: product.description,
             aiKnowledge: product.aiKnowledge,
             aiSalesContext:
-              product.aiSalesContext ||
-              cfg.productAiSalesContexts?.[product.id || product.pid],
+              product.aiSalesContext || cfg.productAiSalesContexts?.[product.id || product.pid],
           },
           systemPrompt: buildSystemPrompt(cfg, product),
         }),
@@ -7603,13 +7604,7 @@
       },
       "🎥 Estúdio",
     );
-    const actionsGroup = el(
-      "div",
-      { class: "pitchai-header-actions" },
-      openBtn,
-      studioBtn,
-      tabBtn,
-    );
+    const actionsGroup = el("div", { class: "pitchai-header-actions" }, openBtn, studioBtn, tabBtn);
 
     header.append(brandGroup, controlsGroup, actionsGroup);
     document.body.appendChild(header);

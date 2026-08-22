@@ -235,8 +235,18 @@ describe("topProdutos", () => {
       [
         sessao({
           products_pitched: [
-            { name: "Camiseta Dry Fit", id: "a", at: "2026-08-20T10:00:00.000Z", imageUrl: "https://cdn/velha.jpg" } as any,
-            { name: "Sem Foto Válida", id: "q", at: "2026-08-20T10:05:00.000Z", imageUrl: "data:image/png;base64,AAAA" } as any,
+            {
+              name: "Camiseta Dry Fit",
+              id: "a",
+              at: "2026-08-20T10:00:00.000Z",
+              imageUrl: "https://cdn/velha.jpg",
+            } as any,
+            {
+              name: "Sem Foto Válida",
+              id: "q",
+              at: "2026-08-20T10:05:00.000Z",
+              imageUrl: "data:image/png;base64,AAAA",
+            } as any,
           ],
         }),
       ],
@@ -256,7 +266,12 @@ describe("topProdutos", () => {
         sessao({
           id: "s-nova",
           products_pitched: [
-            { name: "Produto Apagado", id: "z", at: "2026-08-20T10:00:00.000Z", imageUrl: "https://cdn/z.jpg" } as any,
+            {
+              name: "Produto Apagado",
+              id: "z",
+              at: "2026-08-20T10:00:00.000Z",
+              imageUrl: "https://cdn/z.jpg",
+            } as any,
           ],
         }),
       ],

@@ -47,8 +47,8 @@ describe("limparDescricao", () => {
 
   it("mantém os trechos úteis e joga fora só o ruído", () => {
     expect(
-      limparDescricao("Tela AMOLED 1.43\" · : 0 Fixar Cliques 0 · Monitor cardíaco · 1 dia"),
-    ).toBe("Tela AMOLED 1.43\" · Monitor cardíaco");
+      limparDescricao('Tela AMOLED 1.43" · : 0 Fixar Cliques 0 · Monitor cardíaco · 1 dia'),
+    ).toBe('Tela AMOLED 1.43" · Monitor cardíaco');
   });
 
   it("não mexe em descrição escrita pelo vendedor", () => {

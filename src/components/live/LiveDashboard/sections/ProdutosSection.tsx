@@ -494,7 +494,9 @@ export function ProdutosSection() {
                   <Star aria-hidden="true" /> Produto principal
                 </span>
                 <h4 title={activeProduct.name}>{activeProduct.name}</h4>
-                <p>{descricaoDoProduto(activeProduct) || "Sem descrição — a IA usa nome e preço."}</p>
+                <p>
+                  {descricaoDoProduto(activeProduct) || "Sem descrição — a IA usa nome e preço."}
+                </p>
               </div>
               <div className="app-product-featured-side">
                 <strong>{formatarPreco(activeProduct) ?? "Sem preço"}</strong>
