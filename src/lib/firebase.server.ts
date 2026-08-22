@@ -619,12 +619,20 @@ export async function getLiveConfigByToken(token: string) {
     uid: doc.data.uid as string,
     config: (doc.data.config as Record<string, unknown>) ?? {},
     updatedAt: (doc.data.updatedAt as string) ?? null,
+    revision: Number(doc.data.revision ?? 0) || 0,
+    sectionUpdatedAt: (doc.data.sectionUpdatedAt as Record<string, string> | undefined) ?? {},
   };
 }
 
 export async function setLiveConfigByToken(
   token: string,
-  data: { uid: string; config: unknown; updatedAt?: string },
+  data: {
+    uid: string;
+    config: unknown;
+    updatedAt?: string;
+    revision?: number;
+    sectionUpdatedAt?: Record<string, string>;
+  },
   options: { mode?: FirestoreAuthMode; userToken?: string } = {},
 ): Promise<void> {
   await fsSet(
@@ -633,9 +641,67 @@ export async function setLiveConfigByToken(
       uid: data.uid,
       config: data.config,
       updatedAt: data.updatedAt ?? new Date().toISOString(),
+      ...(data.revision !== undefined ? { revision: data.revision } : {}),
+      ...(data.sectionUpdatedAt ? { sectionUpdatedAt: data.sectionUpdatedAt } : {}),
     },
     options,
   );
+}
+
+/**
+ * Atualiza campos internos de `config` sem reler nem substituir o mapa inteiro.
+ * O update mask e o incremento de revisão pertencem ao mesmo commit atômico.
+ */
+export async function patchLiveConfigByToken(
+  token: string,
+  data: {
+    uid: string;
+    fields: Record<string, unknown>;
+    sections: string[];
+    updatedAt?: string;
+  },
+  options: { mode?: FirestoreAuthMode; userToken?: string } = {},
+): Promise<{ revision: number; updatedAt: string }> {
+  const { headers, key } = await authorization(options.mode ?? "public", options.userToken);
+  const updatedAt = data.updatedAt ?? new Date().toISOString();
+  const document = `${FIRESTORE_RESOURCE_ROOT}/documents/live_configs_by_token/${token}`;
+  const sectionTimes = Object.fromEntries(data.sections.map((section) => [section, updatedAt]));
+  const fieldPaths = [
+    "uid",
+    "updatedAt",
+    ...Object.keys(data.fields).map((field) => `config.${field}`),
+    ...data.sections.map((section) => `sectionUpdatedAt.${section}`),
+  ];
+  const response = await fetch(`${FIRESTORE_BASE_URL}/documents:commit${key}`, {
+    method: "POST",
+    headers: { "content-type": "application/json", ...headers },
+    body: JSON.stringify({
+      writes: [
+        {
+          update: {
+            name: document,
+            fields: {
+              uid: encodeValue(data.uid),
+              config: encodeValue(data.fields),
+              updatedAt: encodeValue(updatedAt),
+              sectionUpdatedAt: encodeValue(sectionTimes),
+            },
+          },
+          updateMask: { fieldPaths },
+          updateTransforms: [{ fieldPath: "revision", increment: { integerValue: "1" } }],
+        },
+      ],
+    }),
+  });
+  const body = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    throw new Error(
+      `Firestore commit live_configs_by_token/${token} falhou: ${body?.error?.message ?? response.status}`,
+    );
+  }
+  const transformed = body?.writeResults?.[0]?.transformResults?.[0];
+  const revision = Number(transformed?.integerValue ?? transformed?.doubleValue ?? 0) || 0;
+  return { revision, updatedAt };
 }
 
 // users/{uid}/subscription/current — plano e assinatura

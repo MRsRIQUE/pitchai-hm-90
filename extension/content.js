@@ -1185,25 +1185,139 @@
   async function updateConfig(mutate) {
     const fresh = await loadConfig();
     const out = (await mutate(fresh)) || fresh;
-    saveConfig(out);
+    await saveConfig(out);
     return out;
   }
 
   /** Envia a config (inclui produtos lidos da vitrine) para o painel web. */
-  let _lastPush = 0;
-  async function pushConfigToBackend(cfg) {
-    if (!cfg?.syncToken) return;
-    if (Date.now() - _lastPush < 5000) return;
-    _lastPush = Date.now();
-    try {
-      await fetch(`${API_BASE}/api/public/live/config`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json", ...(await installHeaders()) },
-        body: JSON.stringify({ action: "push", token: cfg.syncToken, config: cfg }),
-      });
-    } catch (e) {
-      console.warn("[Pitchai] push config falhou", e);
+  let _queuedProductPush = null;
+  let _productPushTimer = null;
+  let _productPushInFlight = null;
+  let _productRetryScheduled = false;
+  let _lastRemoteRevision = 0;
+
+  function pushConfigToBackend(cfg) {
+    if (!cfg?.syncToken) return Promise.resolve(false);
+    _queuedProductPush = {
+      token: cfg.syncToken,
+      produtos: Array.isArray(cfg.produtos) ? cfg.produtos : [],
+    };
+    clearTimeout(_productPushTimer);
+    _productPushTimer = setTimeout(() => flushProductPush(), 700);
+    _productRetryScheduled = false;
+    return Promise.resolve(true);
+  }
+
+  async function flushProductPush(attempt = 0) {
+    _productPushTimer = null;
+    _productRetryScheduled = false;
+    if (_productPushInFlight) {
+      await _productPushInFlight;
+      if (_queuedProductPush && !_productPushTimer && !_productRetryScheduled) {
+        _productPushTimer = setTimeout(() => flushProductPush(), 700);
+      }
+      return true;
     }
+    const queued = _queuedProductPush;
+    if (!queued) return true;
+    _queuedProductPush = null;
+
+    _productPushInFlight = (async () => {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 12000);
+      try {
+        const response = await fetch(`${API_BASE}/api/public/live/config`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", ...(await installHeaders()) },
+          body: JSON.stringify({
+            action: "patch",
+            token: queued.token,
+            config: { produtos: queued.produtos },
+            sections: ["products"],
+            source: "extension",
+            requestId: crypto.randomUUID(),
+          }),
+          signal: controller.signal,
+        });
+        const data = await response.json().catch(() => ({}));
+        if (!response.ok || !data?.ok) {
+          throw new Error(data?.message || data?.error || `HTTP ${response.status}`);
+        }
+        _lastRemoteRevision = Math.max(_lastRemoteRevision, Number(data.revision) || 0);
+        return true;
+      } catch (error) {
+        _queuedProductPush = _queuedProductPush || queued;
+        const delay = Math.min(30000, 1500 * 2 ** attempt);
+        clearTimeout(_productPushTimer);
+        _productRetryScheduled = true;
+        _productPushTimer = setTimeout(() => flushProductPush(attempt + 1), delay);
+        console.warn(`[Pitchai] sync de produtos falhou; nova tentativa em ${delay}ms`, error);
+        return false;
+      } finally {
+        clearTimeout(timeout);
+        _productPushInFlight = null;
+        if (_queuedProductPush && !_productPushTimer && !_productRetryScheduled) {
+          _productPushTimer = setTimeout(() => flushProductPush(), 700);
+        }
+      }
+    })();
+    return _productPushInFlight;
+  }
+
+  let _configPullInFlight = null;
+  async function pullPanelContent({ force = false } = {}) {
+    if (_configPullInFlight) return _configPullInFlight;
+    _configPullInFlight = (async () => {
+      const current = await loadConfig();
+      if (!current?.syncToken) return false;
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 12000);
+      try {
+        const response = await fetch(`${API_BASE}/api/public/live/config`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", ...(await installHeaders()) },
+          body: JSON.stringify({
+            action: "pull",
+            token: current.syncToken,
+            sections: ["texts", "products"],
+            source: "extension",
+          }),
+          signal: controller.signal,
+        });
+        const data = await response.json().catch(() => ({}));
+        if (!response.ok || !data?.ok) {
+          throw new Error(data?.message || data?.error || `HTTP ${response.status}`);
+        }
+        const revision = Number(data?.meta?.revision) || 0;
+        if (!force && revision <= _lastRemoteRevision) return false;
+        const remote = data.config || {};
+        await updateConfig((fresh) => {
+          if (remote.aiContext && typeof remote.aiContext === "object") {
+            fresh.aiContext = { ...(fresh.aiContext || {}), ...remote.aiContext };
+          }
+          if (remote.productAiSalesContexts && typeof remote.productAiSalesContexts === "object") {
+            fresh.productAiSalesContexts = {
+              ...(fresh.productAiSalesContexts || {}),
+              ...remote.productAiSalesContexts,
+            };
+          }
+          for (const key of ["ultimoRoteiro", "roteirosPorProduto"]) {
+            if (Object.prototype.hasOwnProperty.call(remote, key)) fresh[key] = remote[key];
+          }
+          if (Array.isArray(remote.produtos)) fresh.produtos = remote.produtos;
+          return fresh;
+        });
+        _lastRemoteRevision = revision;
+        return true;
+      } catch (error) {
+        console.warn("[Pitchai] pull de textos/produtos falhou", error);
+        return false;
+      } finally {
+        clearTimeout(timeout);
+        _configPullInFlight = null;
+      }
+    })();
+    return _configPullInFlight;
   }
 
   // ---------- Som de caixa registradora ----------
@@ -7106,6 +7220,10 @@
     }
 
     const cfg = await loadConfigWithPendingSync();
+    void pullPanelContent({ force: true });
+    window.setInterval(() => {
+      if (document.visibilityState === "visible") void pullPanelContent();
+    }, 15_000);
     scanFx.mount();
     const unlocked = await checkExtensionLock(cfg.syncToken);
     bindPushToTalk();
