@@ -1,13 +1,34 @@
 /**
- * Empacota a extensão do Chrome em public/pitchai-extension.zip.
+ * Empacota a extensão do Chrome.
+ *
+ *   node scripts/pack-extension.mjs                 → public/pitchai-extension.zip
+ *     Distribuição manual (/download): o manifest mantém o campo `key`, então o
+ *     ID da extensão fica fixo em qualquer pasta em que o zip for extraído.
+ *
+ *   node scripts/pack-extension.mjs --webstore      → dist/pitchai-extension-webstore.zip
+ *     Upload na Chrome Web Store, que REJEITA o campo `key` ("O campo key não é
+ *     permitido no manifesto"). A Store assina o pacote com a chave dela; o ID
+ *     só continua o mesmo da distribuição manual se a chave privada for enviada
+ *     no PRIMEIRO upload do item: `--key-pem <caminho>` inclui o arquivo como
+ *     `key.pem` na raiz do zip (esse zip contém a chave privada — não distribua).
+ *     O alvo --webstore não toca no zip público nem no version.ts.
  *
  * IMPORTANTE: o zip é um arquivo BINÁRIO. Ele nunca deve ser editado ou
  * copiado por pipelines de texto (isso foi o que corrompeu a versão
  * anterior — todos os bytes não-ASCII foram substituídos por U+FFFD).
  * Sempre regenere com: npm run build:extension
  */
-import { existsSync, readFileSync, statSync, mkdtempSync, writeFileSync, rmSync } from "node:fs";
+import {
+  existsSync,
+  readFileSync,
+  statSync,
+  mkdtempSync,
+  mkdirSync,
+  writeFileSync,
+  rmSync,
+} from "node:fs";
 import { execFileSync } from "node:child_process";
+import { createPublicKey } from "node:crypto";
 import path from "node:path";
 import { tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
@@ -15,7 +36,26 @@ import { fileURLToPath } from "node:url";
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const rootDir = path.resolve(__dirname, "..");
 const extDir = path.join(rootDir, "extension");
-const outZip = path.join(rootDir, "public", "pitchai-extension.zip");
+
+// ---------------------------------------------------------------------------
+// Alvo do empacotamento
+// ---------------------------------------------------------------------------
+const argv = process.argv.slice(2);
+const WEBSTORE = argv.includes("--webstore");
+const keyPemIndex = argv.indexOf("--key-pem");
+const keyPemPath = keyPemIndex >= 0 ? path.resolve(String(argv[keyPemIndex + 1] || "")) : "";
+if (keyPemIndex >= 0 && !argv[keyPemIndex + 1]) {
+  console.error("[pack-extension] --key-pem exige o caminho do arquivo .pem");
+  process.exit(1);
+}
+if (keyPemPath && !WEBSTORE) {
+  console.error("[pack-extension] --key-pem só faz sentido junto com --webstore");
+  process.exit(1);
+}
+
+const outZip = WEBSTORE
+  ? path.join(rootDir, "dist", "pitchai-extension-webstore.zip")
+  : path.join(rootDir, "public", "pitchai-extension.zip");
 
 // Arquivos distribuídos — exatamente os referenciados pelo manifest.json
 const FILES = [
@@ -63,33 +103,83 @@ if (!iconHead.equals(PNG_MAGIC)) {
 const psQuote = (value) => `'${String(value).replaceAll("'", "''")}'`;
 
 // ---------------------------------------------------------------------------
-// Manifest de release: remove hosts de desenvolvimento (localhost/127.0.0.1).
-// O manifest fonte mantém localhost para facilitar testes locais; o zip
-// distribuído (Chrome Web Store) nunca deve referenciar hosts de dev.
+// Manifest de release.
+// - Remove hosts de desenvolvimento (localhost/127.0.0.1): o manifest fonte pode
+//   mantê-los para testes locais; o zip distribuído nunca deve referenciá-los.
+// - Remove permissões que não existem no MV3 (o Chrome loga "Permission X is
+//   unknown." e a Web Store pode recusar). Mic/câmera são pedidos em runtime
+//   por getUserMedia, não por `permissions`.
+// - No alvo --webstore, remove o `key` (a Store não aceita o campo).
 // ---------------------------------------------------------------------------
 const DEV_HOST_RE = /^http:\/\/(?:localhost|127\.0\.0\.1)(?::\d+)?\/\*$/;
+const UNKNOWN_PERMISSIONS = new Set(["microphone", "camera"]);
 
 const stripDevMatches = (patterns) => (patterns ?? []).filter((p) => !DEV_HOST_RE.test(p));
 
+const permissions = (manifest.permissions ?? []).filter((p) => {
+  if (!UNKNOWN_PERMISSIONS.has(p)) return true;
+  console.warn(
+    `[pack-extension] aviso: a permissão "${p}" não existe no MV3 — removida do zip (remova também do extension/manifest.json).`,
+  );
+  return false;
+});
+
 const releaseManifest = {
   ...manifest,
+  permissions,
   host_permissions: stripDevMatches(manifest.host_permissions),
   content_scripts: (manifest.content_scripts ?? []).map((cs) => ({
     ...cs,
     matches: stripDevMatches(cs.matches),
   })),
 };
+if (WEBSTORE) delete releaseManifest.key;
+
+// A chave privada enviada no 1º upload precisa ser o par do `key` do manifest —
+// senão a Store gera outro ID e o upload "com chave" não serviu para nada.
+if (keyPemPath) {
+  if (!existsSync(keyPemPath)) {
+    console.error("[pack-extension] --key-pem: arquivo não encontrado:", keyPemPath);
+    process.exit(1);
+  }
+  if (!manifest.key) {
+    console.error("[pack-extension] --key-pem: o manifest fonte não tem `key` para comparar");
+    process.exit(1);
+  }
+  let derivedKey = "";
+  try {
+    derivedKey = createPublicKey(readFileSync(keyPemPath, "utf8"))
+      .export({ type: "spki", format: "der" })
+      .toString("base64");
+  } catch (err) {
+    console.error("[pack-extension] --key-pem: não foi possível ler a chave:", err.message);
+    process.exit(1);
+  }
+  if (derivedKey !== manifest.key) {
+    console.error(
+      "[pack-extension] --key-pem: a chave privada NÃO corresponde ao `key` do manifest — abortando.",
+    );
+    process.exit(1);
+  }
+}
+
+mkdirSync(path.dirname(outZip), { recursive: true });
 
 const stagingDir = mkdtempSync(path.join(tmpdir(), "pitchai-ext-"));
+let zipFiles = [];
 try {
   const stagedManifest = path.join(stagingDir, "manifest.json");
   writeFileSync(stagedManifest, JSON.stringify(releaseManifest, null, 2));
 
   // Empacota em modo binário. Linux/macOS usam zip; Windows possui fallback
   // nativo para que `npm run build:extension` funcione também no ambiente local.
-  const zipFiles = FILES.map((f) =>
-    f === "manifest.json" ? stagedManifest : path.join(extDir, f),
-  );
+  zipFiles = FILES.map((f) => (f === "manifest.json" ? stagedManifest : path.join(extDir, f)));
+  if (keyPemPath) {
+    // Precisa se chamar exatamente key.pem e ficar na raiz do zip.
+    const stagedPem = path.join(stagingDir, "key.pem");
+    writeFileSync(stagedPem, readFileSync(keyPemPath));
+    zipFiles.push(stagedPem);
+  }
   try {
     execFileSync("zip", ["-X", "-q", "-j", "-FS", outZip, ...zipFiles], {
       cwd: extDir,
@@ -125,24 +215,28 @@ if (forbiddenMatches.length) {
 }
 
 // Verificação de integridade
+const expectedEntries = zipFiles.length;
 try {
   execFileSync("unzip", ["-t", "-q", outZip]);
 } catch (err) {
   if (process.platform !== "win32") throw err;
-  const verify = `Add-Type -AssemblyName System.IO.Compression.FileSystem; $z=[IO.Compression.ZipFile]::OpenRead(${psQuote(outZip)}); try { if ($z.Entries.Count -ne ${FILES.length}) { throw 'Quantidade de arquivos inválida' } } finally { $z.Dispose() }`;
+  const verify = `Add-Type -AssemblyName System.IO.Compression.FileSystem; $z=[IO.Compression.ZipFile]::OpenRead(${psQuote(outZip)}); try { if ($z.Entries.Count -ne ${expectedEntries}) { throw 'Quantidade de arquivos inválida' } } finally { $z.Dispose() }`;
   execFileSync("powershell.exe", ["-NoProfile", "-NonInteractive", "-Command", verify], {
     stdio: "pipe",
   });
 }
+
 // ---------------------------------------------------------------------------
 // Versão única do produto: o manifest da extensão é a fonte da verdade.
 // O site lia uma constante escrita à mão que parou de ser bumpada e ficou 14
 // versões atrás. Além de mostrar o número errado no painel e na página de
 // download, ela congelava o cache-buster de /pitchai-extension.zip?v=… — o
 // usuário podia baixar um zip velho servido do cache.
+// (Só no alvo padrão: o build da Web Store não mexe no código-fonte do site.)
 // ---------------------------------------------------------------------------
-const versionFile = path.join(rootDir, "src", "lib", "live", "version.ts");
-const versionSource = `/**
+if (!WEBSTORE) {
+  const versionFile = path.join(rootDir, "src", "lib", "live", "version.ts");
+  const versionSource = `/**
  * Versão única do produto — usada no painel, rodapé e página de download.
  *
  * ARQUIVO GERADO por scripts/pack-extension.mjs a partir de
@@ -151,16 +245,25 @@ const versionSource = `/**
  */
 export const APP_VERSION = "${manifest.version}";
 `;
-const versionBefore = existsSync(versionFile) ? readFileSync(versionFile, "utf8") : "";
-if (versionBefore !== versionSource) {
-  writeFileSync(versionFile, versionSource);
-  const antes = versionBefore.match(/APP_VERSION = "([^"]+)"/)?.[1] ?? "ausente";
-  console.log(
-    `[pack-extension] ${path.relative(rootDir, versionFile)} sincronizado: ${antes} → ${manifest.version}`,
-  );
+  const versionBefore = existsSync(versionFile) ? readFileSync(versionFile, "utf8") : "";
+  if (versionBefore !== versionSource) {
+    writeFileSync(versionFile, versionSource);
+    const antes = versionBefore.match(/APP_VERSION = "([^"]+)"/)?.[1] ?? "ausente";
+    console.log(
+      `[pack-extension] ${path.relative(rootDir, versionFile)} sincronizado: ${antes} → ${manifest.version}`,
+    );
+  }
 }
 
 const size = statSync(outZip).size;
+const target = WEBSTORE ? "Chrome Web Store (sem `key`)" : "distribuição manual (com `key`)";
 console.log(
-  `[pack-extension] OK — ${path.relative(rootDir, outZip)} (${(size / 1024).toFixed(1)} KB, v${manifest.version}, ${FILES.length} arquivos)`,
+  `[pack-extension] OK — ${path.relative(rootDir, outZip)} (${(size / 1024).toFixed(1)} KB, v${manifest.version}, ${expectedEntries} arquivos, ${target})`,
 );
+if (WEBSTORE) {
+  console.log(
+    keyPemPath
+      ? "[pack-extension] key.pem incluído: use este zip SÓ no primeiro upload do item; depois gere sem --key-pem. Não distribua este arquivo."
+      : "[pack-extension] sem key.pem: se este for o primeiro upload do item, a Store vai gerar um ID diferente do da distribuição manual.",
+  );
+}
