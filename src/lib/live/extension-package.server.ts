@@ -5,6 +5,7 @@ import { useStorage } from "nitro/storage";
  * de `public/` impede que a URL estática contorne a validação de licença.
  */
 export async function getExtensionPackage(): Promise<Uint8Array> {
+  // eslint-disable-next-line react-hooks/rules-of-hooks -- useStorage é do nitro, não é hook do React
   const raw = await useStorage("assets/extension").getItemRaw("pitchai-extension.zip");
   if (raw == null) throw new Error("Pacote da extensão não encontrado");
 

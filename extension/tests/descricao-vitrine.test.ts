@@ -53,7 +53,7 @@ describe("isUiNoiseLine (content.js)", () => {
 describe("descrição da vitrine no arquivo distribuído", () => {
   it("descriptionLines descarta rótulo de UI e linha de ruído", () => {
     const bloco = contentSource.match(
-      /function descriptionLines\(text\) \{[\s\S]*?\r?\n  \}\r?\n/,
+      /function descriptionLines\(text\) \{[\s\S]*?\r?\n {2}\}\r?\n/,
     )?.[0];
     expect(bloco).toBeTruthy();
     expect(bloco).toContain("!PRODUCT_UI_RX.test(l)");
@@ -63,7 +63,7 @@ describe("descrição da vitrine no arquivo distribuído", () => {
 
   it("cleanupProducts conserta descrição já gravada com ruído", () => {
     const bloco = contentSource.match(
-      /function cleanupProducts\(cfg\) \{[\s\S]*?\r?\n  \}\r?\n/,
+      /function cleanupProducts\(cfg\) \{[\s\S]*?\r?\n {2}\}\r?\n/,
     )?.[0];
     expect(bloco).toBeTruthy();
     expect(bloco).toContain("hasUiNoise(desc)");
