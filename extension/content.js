@@ -3,6 +3,39 @@
   if (window.__pitchaiInjected) return;
   window.__pitchaiInjected = true;
 
+  // Quando a extensão é recarregada/atualizada, o content script antigo segue
+  // vivo na aba até o F5 e toda chamada chrome.* passa a rejeitar com
+  // "Extension context invalidated". Os chrome.storage.local.set() sem callback
+  // devolvem Promise, então o try/catch síncrono em volta deles não pega nada e
+  // o console enche de "Uncaught (in promise)". Aqui: silencia só esse erro,
+  // para os timers conhecidos e avisa uma única vez como resolver (F5).
+  let contextLostNotified = false;
+  function noteContextLost() {
+    if (contextLostNotified) return;
+    contextLostNotified = true;
+    try {
+      stopAutomations();
+    } catch {}
+    try {
+      const el = chatState?.healthEl;
+      if (el) {
+        el.textContent = "⚠ Extensão atualizada — recarregue a aba (F5)";
+        el.className = "pitchai-status warn";
+        el.title = "A extensão foi recarregada; este painel é de uma versão antiga.";
+      }
+    } catch {}
+    console.info(
+      "[Pitch AI] A extensão foi atualizada/recarregada. Recarregue esta aba (F5) para voltar a usar o painel.",
+    );
+  }
+  window.addEventListener("unhandledrejection", (event) => {
+    const reason = event?.reason;
+    const message = String((reason && reason.message) || reason || "");
+    if (!/Extension context invalidated/i.test(message)) return;
+    event.preventDefault();
+    noteContextLost();
+  });
+
   // Notifica o site do Pitch AI que a extensão está instalada
   try {
     window.pitchAiExtensionInstalled = true;
@@ -1380,6 +1413,31 @@
   // Rabo numérico que sobra quando o rótulo é cortado do texto ("...em estoque"
   // deixa ": 18,8 mil", "...solicitada" deixa ": 0"). Não é descrição de nada.
   const COUNTER_LINE_RX = /^:?\s*[\d.,]+\s*(mil|un(id\.?)?|pcs?|peças?)?\s*$/i;
+  // Linha feita só de rótulo de controle, contador ou cronômetro do card
+  // (": 0 Fixar Cliques 0", "Adicionado ao carrinho 0", "16:08:43", "1 dia"):
+  // é a interface da vitrine, não descrição — e era isso que o painel mostrava
+  // embaixo de cada produto. Uma palavra de produto no meio ("Suporte para
+  // fixar na parede") já basta para a linha ficar. Autocontida de propósito:
+  // o teste extrai a função do arquivo distribuído.
+  function isUiNoiseLine(line) {
+    const UI_WORD_RX =
+      /^(?:fixar|desafixar|destacar|cliques?|clique|adicionado|adicionar|ao|no|na|carrinho|editar|excluir|remover|mover|para|o|a|topo|dias?|horas?|h|min|mins?|minutos?|s|seg|segundos?|de|por|e|em|estoque|termina|demonstra[çc][ãa]o|solicitada|vendidos?|sold|un|unid|mil|pcs?|pe[çc]as?|frete|gr[áa]tis)$/i;
+    const words = String(line || "")
+      .toLowerCase()
+      .split(/[\s;,()|•·\-–—/]+/)
+      .map((w) => w.replace(/^:+|:+$/g, ""))
+      .filter(Boolean);
+    if (!words.length) return true;
+    return words.every(
+      (w) => /^\d+(?:[.,]\d+)?$/.test(w) || /^\d{1,2}:\d{2}(?::\d{2})?$/.test(w) || UI_WORD_RX.test(w),
+    );
+  }
+  /** Alguma linha da descrição é só interface da vitrine? */
+  function hasUiNoise(text) {
+    return String(text || "")
+      .split(/[\n·|]/)
+      .some((l) => l.trim() && isUiNoiseLine(l));
+  }
   const PRODUCT_UI_RX =
     /^(?:carrinho|adicionado ao carrinho|cliques?|fixar|desafixar|editar|excluir|remover|mover para o topo|demonstra[çc][ãa]o solicitada)(?:\s*\d+)?$/i;
   // Blocos comerciais e controles vizinhos da vitrine não são mercadorias.
@@ -1711,7 +1769,10 @@
           !BADGE_RX.test(l) &&
           !PRICE_RX.test(l) &&
           !PRODUCT_META_RX.test(l) &&
-          !COUNTER_LINE_RX.test(l),
+          !COUNTER_LINE_RX.test(l) &&
+          !PRODUCT_UI_RX.test(l) &&
+          !JUNK_NAME_RX.test(l) &&
+          !isUiNoiseLine(l),
       );
   }
 
@@ -1741,8 +1802,11 @@
       }
       // Descrição que começa com preço é resto emendado do card
       // ("R$ 33,99Em estoque: 18,8 milDemonstração..."), não texto do usuário.
+      // O mesmo vale para a que carrega linha só de interface (": 0 Fixar
+      // Cliques 0 · Adicionado ao carrinho 0"): gravada antes do filtro, ela
+      // seguia até o painel do usuário — aqui ela é limpa de uma vez.
       const desc = String(p.description || "");
-      if (/^(de|por)?\s*(R\$|US\$|\$|€|£)\s?\d/i.test(desc)) {
+      if (/^(de|por)?\s*(R\$|US\$|\$|€|£)\s?\d/i.test(desc) || hasUiNoise(desc)) {
         const limpa = descriptionLines(desc).join(" · ").slice(0, 400);
         if (limpa !== desc) {
           p.description = limpa;
@@ -2934,11 +2998,15 @@
       if (options.signal?.aborted || options.isCancelled?.()) spoken = false;
     } catch (error) {
       if (error?.name !== "AbortError") {
-        console.warn("[PITCHAI-TTS] falha:", String(error?.message || error).slice(0, 200), {
-          text: String(text || "").slice(0, 60),
-          voice: voice?.id,
-          fromCache,
-        });
+        // Tudo numa string só: coletores de log (e o "copiar" do console) viram
+        // o objeto de detalhes em "[object Object]" e a causa real sumia do relato.
+        console.warn(
+          `[PITCHAI-TTS] falha: ${String(error?.message || error).slice(0, 200)}` +
+            ` · ${error?.name || "Error"} · url=${API_BASE}/api/public/tts/speak` +
+            ` · online=${typeof navigator !== "undefined" ? navigator.onLine : "?"}` +
+            ` · voz=${voice?.id || "?"} · cache=${fromCache ? "sim" : "não"}` +
+            ` · texto="${String(text || "").slice(0, 60)}"`,
+        );
         activity.log({
           type: "error",
           text: `Falha ao falar resposta: ${String(error?.message || error).slice(0, 140)}`,
@@ -2957,7 +3025,18 @@
     sessionEvent({ kind: "tts", tts_seconds: seconds, estimated_cost_cents: costCents });
     // If active product, mark it as pitched (once)
     const ativo = (cfg.produtos || []).find((p) => p.active);
-    if (ativo) sessionEvent({ kind: "product", product: { id: ativo.id, name: ativo.name } });
+    // A foto vai junto: o ranking "Produtos que mais vendem" do painel lê as
+    // sessões, e sem ela o produto que saiu do catálogo aparecia sem imagem.
+    if (ativo) {
+      sessionEvent({
+        kind: "product",
+        product: {
+          id: ativo.id,
+          name: ativo.name,
+          ...(isUsableImageUrl(ativo.imageUrl) ? { imageUrl: String(ativo.imageUrl).trim() } : {}),
+        },
+      });
+    }
     return true;
   }
 
@@ -7147,7 +7226,22 @@
       scrapeBtn,
       demoBtn,
     );
-    const actionsGroup = el("div", { class: "pitchai-header-actions" }, openBtn, tabBtn);
+    const studioBtn = el(
+      "button",
+      {
+        class: "pitchai-btn pitchai-studio-trigger",
+        id: "pitchai-studio",
+        title: "Abrir o Estúdio (fonte virtual) em um card separado, do lado oposto",
+      },
+      "🎥 Estúdio",
+    );
+    const actionsGroup = el(
+      "div",
+      { class: "pitchai-header-actions" },
+      openBtn,
+      studioBtn,
+      tabBtn,
+    );
 
     header.append(brandGroup, controlsGroup, actionsGroup);
     document.body.appendChild(header);
@@ -7171,6 +7265,96 @@
       frame.classList.toggle("open");
       openBtn.textContent = frame.classList.contains("open") ? "Painel ▴" : "Painel ▾";
     });
+
+    // ---- Card separado do Estúdio (fonte virtual), do lado oposto ----
+    // Reaproveita o mesmo panel.html em "modo Estúdio" (#estudio): o panel.js
+    // detecta o hash e renderiza só a Fonte virtual. Fica num iframe próprio
+    // porque um card à esquerda não cabe dentro do iframe do painel da direita.
+    const studioFrame = el("div", {
+      class: "pitchai-panel-frame pitchai-studio-frame",
+      id: "pitchai-studio-frame",
+    });
+    const studioIframe = el("iframe", {
+      src: chrome.runtime.getURL("panel.html") + "#estudio",
+      allow: "camera; microphone; display-capture; autoplay",
+    });
+    studioFrame.appendChild(studioIframe);
+    document.body.appendChild(studioFrame);
+
+    studioBtn.addEventListener("click", () => {
+      const open = studioFrame.classList.toggle("open");
+      studioBtn.classList.toggle("active", open);
+    });
+
+    // Torna um card arrastável por uma alça no topo e lembra a posição.
+    // A alça é necessária porque o corpo do card é um iframe, que engole os
+    // eventos de ponteiro — arrastar por cima dele não moveria o card.
+    function makeFrameDraggable(frameEl, storageKey) {
+      const handle = el("div", {
+        class: "pitchai-drag-handle",
+        title: "Arraste para mover",
+      });
+      frameEl.insertBefore(handle, frameEl.firstChild);
+
+      const applyPos = (left, top) => {
+        const w = frameEl.offsetWidth || 400;
+        const maxLeft = Math.max(4, window.innerWidth - w - 4);
+        const maxTop = Math.max(4, window.innerHeight - 60);
+        left = Math.min(Math.max(4, left), maxLeft);
+        top = Math.min(Math.max(4, top), maxTop);
+        frameEl.style.setProperty("left", left + "px", "important");
+        frameEl.style.setProperty("top", top + "px", "important");
+        frameEl.style.setProperty("right", "auto", "important");
+        frameEl.style.setProperty("bottom", "auto", "important");
+      };
+
+      try {
+        chrome.storage.local.get([storageKey], (r) => {
+          const pos = r && r[storageKey];
+          if (pos && Number.isFinite(pos.left) && Number.isFinite(pos.top)) {
+            applyPos(pos.left, pos.top);
+          }
+        });
+      } catch {}
+
+      let startX = 0,
+        startY = 0,
+        baseLeft = 0,
+        baseTop = 0,
+        dragging = false;
+
+      const onMove = (ev) => {
+        if (!dragging) return;
+        applyPos(baseLeft + (ev.clientX - startX), baseTop + (ev.clientY - startY));
+      };
+      const onUp = () => {
+        if (!dragging) return;
+        dragging = false;
+        frameEl.classList.remove("pitchai-dragging");
+        document.removeEventListener("pointermove", onMove);
+        document.removeEventListener("pointerup", onUp);
+        const rect = frameEl.getBoundingClientRect();
+        try {
+          chrome.storage.local.set({ [storageKey]: { left: rect.left, top: rect.top } });
+        } catch {}
+      };
+      handle.addEventListener("pointerdown", (ev) => {
+        ev.preventDefault();
+        const rect = frameEl.getBoundingClientRect();
+        baseLeft = rect.left;
+        baseTop = rect.top;
+        applyPos(baseLeft, baseTop); // congela a posição atual antes de mover
+        startX = ev.clientX;
+        startY = ev.clientY;
+        dragging = true;
+        frameEl.classList.add("pitchai-dragging");
+        document.addEventListener("pointermove", onMove);
+        document.addEventListener("pointerup", onUp);
+      });
+    }
+
+    makeFrameDraggable(frame, "pitchai.pos.panel");
+    makeFrameDraggable(studioFrame, "pitchai.pos.studio");
 
     if (cfg.demo?.enabled) demo.start(cfg).catch(() => {});
 

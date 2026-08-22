@@ -1515,3 +1515,26 @@ textarea {
     max-height: 58vh;
   }
 }
+
+/* ---------- Modo Estúdio destacado (card separado: panel.html#estudio) ---------- */
+/* Este documento roda dentro do card do lado oposto. Mostra só a Fonte virtual:
+   esconde a barra de marca, a navegação por abas e as demais abas. */
+body.pnl-studio-only .pnl-header,
+body.pnl-studio-only .pnl-tabs-nav {
+  display: none !important;
+}
+body.pnl-studio-only .pnl-tab-content {
+  display: none !important;
+}
+body.pnl-studio-only #tab-estudio {
+  display: block !important;
+}
+body.pnl-studio-only .pnl-body {
+  padding: 10px 12px 14px !important;
+}
+
+/* O Estúdio foi extraído para o card separado — some da navegação do painel
+   principal (a aba não funciona fora do card embutido de qualquer forma). */
+body:not(.pnl-studio-only) .pnl-tab-btn[data-tab="tab-estudio"] {
+  display: none !important;
+}

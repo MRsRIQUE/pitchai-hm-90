@@ -423,7 +423,9 @@
     0 0 35px 8px rgba(168, 85, 247, 0.6) !important;
 }
 .pitchai-panel-frame.open {
-  display: block !important;
+  display: flex !important;
+  flex-direction: column !important;
+  overflow: hidden !important;
   border-color: rgba(168, 85, 247, 0.55) !important;
   animation: pitchai-pulse-glow 3.5s infinite ease-in-out !important;
 }
@@ -432,9 +434,11 @@
 }
 .pitchai-panel-frame iframe {
   width: 100% !important;
-  height: 100% !important;
+  flex: 1 1 auto !important;
+  height: auto !important;
+  min-height: 0 !important;
   border: none !important;
-  border-radius: 16px !important;
+  border-radius: 0 0 16px 16px !important;
 }
 
 /* A fila flutuante foi removida. Revisoes aparecem uma por vez, sem PiP. */
@@ -685,4 +689,44 @@
     600 13px/1.2 system-ui,
     sans-serif;
   box-shadow: 0 6px 24px rgba(0, 0, 0, 0.45);
+}
+
+/* ---------- Card destacado do Estúdio (lado oposto) ---------- */
+/* Espelha o painel principal, mas ancorado à esquerda e um pouco menor.
+   A posição pode ser sobrescrita pelo arraste (content.js grava left/top). */
+.pitchai-panel-frame.pitchai-studio-frame {
+  right: auto !important;
+  left: 20px !important;
+  width: min(400px, calc(100vw - 32px)) !important;
+  max-height: 660px !important;
+}
+
+/* Alça de arrastar (injetada como primeiro filho do card). Só por ela o card
+   se move — o corpo é um iframe e engole os eventos de ponteiro. */
+.pitchai-drag-handle {
+  flex: 0 0 auto !important;
+  height: 24px !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  cursor: grab !important;
+  user-select: none !important;
+  touch-action: none !important;
+  border-radius: 16px 16px 0 0 !important;
+  background: linear-gradient(180deg, rgba(124, 58, 237, 0.32), rgba(124, 58, 237, 0.05)) !important;
+  border-bottom: 1px solid rgba(124, 58, 237, 0.28) !important;
+}
+.pitchai-drag-handle:active {
+  cursor: grabbing !important;
+}
+.pitchai-drag-handle::before {
+  content: "" !important;
+  width: 36px !important;
+  height: 4px !important;
+  border-radius: 999px !important;
+  background: rgba(233, 213, 255, 0.65) !important;
+}
+/* Enquanto arrasta, desliga o ponteiro do iframe para não perder o movimento. */
+.pitchai-panel-frame.pitchai-dragging iframe {
+  pointer-events: none !important;
 }

@@ -73,6 +73,9 @@
     canvasStream: null,
     videoTrack: null,
     videoSource: "canvas", // "canvas" | "element"
+    manualCapture: false, // captura manual do canvas (requestFrame por quadro pintado)
+    lastPaintAt: 0,
+    blackScratch: null,
     elementStream: null,
     elementTrack: null,
     blackTicks: 0,
@@ -101,6 +104,8 @@
     mutedFallback: false,
     videoSrcNode: null,
     audioSrcNode: null,
+    monitorGain: null, // monitor LOCAL (fone do vendedor); não vai pro TikTok
+    monitorOn: false, // nasce mudo: sem retorno do vídeo no fone por padrão
     audioTrack: null,
     pcs: new Set(),
     syntheticTracks: new WeakSet(),
@@ -257,14 +262,36 @@
     }
   }
 
+  // Pinta um quadro e, no modo de captura manual, emite exatamente esse quadro
+  // na trilha (requestFrame). Isso sincroniza captura e desenho: sem a
+  // amostragem automática a 30Hz batendo contra o loop de pintura, sem judder.
+  function pumpPaint() {
+    paintFrame();
+    const track = state.videoTrack;
+    if (state.manualCapture && track && typeof track.requestFrame === "function") {
+      try {
+        track.requestFrame();
+      } catch {}
+    }
+  }
+
   function startCanvasPump() {
     ensureCanvas();
     if (state.pumpStarted) return;
     state.pumpStarted = true;
+    state.lastPaintAt = 0;
 
-    const rafLoop = () => {
+    // rAF COM CAP no fps alvo. Sem o cap, o rAF repinta a 60/120Hz um quadro que
+    // a live só usa a 30 — 2 a 4x o drawImage necessário, disputando a main
+    // thread com o encoder do TikTok e travando o vídeo. Pintamos ~1x por período.
+    const rafLoop = (ts) => {
       state.lastRafAt = Date.now();
-      paintFrame();
+      const now = typeof ts === "number" ? ts : state.lastRafAt;
+      const minGap = 1000 / Math.max(1, state.fps) - 2; // -2ms de folga p/ não pular período
+      if (now - state.lastPaintAt >= minGap) {
+        state.lastPaintAt = now;
+        pumpPaint();
+      }
       state.rafId = requestAnimationFrame(rafLoop);
     };
     try {
@@ -286,7 +313,7 @@
             return;
           }
           if (Date.now() - state.lastRafAt < 250) return;
-          paintFrame();
+          pumpPaint();
         },
         Math.max(16, Math.round(1000 / state.fps)),
       );
@@ -328,20 +355,20 @@
     const { canvas, ctx } = state;
     if (!canvas || !ctx || !canvas.width || !canvas.height) return false;
     try {
-      const points = [
-        [0.25, 0.25],
-        [0.75, 0.35],
-        [0.5, 0.5],
-        [0.5, 0.75],
-      ];
-      for (const [px, py] of points) {
-        const pixel = ctx.getImageData(
-          Math.floor(canvas.width * px),
-          Math.floor(canvas.height * py),
-          1,
-          1,
-        ).data;
-        if (pixel[0] > 8 || pixel[1] > 8 || pixel[2] > 8) return false;
+      // Um único readback: encolhe o frame para 3x3 num scratch (CPU-backed) e
+      // lê os 9 px de uma vez. Antes eram 4 getImageData no canvas principal —
+      // 4 flushes GPU→CPU a cada 2s, cada um capaz de causar um engasgo.
+      let s = state.blackScratch;
+      if (!s) {
+        s = state.blackScratch = document.createElement("canvas");
+        s.width = 3;
+        s.height = 3;
+      }
+      const sctx = s.getContext("2d", { willReadFrequently: true });
+      sctx.drawImage(canvas, 0, 0, 3, 3);
+      const data = sctx.getImageData(0, 0, 3, 3).data;
+      for (let i = 0; i < data.length; i += 4) {
+        if (data[i] > 8 || data[i + 1] > 8 || data[i + 2] > 8) return false;
       }
       return true;
     } catch {
@@ -371,15 +398,29 @@
     }
 
     const canvas = ensureCanvas();
-    startCanvasPump();
     if (force || !isLiveTrack(state.videoTrack, "video")) {
       if (force && state.videoTrack?.readyState === "live") state.videoTrack.stop();
-      state.canvasStream = canvas.captureStream(state.fps);
-      state.videoTrack = markSynthetic(state.canvasStream.getVideoTracks()[0] || null);
+      // Captura MANUAL (0 fps): nós emitimos cada quadro via requestFrame no mesmo
+      // instante em que pintamos — captura e desenho ficam em fase, sem o judder
+      // da amostragem automática. Cai para o modo automático (fps fixo) só se o
+      // navegador não expuser requestFrame na trilha.
+      state.canvasStream = canvas.captureStream(0);
+      let track = state.canvasStream.getVideoTracks()[0] || null;
+      if (track && typeof track.requestFrame === "function") {
+        state.manualCapture = true;
+      } else {
+        try {
+          state.canvasStream = canvas.captureStream(state.fps);
+        } catch {}
+        track = state.canvasStream.getVideoTracks()[0] || null;
+        state.manualCapture = false;
+      }
+      state.videoTrack = markSynthetic(track);
       try {
         if (state.videoTrack) state.videoTrack.contentHint = "motion";
       } catch {}
     }
+    startCanvasPump();
     return state.videoTrack;
   }
 
@@ -409,6 +450,7 @@
       state.analyser = null;
       state.voiceGain = null;
       state.toneGain = null;
+      state.monitorGain = null; // reconecta ao novo sourceGain abaixo
     }
 
     // As fontes reais passam pelo sourceGain (que o analyser mede); o sinal
@@ -441,6 +483,19 @@
       state.toneOsc.connect(state.toneGain);
       try {
         state.toneOsc.start();
+      } catch {}
+    }
+    // Monitor LOCAL (fone do vendedor). Deriva do sourceGain (o áudio do vídeo)
+    // e vai para a saída física (ctx.destination), SEM passar pelo destNode —
+    // ou seja, o que os espectadores ouvem no TikTok não muda. Nasce MUDO
+    // (gain 0): por padrão nada do vídeo retorna no fone. O botão do Estúdio
+    // liga/desliga só este caminho.
+    if (!state.monitorGain) {
+      state.monitorGain = ctx.createGain();
+      state.monitorGain.gain.value = state.monitorOn ? 1 : 0;
+      state.sourceGain.connect(state.monitorGain);
+      try {
+        state.monitorGain.connect(ctx.destination);
       } catch {}
     }
 
@@ -1380,6 +1435,7 @@
       tone: state.tone,
       muted: state.mutedFallback,
       videoMuted: state.videoMuted,
+      monitorOn: state.monitorOn,
       videoGain: state.videoGain,
       ducking: state.ducking,
       duckLevel: state.duckManual ? state.duckManualLevel : state.voiceDuckLevel,
@@ -1451,6 +1507,17 @@
           : "O vídeo não abaixa quando a IA fala",
       );
     }
+    // Monitor local no fone do vendedor (liga/desliga o retorno do vídeo no
+    // fone). NÃO afeta o áudio publicado no TikTok — mexe só no monitorGain.
+    if (command === "monitor") {
+      state.monitorOn = Boolean(payload.on);
+      if (state.monitorGain) {
+        rampGain(state.monitorGain.gain, state.monitorOn ? 1 : 0, 120);
+      }
+      return publicStatus(
+        state.monitorOn ? "Retorno do vídeo ligado no seu fone" : "Fone sem retorno do vídeo",
+      );
+    }
     if (command === "speak") return speakVoice(payload);
     if (command === "stopSpeak") {
       const cut = stopVoicePlayback();
@@ -1517,13 +1584,20 @@
   function isPanelMessage(event, data) {
     if (window.top !== window || data.relay) return false;
     if (!PANEL_ORIGIN_RX.test(event.origin)) return false;
-    const frame = document.querySelector("#pitchai-frame iframe");
-    if (!frame || event.source !== frame.contentWindow) return false;
-    try {
-      return new URL(frame.src).origin === event.origin;
-    } catch {
-      return false;
+    // Aceita qualquer card do painel: o principal (#pitchai-frame) e o card
+    // separado do Estúdio (#pitchai-studio-frame). Antes só o principal era
+    // reconhecido — por isso a fonte virtual de áudio/vídeo parou de responder
+    // quando o Estúdio foi movido para o card destacado.
+    const frames = document.querySelectorAll(
+      "#pitchai-frame iframe, #pitchai-studio-frame iframe",
+    );
+    for (const frame of frames) {
+      if (event.source !== frame.contentWindow) continue;
+      try {
+        if (new URL(frame.src).origin === event.origin) return true;
+      } catch {}
     }
+    return false;
   }
 
   function isRelayMessage(event, data) {
