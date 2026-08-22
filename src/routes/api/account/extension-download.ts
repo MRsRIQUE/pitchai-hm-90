@@ -11,9 +11,7 @@ const PRIVATE_HEADERS = {
 };
 
 export async function handleExtensionDownload(request: Request): Promise<Response> {
-  const token = (request.headers.get("authorization") || "")
-    .replace(/^Bearer\s+/i, "")
-    .trim();
+  const token = (request.headers.get("authorization") || "").replace(/^Bearer\s+/i, "").trim();
   if (!token) {
     return Response.json(
       { error: "Entre na sua conta para baixar a extensão." },

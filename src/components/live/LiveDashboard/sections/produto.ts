@@ -63,7 +63,7 @@ export function formatarPreco(produto: Product): string | null {
  * localStorage, e um `data:`/`javascript:` chegando até um `<img src>` é o tipo
  * de coisa que não deve depender de a origem estar correta.
  */
-export function urlDaImagem(produto: Product): string | null {
+export function urlDaImagem(produto: Pick<Product, "imageUrl">): string | null {
   const url = produto.imageUrl?.trim();
   if (!url || url.length > MAX_URL) return null;
   return /^https?:\/\//i.test(url) ? url : null;
@@ -79,4 +79,49 @@ export function iniciaisDoProduto(nome: string): string {
   if (palavras.length === 0) return "?";
   if (palavras.length === 1) return palavras[0].slice(0, 2).toUpperCase();
   return (palavras[0][0] + palavras[1][0]).toUpperCase();
+}
+
+/*
+ * Restos da interface da vitrine que a extensão emendava na descrição do
+ * produto: rótulos dos controles do card ("Fixar", "Cliques 0", "Adicionado ao
+ * carrinho 0"), contadores ("Em estoque: 18,8 mil") e o cronômetro da oferta
+ * ("16:08:43", "1 dia"). Nada disso descreve o produto — mas já está gravado no
+ * catálogo de quem importou antes do filtro, então a tela limpa na leitura.
+ */
+const PALAVRA_DE_UI_RX =
+  /^(?:fixar|desafixar|destacar|cliques?|clique|adicionado|adicionar|ao|no|na|carrinho|editar|excluir|remover|mover|para|o|a|topo|dias?|horas?|h|min|mins?|minutos?|s|seg|segundos?|de|por|e|em|estoque|termina|demonstra[çc][ãa]o|solicitada|vendidos?|sold|un|unid|mil|pcs?|pe[çc]as?|frete|gr[áa]tis)$/i;
+const NUMERO_RX = /^\d+(?:[.,]\d+)?$/;
+const HORARIO_RX = /^\d{1,2}:\d{2}(?::\d{2})?$/;
+
+/**
+ * Um trecho é ruído quando TODAS as palavras são número, horário ou rótulo de
+ * controle. "Suporte para fixar na parede" fica; ": 0 Fixar Cliques 0" cai.
+ */
+export function trechoEhRuidoDaVitrine(trecho: string): boolean {
+  const palavras = trecho
+    .toLowerCase()
+    .split(/[\s;,()|•·\-–—/]+/)
+    // "Cliques: 0" e ": 0" — o dois-pontos é separador, não palavra.
+    .map((p) => p.replace(/^:+|:+$/g, ""))
+    .filter(Boolean);
+  if (palavras.length === 0) return true;
+  return palavras.every((p) => NUMERO_RX.test(p) || HORARIO_RX.test(p) || PALAVRA_DE_UI_RX.test(p));
+}
+
+/** Descrição sem os restos da vitrine; `""` quando só havia ruído. */
+export function limparDescricao(texto: string | null | undefined): string {
+  return (
+    String(texto ?? "")
+      .split(/\s*(?:\r?\n|·|\|)\s*/)
+      // Tira só o separador que sobrou na ponta (": 0 …", "… ·"); o ponto final
+      // fica — ele é do texto do vendedor.
+      .map((t) => t.replace(/^[\s:;,·|•\-–—]+|[\s:;,·|•\-–—]+$/g, "").trim())
+      .filter((t) => t && !trechoEhRuidoDaVitrine(t))
+      .join(" · ")
+  );
+}
+
+/** Descrição pronta para a tela — ver `limparDescricao`. */
+export function descricaoDoProduto(produto: Product): string {
+  return limparDescricao(produto.description);
 }

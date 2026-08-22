@@ -203,6 +203,83 @@ describe("topProdutos", () => {
     expect(ranking[0]).toMatchObject({ nome: "Produto Apagado", vendas: 1, produto: null });
   });
 
+  // "Produtos que mais vendem" mostrava o ícone genérico no lugar da foto para
+  // todo produto que já não estava no catálogo — e a vitrine muda de live para
+  // live. A foto gravada na sessão é o que mantém a linha reconhecível.
+  it("usa a foto gravada na sessão quando o produto saiu do catálogo", () => {
+    const ranking = topProdutos(
+      [
+        sessao({
+          products_pitched: [
+            {
+              name: "Produto Apagado",
+              id: "z",
+              at: "2026-08-20T10:00:00.000Z",
+              imageUrl: "https://p16-oec-sg.ibyteimg.com/foto-antiga.jpg",
+            } as any,
+          ],
+        }),
+      ],
+      catalogo,
+    );
+    expect(ranking[0]).toMatchObject({
+      nome: "Produto Apagado",
+      produto: null,
+      imageUrl: "https://p16-oec-sg.ibyteimg.com/foto-antiga.jpg",
+    });
+  });
+
+  it("prefere a foto do catálogo e só aceita URL http(s) vinda da sessão", () => {
+    const comFoto = [{ ...produto("a", "Camiseta Dry Fit"), imageUrl: "https://cdn/atual.jpg" }];
+    const ranking = topProdutos(
+      [
+        sessao({
+          products_pitched: [
+            {
+              name: "Camiseta Dry Fit",
+              id: "a",
+              at: "2026-08-20T10:00:00.000Z",
+              imageUrl: "https://cdn/velha.jpg",
+            } as any,
+            {
+              name: "Sem Foto Válida",
+              id: "q",
+              at: "2026-08-20T10:05:00.000Z",
+              imageUrl: "data:image/png;base64,AAAA",
+            } as any,
+          ],
+        }),
+      ],
+      comFoto,
+    );
+    expect(ranking.find((r) => r.id === "a")?.imageUrl).toBe("https://cdn/atual.jpg");
+    expect(ranking.find((r) => r.id === "q")?.imageUrl).toBeNull();
+  });
+
+  it("completa a foto de sessão antiga com a de uma sessão mais nova", () => {
+    const ranking = topProdutos(
+      [
+        sessao({
+          id: "s-antiga",
+          products_pitched: [{ name: "Produto Apagado", id: "z", at: "2026-08-19T10:00:00.000Z" }],
+        }),
+        sessao({
+          id: "s-nova",
+          products_pitched: [
+            {
+              name: "Produto Apagado",
+              id: "z",
+              at: "2026-08-20T10:00:00.000Z",
+              imageUrl: "https://cdn/z.jpg",
+            } as any,
+          ],
+        }),
+      ],
+      catalogo,
+    );
+    expect(ranking[0]).toMatchObject({ id: "z", imageUrl: "https://cdn/z.jpg" });
+  });
+
   it("não inventa ranking quando a sessão não apresentou nenhum produto", () => {
     expect(
       topProdutos([sessao({ sales_snapshot: [{ at: HOJE.toISOString() }] })], catalogo),

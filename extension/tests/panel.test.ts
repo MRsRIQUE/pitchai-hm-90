@@ -96,7 +96,9 @@ describe("painel distribuído", () => {
     // O motor trabalha em fração; a tela mostra porcentagem.
     expect(panelSource).toMatch(/DUCK_LEVEL_PADRAO = 0\.12/);
     expect(panelSource).toContain("duckAutoLevel: duckPct() / 100");
-    expect(panelSource).toMatch(/midia:\s*\{ videoMuted: false, duckIA: \{ enabled: true/);
+    expect(panelSource).toMatch(
+      /midia:\s*\{ videoMuted: false, monitorFone: false, duckIA: \{ enabled: true/,
+    );
   });
 
   it("permite ativar e testar o som de venda pelo contexto da extensão", () => {

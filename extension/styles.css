@@ -9,7 +9,9 @@
   overflow: hidden !important;
   opacity: 0 !important;
   visibility: hidden !important;
-  transition: opacity 0.5s ease, visibility 0.5s ease !important;
+  transition:
+    opacity 0.5s ease,
+    visibility 0.5s ease !important;
   isolation: isolate !important;
   contain: strict !important;
 }
@@ -31,7 +33,11 @@
     radial-gradient(circle at 78% 65%, rgba(124, 58, 237, 0.26), transparent 34%),
     linear-gradient(rgba(168, 85, 247, 0.12) 1px, transparent 1px),
     linear-gradient(90deg, rgba(139, 92, 246, 0.12) 1px, transparent 1px) !important;
-  background-size: auto, auto, 42px 42px, 42px 42px !important;
+  background-size:
+    auto,
+    auto,
+    42px 42px,
+    42px 42px !important;
   mask-image: radial-gradient(ellipse at center, #000 15%, transparent 76%) !important;
   animation: pitchai-mesh-drift 11s ease-in-out infinite alternate !important;
   transform: perspective(700px) rotateX(54deg) scale(1.35) !important;
@@ -91,7 +97,11 @@
   color: #f3e8ff !important;
   box-shadow: 0 8px 28px rgba(76, 29, 149, 0.3) !important;
   backdrop-filter: blur(12px) saturate(1.4) !important;
-  font: 700 10px/1.2 ui-monospace, SFMono-Regular, Consolas, monospace !important;
+  font:
+    700 10px/1.2 ui-monospace,
+    SFMono-Regular,
+    Consolas,
+    monospace !important;
   letter-spacing: 0.14em !important;
   text-transform: uppercase !important;
   opacity: 0.72 !important;
@@ -103,7 +113,9 @@
   height: 6px !important;
   border-radius: 999px !important;
   background: #d8b4fe !important;
-  box-shadow: 0 0 0 4px rgba(192, 132, 252, 0.15), 0 0 12px #c084fc !important;
+  box-shadow:
+    0 0 0 4px rgba(192, 132, 252, 0.15),
+    0 0 12px #c084fc !important;
   animation: pitchai-scanner-dot 1.25s ease-in-out infinite !important;
 }
 
@@ -113,23 +125,44 @@
 }
 
 @keyframes pitchai-scan-curtain {
-  0% { transform: translateY(0); opacity: 0; }
-  8% { opacity: 1; }
-  88% { opacity: 1; }
-  100% { transform: translateY(145vh); opacity: 0; }
+  0% {
+    transform: translateY(0);
+    opacity: 0;
+  }
+  8% {
+    opacity: 1;
+  }
+  88% {
+    opacity: 1;
+  }
+  100% {
+    transform: translateY(145vh);
+    opacity: 0;
+  }
 }
 
 @keyframes pitchai-mesh-drift {
-  from { transform: perspective(700px) rotateX(54deg) translate3d(-1.5%, -1%, 0) scale(1.35); }
-  to { transform: perspective(700px) rotateX(50deg) translate3d(1.5%, 2%, 0) scale(1.42); }
+  from {
+    transform: perspective(700px) rotateX(54deg) translate3d(-1.5%, -1%, 0) scale(1.35);
+  }
+  to {
+    transform: perspective(700px) rotateX(50deg) translate3d(1.5%, 2%, 0) scale(1.42);
+  }
 }
 
 @keyframes pitchai-mesh-flow {
-  to { background-position: 120px -80px, center; }
+  to {
+    background-position:
+      120px -80px,
+      center;
+  }
 }
 
 @keyframes pitchai-scanner-dot {
-  50% { opacity: 0.45; transform: scale(0.72); }
+  50% {
+    opacity: 0.45;
+    transform: scale(0.72);
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -139,7 +172,10 @@
   #pitchai-scan-overlay .pitchai-scan-label::before {
     animation: none !important;
   }
-  #pitchai-scan-overlay::after { top: 42% !important; opacity: 0.45 !important; }
+  #pitchai-scan-overlay::after {
+    top: 42% !important;
+    opacity: 0.45 !important;
+  }
 }
 
 .pitchai-header {
@@ -155,8 +191,7 @@
   width: min(1180px, calc(100vw - 32px)) !important;
   min-height: 52px !important;
   padding: 7px 8px 7px 14px !important;
-  background:
-    linear-gradient(105deg, rgba(17, 16, 30, 0.96), rgba(10, 10, 17, 0.94)) !important;
+  background: linear-gradient(105deg, rgba(17, 16, 30, 0.96), rgba(10, 10, 17, 0.94)) !important;
   border: 1px solid rgba(167, 139, 250, 0.2) !important;
   border-radius: 18px !important;
   color: #f9fafb !important;
@@ -423,7 +458,9 @@
     0 0 35px 8px rgba(168, 85, 247, 0.6) !important;
 }
 .pitchai-panel-frame.open {
-  display: block !important;
+  display: flex !important;
+  flex-direction: column !important;
+  overflow: hidden !important;
   border-color: rgba(168, 85, 247, 0.55) !important;
   animation: pitchai-pulse-glow 3.5s infinite ease-in-out !important;
 }
@@ -432,9 +469,11 @@
 }
 .pitchai-panel-frame iframe {
   width: 100% !important;
-  height: 100% !important;
+  flex: 1 1 auto !important;
+  height: auto !important;
+  min-height: 0 !important;
   border: none !important;
-  border-radius: 16px !important;
+  border-radius: 0 0 16px 16px !important;
 }
 
 /* A fila flutuante foi removida. Revisoes aparecem uma por vez, sem PiP. */
@@ -446,8 +485,7 @@
   width: min(390px, calc(100vw - 44px)) !important;
   padding: 16px !important;
   border-radius: 18px !important;
-  background:
-    linear-gradient(145deg, rgba(25, 20, 43, 0.98), rgba(10, 10, 17, 0.98)) !important;
+  background: linear-gradient(145deg, rgba(25, 20, 43, 0.98), rgba(10, 10, 17, 0.98)) !important;
   border: 1px solid rgba(167, 139, 250, 0.3) !important;
   box-shadow:
     0 24px 70px -20px rgba(0, 0, 0, 0.9),
@@ -489,8 +527,14 @@
   margin-top: 13px !important;
 }
 @keyframes pitchai-review-in {
-  from { opacity: 0; transform: translateY(12px) scale(0.98); }
-  to { opacity: 1; transform: translateY(0) scale(1); }
+  from {
+    opacity: 0;
+    transform: translateY(12px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
 }
 
 /* Legacy: mantido apenas para nao quebrar instalacoes que ainda tenham o no antigo. */
@@ -685,4 +729,48 @@
     600 13px/1.2 system-ui,
     sans-serif;
   box-shadow: 0 6px 24px rgba(0, 0, 0, 0.45);
+}
+
+/* ---------- Card destacado do Estúdio (lado oposto) ---------- */
+/* Espelha o painel principal, mas ancorado à esquerda e um pouco menor.
+   A posição pode ser sobrescrita pelo arraste (content.js grava left/top). */
+.pitchai-panel-frame.pitchai-studio-frame {
+  right: auto !important;
+  left: 20px !important;
+  width: min(400px, calc(100vw - 32px)) !important;
+  max-height: 660px !important;
+}
+
+/* Alça de arrastar (injetada como primeiro filho do card). Só por ela o card
+   se move — o corpo é um iframe e engole os eventos de ponteiro. */
+.pitchai-drag-handle {
+  flex: 0 0 auto !important;
+  height: 24px !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  cursor: grab !important;
+  user-select: none !important;
+  touch-action: none !important;
+  border-radius: 16px 16px 0 0 !important;
+  background: linear-gradient(
+    180deg,
+    rgba(124, 58, 237, 0.32),
+    rgba(124, 58, 237, 0.05)
+  ) !important;
+  border-bottom: 1px solid rgba(124, 58, 237, 0.28) !important;
+}
+.pitchai-drag-handle:active {
+  cursor: grabbing !important;
+}
+.pitchai-drag-handle::before {
+  content: "" !important;
+  width: 36px !important;
+  height: 4px !important;
+  border-radius: 999px !important;
+  background: rgba(233, 213, 255, 0.65) !important;
+}
+/* Enquanto arrasta, desliga o ponteiro do iframe para não perder o movimento. */
+.pitchai-panel-frame.pitchai-dragging iframe {
+  pointer-events: none !important;
 }

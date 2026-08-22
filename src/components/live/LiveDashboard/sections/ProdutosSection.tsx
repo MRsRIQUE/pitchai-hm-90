@@ -24,7 +24,7 @@ import { useVitrineSync } from "@/hooks/live/useVitrineSync";
 import { mergeVitrineProducts, newProduct, type Product } from "@/lib/live/config";
 import { useHotProducts, sendHotProduct } from "@/hooks/live/useHotProducts";
 import { ProdutoThumb } from "./ProdutoThumb";
-import { formatarPreco } from "./produto";
+import { descricaoDoProduto, formatarPreco } from "./produto";
 import { aiHeaders } from "@/lib/live/ai-headers";
 
 /**
@@ -306,7 +306,7 @@ export function ProdutosSection() {
               <div className="app-product-detail-description">
                 <span>Descrição e benefícios</span>
                 <p>
-                  {detailsProduct.description ||
+                  {descricaoDoProduto(detailsProduct) ||
                     "Este produto ainda não possui uma descrição cadastrada."}
                 </p>
               </div>
@@ -494,7 +494,9 @@ export function ProdutosSection() {
                   <Star aria-hidden="true" /> Produto principal
                 </span>
                 <h4 title={activeProduct.name}>{activeProduct.name}</h4>
-                <p>{activeProduct.description || "Sem descrição — a IA usa nome e preço."}</p>
+                <p>
+                  {descricaoDoProduto(activeProduct) || "Sem descrição — a IA usa nome e preço."}
+                </p>
               </div>
               <div className="app-product-featured-side">
                 <strong>{formatarPreco(activeProduct) ?? "Sem preço"}</strong>
@@ -556,7 +558,7 @@ export function ProdutosSection() {
                     <div className="app-product-card-body">
                       <h4 title={p.name}>{p.name || "Produto sem nome"}</h4>
                       <strong>{preco ?? "Sem preço"}</strong>
-                      <p>{p.description || "Sem descrição cadastrada."}</p>
+                      <p>{descricaoDoProduto(p) || "Sem descrição cadastrada."}</p>
                     </div>
                     <div className="app-product-card-actions">
                       <button

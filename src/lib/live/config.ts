@@ -482,15 +482,13 @@ export function buildSystemPrompt(cfg: LiveConfig): string {
   const { aiContext, produtos } = cfg;
   const active = produtos.find((p) => p.active);
   const catalog = produtos
-    .map(
-      (p, i) => {
-        const contextText = productAiSalesContextText({
-          ...p,
-          aiSalesContext: p.aiSalesContext ?? cfg.productAiSalesContexts[p.id],
-        });
-        return `${i + 1}. ${p.name}${p.price ? ` — ${p.price}` : ""}${p.active ? " [ATIVO]" : ""}\n   ${p.description || "(sem descrição)"}${p.aiKnowledge ? `\n   Ficha aprendida pela IA: ${p.aiKnowledge}` : ""}${contextText ? `\n   Contexto de venda do produto:\n${contextText}` : ""}`;
-      },
-    )
+    .map((p, i) => {
+      const contextText = productAiSalesContextText({
+        ...p,
+        aiSalesContext: p.aiSalesContext ?? cfg.productAiSalesContexts[p.id],
+      });
+      return `${i + 1}. ${p.name}${p.price ? ` — ${p.price}` : ""}${p.active ? " [ATIVO]" : ""}\n   ${p.description || "(sem descrição)"}${p.aiKnowledge ? `\n   Ficha aprendida pela IA: ${p.aiKnowledge}` : ""}${contextText ? `\n   Contexto de venda do produto:\n${contextText}` : ""}`;
+    })
     .join("\n");
 
   return [

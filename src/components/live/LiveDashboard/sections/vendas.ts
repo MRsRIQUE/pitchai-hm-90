@@ -1,5 +1,6 @@
 import type { LiveSessionRow } from "@/lib/live/sync";
 import type { Product } from "@/lib/live/config";
+import { urlDaImagem } from "./produto";
 
 /**
  * Leitura das sessões de LIVE para o painel de Início.
@@ -28,9 +29,20 @@ export type ProdutoNoRanking = {
   vendas: number;
   /** Produto do catálogo local, quando o nome/id casa com algum. */
   produto: Product | null;
+  /**
+   * Foto para a linha do ranking: a do catálogo quando o produto ainda está
+   * nele; senão a que a extensão gravou na sessão ao apresentar o produto.
+   * Produto que saiu da vitrine continuava no ranking — mas sem foto.
+   */
+  imageUrl: string | null;
 };
 
 const lista = (valor: unknown): any[] => (Array.isArray(valor) ? valor : []);
+
+/** Foto gravada na sessão, pela mesma régua do catálogo (só http(s), tamanho). */
+function fotoValida(valor: unknown): string | null {
+  return typeof valor === "string" ? urlDaImagem({ imageUrl: valor }) : null;
+}
 
 /** Data válida ou `null` — o campo vem de JSON e pode chegar torto. */
 function quando(valor: unknown): Date | null {
@@ -128,18 +140,23 @@ export function topProdutos(
     if (p.id) doCatalogo.set(`#${p.id}`, p);
   }
 
-  const registrar = (nome: string, id: string | null, vendas: number) => {
+  const registrar = (nome: string, id: string | null, vendas: number, foto: string | null) => {
     const chave = id ? `#${id}` : chaveDoNome(nome);
     const atual = porChave.get(chave);
     if (atual) {
       atual.vendas += vendas;
+      // Sessão antiga sem foto + sessão nova com foto: a nova completa.
+      if (!atual.imageUrl && foto) atual.imageUrl = foto;
       return;
     }
+    const produto =
+      (id ? doCatalogo.get(`#${id}`) : null) ?? doCatalogo.get(chaveDoNome(nome)) ?? null;
     porChave.set(chave, {
       id,
       nome,
       vendas,
-      produto: (id ? doCatalogo.get(`#${id}`) : null) ?? doCatalogo.get(chaveDoNome(nome)) ?? null,
+      produto,
+      imageUrl: (produto ? urlDaImagem(produto) : null) ?? foto,
     });
   };
 
@@ -149,6 +166,7 @@ export function topProdutos(
         nome: String(p?.name ?? "").trim(),
         id: typeof p?.id === "string" && p.id ? p.id : null,
         em: quando(p?.at)?.getTime() ?? null,
+        foto: fotoValida(p?.imageUrl),
       }))
       .filter((p) => p.nome)
       .sort((a, b) => (a.em ?? 0) - (b.em ?? 0));
@@ -165,12 +183,12 @@ export function topProdutos(
           ? apresentados[0]
           : ([...apresentados].reverse().find((p) => p.em !== null && p.em <= em) ??
             apresentados[0]);
-      registrar(alvo.nome, alvo.id, 1);
+      registrar(alvo.nome, alvo.id, 1, alvo.foto);
     }
 
     // Produto apresentado e sem venda também entra no ranking, com zero: sumir
     // da lista esconderia justamente o que não está performando.
-    for (const p of apresentados) registrar(p.nome, p.id, 0);
+    for (const p of apresentados) registrar(p.nome, p.id, 0, p.foto);
   }
 
   return [...porChave.values()].sort((a, b) => b.vendas - a.vendas).slice(0, limite);

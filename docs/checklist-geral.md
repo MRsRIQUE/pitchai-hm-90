@@ -80,7 +80,7 @@
 ### Pendências / riscos
 
 - ☐ **DOM frágil**: seletores `data-tid`/`data-e2e`/classes do TikTok quebram com frequência; fallbacks heurísticos existem (`dom-map.js` score, `hasMultipleProductRows`) mas podem gerar falso positivo. Monitorar a cada mudança do TikTok.
-- ☐ **Permissão `microphone` ausente no manifest** — media-injector usa `getUserMedia`.
+- ☒ ~~Permissão `microphone` ausente no manifest~~ — **não existe** essa permissão no MV3 (gerava `Permission microphone is unknown.` no console). O mic é pedido em runtime via `getUserMedia` + `allow="microphone"` no iframe do painel. Removida do manifest em 2026-08-21.
 - ☐ **Validar mídia virtual nativa da extensão** — confirmar câmera e microfone Pitch AI selecionados na página da live, sem instalação de programa externo.
 - ☐ Erros silenciosos: `hook.js:183-185` e `hook.js:258-260` engolem falhas de parse/rede.
 - ☐ Sem onboarding guiado no popup (`popup.html` só links).
@@ -97,7 +97,7 @@
 2. **Roll da sk_live** exposta.
 3. Remover `debug` do checkout 500.
 4. Botão "gerenciar assinatura" (Stripe Portal) em Conta + página de erro pós-checkout.
-5. Permissão `microphone` no manifest da extensão (+ bump de versão).
+5. ~~Permissão `microphone` no manifest da extensão~~ — inválida no MV3, removida em 2026-08-21 (ver seção 3).
 6. Unificar telas de Produtos duplicadas.
 7. zod + throttle nos endpoints de IA.
 8. Onboarding da extensão + documentação da voz virtual.

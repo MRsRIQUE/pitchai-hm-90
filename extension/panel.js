@@ -1,5 +1,9 @@
 (function () {
   const KEY = "pitchai.config.v1";
+  // Modo "Estúdio destacado": este painel roda dentro do card separado
+  // (iframe carregado como panel.html#estudio). Renderiza só a Fonte virtual
+  // e pula os efeitos de boot pesados do painel completo (auto-scrape, tutorial).
+  const STUDIO_ONLY = /(?:estudio|studio)/i.test(location.hash || "");
   const PENDING_SYNC_KEY = "pitchai.pendingSyncToken";
   const SYNC_UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
   function resolveApiBase() {
@@ -389,7 +393,7 @@
 
     // Som do vídeo da fonte virtual. `level` é fração (o motor trabalha em
     // 0..1); a tela mostra porcentagem porque "12%" é o que o vendedor entende.
-    midia: { videoMuted: false, duckIA: { enabled: true, level: 0.12 } },
+    midia: { videoMuted: false, monitorFone: false, duckIA: { enabled: true, level: 0.12 } },
 
     vozContextos: { default: null, greeting: null, offer: null, farewell: null },
     // usarListaPadrao começa LIGADO: a live nasce protegida sem o vendedor
@@ -670,6 +674,14 @@
       btn.classList.toggle("danger", muted);
       btn.setAttribute("aria-pressed", muted ? "true" : "false");
     }
+    // Retorno do vídeo no fone do vendedor (monitor local). Nasce desligado.
+    const monitorOn = !!cfg?.midia?.monitorFone;
+    const monBtn = document.getElementById("pnl-media-monitor");
+    if (monBtn) {
+      monBtn.textContent = monitorOn ? "🔊 Ouvindo o vídeo no fone" : "🔇 Fone sem retorno";
+      monBtn.classList.toggle("on", monitorOn);
+      monBtn.setAttribute("aria-pressed", monitorOn ? "true" : "false");
+    }
     const duckOn = cfg?.midia?.duckIA?.enabled !== false;
     document.getElementById("pnl-media-duck")?.classList.toggle("on", duckOn);
     const range = document.getElementById("pnl-media-duck-level");
@@ -762,11 +774,13 @@
         "Nenhum produto lido ainda. Abra a live e toque em 🔄 para ler a vitrine." + avisoCurtos;
       return;
     }
+    // O texto precisa dizer o que o content.js faz de verdade (runAutoPin):
+    // sem produto marcado a fixação automática NÃO escolhe todos — ela espera.
     const msg = noRodizio.length
-      ? `${total} produto(s) na vitrine · rodízio com ${noRodizio.length}: ${noRodizio
+      ? `${total} produto(s) na vitrine · fixação automática com ${noRodizio.length}: ${noRodizio
           .map((p) => p.name)
           .join(", ")}`
-      : `${total} produto(s) na vitrine. Nenhum marcado no rodízio — a IA vai alternar todos.`;
+      : `${total} produto(s) na vitrine. Nenhum marcado para fixar — a fixação automática fica aguardando até você marcar ao menos um.`;
     hint.textContent = msg + avisoCurtos;
   }
 
@@ -902,6 +916,13 @@
 
   document.addEventListener("DOMContentLoaded", async () => {
     cfg = await load();
+    if (STUDIO_ONLY) {
+      // Card separado: mostra só a aba do Estúdio (o CSS esconde o resto).
+      document.body.classList.add("pnl-studio-only");
+      document.querySelectorAll(".pnl-tab-content").forEach((c) => {
+        c.classList.toggle("active", c.id === "tab-estudio");
+      });
+    }
     const pendingToken = await new Promise((resolve) => {
       try {
         chrome.storage.local.get([PENDING_SYNC_KEY], (result) =>
@@ -966,7 +987,7 @@
     // Só dispara se já não houver produtos (evita re-raspagem desnecessária).
     // Sem `await`: a leitura pode levar até 9s e antes disso o painel inteiro
     // ficava sem responder aos cliques (os listeners abaixo ainda não existiam).
-    if (!cfg.produtos || cfg.produtos.length === 0) {
+    if (!STUDIO_ONLY && (!cfg.produtos || cfg.produtos.length === 0)) {
       const hint = document.getElementById("pnl-autofix-hint");
       if (hint) hint.textContent = "Lendo vitrine…";
       Promise.resolve()
@@ -1427,6 +1448,24 @@
         { muted: midia.videoMuted },
         midia.videoMuted ? "Som do vídeo mudo" : "Som do vídeo ligado",
       );
+    });
+
+    // Retorno do vídeo no fone (monitor local). NÃO altera o que vai pro TikTok:
+    // manda o comando "monitor", que mexe só no monitorGain do media-injector.
+    document.getElementById("pnl-media-monitor")?.addEventListener("click", async () => {
+      const midia = midiaCfg();
+      midia.monitorFone = !midia.monitorFone;
+      save("midia.monitorFone");
+      renderMediaAudio();
+      try {
+        const status = await sendMedia("monitor", { on: midia.monitorFone });
+        info.textContent = status.message || (midia.monitorFone ? "Fone com retorno" : "Fone mudo");
+        renderDiag(status);
+      } catch (error) {
+        // Fonte desligada ou painel em aba: a preferência fica guardada e o
+        // motor já nasce mudo (sem retorno), então não há eco por padrão.
+        info.textContent = error.message;
+      }
     });
 
     /**
@@ -2178,10 +2217,10 @@
     if (onbEl && onbNext && onbBack && onbSlides.length) {
       try {
         chrome.storage.local.get([ONBOARD_KEY], (res) => {
-          if (!res || !res[ONBOARD_KEY]) openOnboarding(true);
+          if ((!res || !res[ONBOARD_KEY]) && !STUDIO_ONLY) openOnboarding(true);
         });
       } catch {
-        openOnboarding(true);
+        if (!STUDIO_ONLY) openOnboarding(true);
       }
       onbBack.addEventListener("click", () => {
         if (onbStep > 0) onbStep--;
