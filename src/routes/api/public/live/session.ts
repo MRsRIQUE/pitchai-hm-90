@@ -36,7 +36,19 @@ const BodySchema = z.object({
     .optional(),
   sale: z.object({ text: z.string().max(200).optional() }).optional(),
   product: z
-    .object({ id: z.string().max(120).optional(), name: z.string().max(200).optional() })
+    .object({
+      id: z.string().max(120).optional(),
+      name: z.string().max(200).optional(),
+      // Foto guardada junto do registro: o ranking do Início mostra o produto
+      // apresentado mesmo depois que ele sai do catálogo (vitrine trocada,
+      // produto removido) — sem isso a linha fica sem foto para sempre.
+      imageUrl: z
+        .string()
+        .max(2048)
+        .regex(/^https?:\/\//i)
+        .optional()
+        .catch(undefined),
+    })
     .optional(),
   tokens_in: num(1_000_000),
   tokens_out: num(1_000_000),
@@ -148,15 +160,23 @@ export const Route = createFileRoute("/api/public/live/session")({
               patch.messages_blocked = (data.messages_blocked ?? 0) + 1;
             else if (body.kind === "product" && body.product?.name) {
               const list = Array.isArray(data.products_pitched) ? data.products_pitched : [];
+              const imageUrl = body.product.imageUrl ?? null;
               const exists = list.some((p: any) => p?.name === body.product?.name);
               patch.products_pitched = exists
-                ? list
+                ? // Já registrado: só completa a foto se ela ainda não estava lá
+                  // (sessão que começou antes da extensão mandar a foto).
+                  list.map((p: any) =>
+                    p?.name === body.product?.name && imageUrl && !p?.imageUrl
+                      ? { ...p, imageUrl }
+                      : p,
+                  )
                 : [
                     ...list,
                     {
                       name: body.product.name,
                       id: body.product.id ?? null,
                       at: new Date().toISOString(),
+                      ...(imageUrl ? { imageUrl } : {}),
                     },
                   ];
             } else if (body.kind === "tokens") {

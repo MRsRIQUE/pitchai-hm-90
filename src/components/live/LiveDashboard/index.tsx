@@ -176,9 +176,17 @@ function LiveDashboardContent() {
    * Ele guarda o retrato da config a cada mudança; se rodasse depois, a própria
    * hidratação apareceria como uma edição e a topbar diria "salvo agora" sem o
    * usuário ter tocado em nada.
+   *
+   * Mas ele só pode GRAVAR depois da hidratação. Na montagem `config` ainda é
+   * o padrão da store; gravá-lo aqui apagava o que estava no localStorage e o
+   * efeito de baixo lia o padrão de volta. Era por isso que a Configuração
+   * inicial reabria a cada recarga (onboardingDone voltava a false) e o
+   * catálogo só existia enquanto a vitrine o reimportava.
    */
   const ultimoSerial = useRef<string | null>(null);
+  const hidratadoRef = useRef(false);
   useEffect(() => {
+    if (!hidratadoRef.current) return;
     const serial = JSON.stringify(config);
     saveConfig(config);
     if (ultimoSerial.current !== null && ultimoSerial.current !== serial) {
@@ -194,6 +202,7 @@ function LiveDashboardContent() {
       ultimoSerial.current = JSON.stringify(cfg);
       updateConfigRaw(() => cfg);
     }
+    hidratadoRef.current = true;
     setHidratado(true);
   }, [updateConfigRaw]);
 

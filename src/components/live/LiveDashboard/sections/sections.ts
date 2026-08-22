@@ -72,7 +72,7 @@ export const SECTIONS: SectionDef[] = [
     label: "Produtos",
     icon: ShoppingBag,
     title: "Produtos",
-    subtitle: "Catálogo, produto ativo e rodízio automático",
+    subtitle: "Catálogo e produto principal que a IA apresenta",
   },
   {
     id: "roteiros",

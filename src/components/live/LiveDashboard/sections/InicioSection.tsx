@@ -70,7 +70,13 @@ export function InicioSection({
   // produto ativo daqui, que é a ação que ele veio fazer.
   const linhasDoRanking = ranking.length
     ? ranking
-    : config.produtos.slice(0, 5).map((p) => ({ id: p.id, nome: p.name, vendas: 0, produto: p }));
+    : config.produtos.slice(0, 5).map((p) => ({
+        id: p.id,
+        nome: p.name,
+        vendas: 0,
+        produto: p,
+        imageUrl: p.imageUrl ?? null,
+      }));
   const maiorVenda = Math.max(1, ...linhasDoRanking.map((l) => l.vendas));
 
   const set = <K extends keyof typeof config>(chave: K, valor: (typeof config)[K]) =>
@@ -292,6 +298,20 @@ export function InicioSection({
                         <span className="app-rank-pos">{i + 1}</span>
                         {doCatalogo ? (
                           <ProdutoThumb produto={doCatalogo} tamanho={38} />
+                        ) : linha.imageUrl ? (
+                          // Saiu do catálogo (vitrine trocou, produto removido),
+                          // mas a sessão guardou a foto — a linha não fica cega.
+                          <ProdutoThumb
+                            produto={{
+                              id: linha.id ?? linha.nome,
+                              name: linha.nome,
+                              description: "",
+                              price: "",
+                              active: false,
+                              imageUrl: linha.imageUrl,
+                            }}
+                            tamanho={38}
+                          />
                         ) : (
                           <span className="app-rank-ghost">
                             <Package aria-hidden="true" />
