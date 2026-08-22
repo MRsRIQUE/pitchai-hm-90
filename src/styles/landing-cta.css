@@ -135,3 +135,33 @@
     margin-bottom: -14%;
   }
 }
+
+@media screen and (max-width: 600px) {
+  .landing .cta-final {
+    padding: 48px 0 28px;
+  }
+
+  .landing .cta-final-card {
+    border-radius: 22px;
+  }
+
+  .landing .cta-final-inner {
+    padding: 38px 20px;
+  }
+
+  .landing .cta-final-title {
+    font-size: clamp(1.7rem, 8vw, 2.15rem);
+  }
+
+  .landing .cta-final-actions {
+    flex-direction: column;
+  }
+
+  .landing .cta-final-actions .btn {
+    width: 100%;
+  }
+
+  .landing .cta-final-phone {
+    display: none;
+  }
+}

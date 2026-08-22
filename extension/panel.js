@@ -941,9 +941,25 @@
       const key = el.getAttribute("data-key");
       if (el.classList.contains("pnl-toggle")) {
         el.addEventListener("click", () => {
-          set(cfg, key, !get(cfg, key));
-          save(key);
+          const next = !get(cfg, key);
+          set(cfg, key, next);
+          if (key === "demo.enabled" && !next) {
+            cfg.produtos = (cfg.produtos || []).filter((produto) => !produto.demo);
+            save([key, "produtos"]);
+            renderProducts();
+            renderAutofixPicker();
+          } else {
+            save(key);
+          }
           el.classList.toggle("on");
+          if (key === "demo.enabled") {
+            sendDemoCommand(next ? "demo:start" : "demo:stop");
+            const hint = document.getElementById("pnl-demo-hint");
+            if (hint)
+              hint.textContent = next
+                ? "Preparando o ambiente seguro de demonstração…"
+                : "Encerrando a demonstração e limpando os dados simulados…";
+          }
         });
       } else if (el.tagName === "SELECT") {
         el.addEventListener("change", () => {
@@ -1070,6 +1086,20 @@
         if (hint)
           hint.textContent =
             action === "tour" ? "Iniciando demonstração guiada…" : `Executando "${action}"…`;
+        if (action === "tour") {
+          btn.disabled = true;
+          btn.textContent = "⏳ Preparando teste…";
+          setTimeout(() => {
+            if (!btn.disabled) return;
+            btn.disabled = false;
+            btn.textContent = "↻ Tentar teste completo novamente";
+            if (hint) {
+              hint.textContent =
+                "A página da LIVE não confirmou o teste. Abra-a, aguarde carregar e tente novamente.";
+              hint.style.color = "#FF6B35";
+            }
+          }, 90000);
+        }
       });
     });
 
@@ -1078,12 +1108,29 @@
       chrome.storage.onChanged.addListener((changes) => {
         const ack = changes["pitchai.demo.ack"]?.newValue;
         const hint = document.getElementById("pnl-demo-hint");
-        if (!ack || !hint) return;
-        hint.textContent = `${ack.ok ? "✓" : "✗"} ${ack.message}`;
-        hint.style.color = ack.ok ? "#00E676" : "#FF6B35";
+        const tutorialStatus = document.getElementById("pnl-onb-demo-status");
+        const tutorialDemoBtn = document.getElementById("pnl-onb-run-demo");
+        if (!ack) return;
+        if (hint) {
+          hint.textContent = `${ack.ok ? "✓" : "✗"} ${ack.message}`;
+          hint.style.color = ack.ok ? "#00E676" : "#FF6B35";
+        }
+        if (tutorialStatus && ack.action === "tour") {
+          tutorialStatus.textContent = `${ack.ok ? "✓" : "✗"} ${ack.message}`;
+          tutorialStatus.style.color = ack.ok ? "#A7F3D0" : "#FDA4AF";
+        }
+        if (tutorialDemoBtn && ack.action === "tour") {
+          const finished = /concluída|não concluiu|falhou/i.test(ack.message || "");
+          tutorialDemoBtn.disabled = !finished;
+          tutorialDemoBtn.textContent = finished
+            ? "↻ Repetir demonstração"
+            : "⏳ Demonstração em andamento";
+        }
         const tourBtn = document.getElementById("pnl-demo-tour");
         if (tourBtn && ack.action === "tour") {
-          const finished = /concluída|não concluiu/i.test(ack.message || "");
+          const finished = /concluída|não concluiu|falhou|não foi possível/i.test(
+            ack.message || "",
+          );
           tourBtn.textContent = finished ? "↻ Repetir teste completo" : "⏳ Teste em andamento";
           tourBtn.disabled = !finished;
         }
@@ -2007,7 +2054,7 @@
     });
 
     // Primeiro uso: animação em tela cheia e tutorial navegável.
-    const ONBOARD_KEY = "pitchai.onboarded.v2";
+    const ONBOARD_KEY = "pitchai.onboarded.v3";
     const onbEl = document.getElementById("pnl-onboarding");
     const onbIntro = document.getElementById("pnl-onb-intro");
     const onbTutorial = document.getElementById("pnl-onb-tutorial");
@@ -2015,6 +2062,9 @@
     const onbNext = document.getElementById("pnl-onb-next");
     const onbCount = document.getElementById("pnl-onb-count");
     const onbDots = document.getElementById("pnl-onb-dots");
+    const onbClose = document.getElementById("pnl-onb-close");
+    const onbRunDemo = document.getElementById("pnl-onb-run-demo");
+    const onbDemoStatus = document.getElementById("pnl-onb-demo-status");
     const onbSlides = Array.from(document.querySelectorAll("[data-onb-step]"));
     let onbStep = 0;
     let onbTimer = null;
@@ -2039,6 +2089,7 @@
       if (onbIntro) onbIntro.hidden = true;
       if (onbTutorial) onbTutorial.hidden = false;
       renderOnboardingStep();
+      setTimeout(() => onbNext?.focus(), 0);
     }
 
     function openOnboarding(withIntro = true) {
@@ -2046,11 +2097,16 @@
       clearTimeout(onbTimer);
       onbStep = 0;
       onbEl.hidden = false;
+      setTimeout(() => onbClose?.focus(), 0);
       if (onbIntro) {
         onbIntro.hidden = !withIntro;
         onbIntro.classList.remove("leaving");
       }
       if (onbTutorial) onbTutorial.hidden = withIntro;
+      if (onbDemoStatus) {
+        onbDemoStatus.textContent = "";
+        onbDemoStatus.style.color = "";
+      }
       if (withIntro) {
         onbTimer = setTimeout(() => {
           onbIntro?.classList.add("leaving");
@@ -2092,5 +2148,37 @@
     document
       .getElementById("pnl-open-tutorial")
       ?.addEventListener("click", () => openOnboarding(false));
+    onbClose?.addEventListener("click", finishOnboarding);
+    onbRunDemo?.addEventListener("click", () => {
+      onbRunDemo.disabled = true;
+      onbRunDemo.textContent = "⏳ Preparando demonstração…";
+      if (onbDemoStatus)
+        onbDemoStatus.textContent =
+          "Enviando o comando. A página da LIVE será aberta se necessário.";
+      sendDemoCommand("tour");
+      setTimeout(() => {
+        if (!onbRunDemo.disabled) return;
+        onbRunDemo.disabled = false;
+        onbRunDemo.textContent = "↻ Tentar demonstração novamente";
+        if (onbDemoStatus) {
+          onbDemoStatus.textContent =
+            "A página da LIVE não confirmou o teste. Abra-a, aguarde carregar e tente novamente.";
+          onbDemoStatus.style.color = "#FDA4AF";
+        }
+      }, 90000);
+    });
+    document.addEventListener("keydown", (event) => {
+      if (!onbEl || onbEl.hidden) return;
+      if (event.key === "Escape") {
+        event.preventDefault();
+        finishOnboarding();
+      } else if (event.key === "ArrowLeft" && onbStep > 0) {
+        onbStep--;
+        renderOnboardingStep();
+      } else if (event.key === "ArrowRight" && onbStep < onbSlides.length - 1) {
+        onbStep++;
+        renderOnboardingStep();
+      }
+    });
   });
 })();

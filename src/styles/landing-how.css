@@ -199,3 +199,21 @@
     max-width: 36ch;
   }
 }
+
+@media (max-width: 600px) {
+  .landing .hows-list {
+    row-gap: 34px;
+  }
+
+  .landing .hows-item {
+    gap: 28px;
+  }
+
+  .landing .hows-phone {
+    width: min(100%, 204px);
+  }
+
+  .landing .hows-glow {
+    width: 112%;
+  }
+}

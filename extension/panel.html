@@ -20,6 +20,9 @@
       <div class="pnl-onb-orb orb-one" aria-hidden="true"></div>
       <div class="pnl-onb-orb orb-two" aria-hidden="true"></div>
       <div class="pnl-onb-card">
+        <button class="pnl-onb-close" id="pnl-onb-close" type="button" aria-label="Fechar tutorial">
+          ×
+        </button>
         <section class="pnl-onb-intro" id="pnl-onb-intro">
           <div class="pnl-onb-logo-wrap">
             <span class="pnl-onb-ring ring-one"></span>
@@ -35,51 +38,124 @@
         <section class="pnl-onb-tutorial" id="pnl-onb-tutorial" hidden>
           <div class="pnl-onb-topline">
             <span>GUIA RÁPIDO</span>
-            <span id="pnl-onb-count">1 de 4</span>
+            <span id="pnl-onb-count">1 de 8</span>
           </div>
 
           <article class="pnl-onb-slide active" data-onb-step="0">
             <div class="pnl-onb-icon">🔗</div>
-            <h2>Conecte sua conta uma vez</h2>
+            <h2>1. Conecte sua conta</h2>
             <p>
-              Abra o painel web e clique em conectar. A extensão recebe o código automaticamente;
-              colar o código continua disponível como alternativa.
+              Abra o painel web, copie o código de conexão e cole na barra superior. Clique em
+              “Sincronizar” para trazer produtos, regras, voz e preferências.
             </p>
-            <div class="pnl-onb-tip">
-              Seu acesso de cortesia ou assinatura será reconhecido do mesmo jeito.
+            <div class="pnl-onb-example">
+              <b>Exemplo</b>
+              <span>Código conectado → navegador autorizado → status verde no painel.</span>
             </div>
           </article>
           <article class="pnl-onb-slide" data-onb-step="1" hidden>
-            <div class="pnl-onb-icon">✨</div>
-            <h2>A tela é reconhecida sozinha</h2>
+            <div class="pnl-onb-icon">🎬</div>
+            <h2>2. Abra o Gerenciador de LIVE</h2>
             <p>
-              Produtos, chat, resposta, vendas, análises, avisos e botões da LIVE são encontrados
-              automaticamente — sem configurar áreas da tela.
+              Na página da LIVE aparece a barra “Pitch AI LIVE”. Ela mostra a saúde do chat,
+              proteção, leitura, demo e acesso ao painel completo.
             </p>
-            <div class="pnl-onb-tip">
-              Se o TikTok mudar alguma parte, a extensão tenta localizar novamente.
+            <div class="pnl-onb-example">
+              <b>Se algo não for encontrado</b>
+              <span
+                >Use Avançado → Diagnóstico → Remapear. O apontamento manual é o último
+                recurso.</span
+              >
             </div>
           </article>
           <article class="pnl-onb-slide" data-onb-step="2" hidden>
-            <div class="pnl-onb-icon">🧪</div>
-            <h2>Teste antes de entrar ao vivo</h2>
+            <div class="pnl-onb-icon">💬</div>
+            <h2>3. Respostas da IA</h2>
             <p>
-              Use a Demonstração guiada para ver uma vitrine, uma pergunta, uma venda e um pitch de
-              voz funcionando sem precisar iniciar uma LIVE real.
+              Escolha resposta por voz, texto ou ambos. Defina o tom, o intervalo e se deseja
+              revisar antes de enviar. A IA usa o produto fixado como contexto.
             </p>
-            <div class="pnl-onb-tip">
-              Você pode repetir o teste quando quiser em “Avançado / Diagnóstico”.
+            <div class="pnl-onb-example conversation">
+              <b>Exemplo real</b>
+              <span><strong>Cliente:</strong> “Tem no tamanho 38?”</span>
+              <span><strong>Pitch AI:</strong> “Tem sim! Selecione o 38 no produto fixado.”</span>
             </div>
           </article>
           <article class="pnl-onb-slide" data-onb-step="3" hidden>
-            <div class="pnl-onb-icon">🎙️</div>
-            <h2>Pronto para vender</h2>
+            <div class="pnl-onb-icon">🛍️</div>
+            <h2>4. Vitrine e produto fixado</h2>
             <p>
-              Abra a página da sua LIVE, deixe “Respostas por voz” ligado e mantenha o painel
-              aberto. A Pitch AI cuida do restante.
+              Atualize a vitrine, marque somente os produtos desejados e ative o auto-fixar. A
+              extensão ignora cupons, promoções e o catálogo geral.
             </p>
+            <div class="pnl-onb-example">
+              <b>Exemplo</b>
+              <span
+                >Selecione “Kit Panelas” → intervalo 30–60s → a extensão apenas fixa; nunca
+                desfixa.</span
+              >
+            </div>
+          </article>
+          <article class="pnl-onb-slide" data-onb-step="4" hidden>
+            <div class="pnl-onb-icon">🎙️</div>
+            <h2>5. Roteiro, voz e pitches</h2>
+            <p>
+              Configure a voz, velocidade e volume. Os pitches automáticos alternam benefícios,
+              preço, urgência e chamada para ação sem repetir a mesma frase.
+            </p>
+            <div class="pnl-onb-example">
+              <b>Exemplo de pitch</b>
+              <span
+                >“O Kit Panelas está por R$ 99,90. Toque no produto fixado para aproveitar.”</span
+              >
+            </div>
+          </article>
+          <article class="pnl-onb-slide" data-onb-step="5" hidden>
+            <div class="pnl-onb-icon">🛡️</div>
+            <h2>6. Vendas e proteção</h2>
+            <p>
+              A extensão registra vendas, pode agradecer por voz, filtra mensagens ofensivas e pausa
+              automações quando encontra um aviso de violação.
+            </p>
+            <div class="pnl-onb-example">
+              <b>Controle da LIVE</b>
+              <span
+                >Você também pode programar duração e encerramento; ações reais pedem página e
+                licença válidas.</span
+              >
+            </div>
+          </article>
+          <article class="pnl-onb-slide" data-onb-step="6" hidden>
+            <div class="pnl-onb-icon">🧪</div>
+            <h2>7. Teste tudo no Modo Demo</h2>
+            <p>
+              O teste cria produtos fictícios, recebe uma pergunta, registra uma venda e tenta um
+              pitch de voz. Se a página da LIVE não estiver aberta, ela será aberta automaticamente.
+            </p>
+            <div class="pnl-onb-example">
+              <b>Seguro para testar</b>
+              <span
+                >Nenhum botão do TikTok é clicado. Voz e IA exigem uma conta conectada e com
+                saldo.</span
+              >
+            </div>
+            <button class="pnl-btn primary pnl-onb-demo-btn" id="pnl-onb-run-demo" type="button">
+              ▶ Executar demonstração agora
+            </button>
+            <p class="pnl-onb-demo-status" id="pnl-onb-demo-status" aria-live="polite"></p>
+          </article>
+          <article class="pnl-onb-slide" data-onb-step="7" hidden>
+            <div class="pnl-onb-icon">✅</div>
+            <h2>8. Checklist antes de entrar ao vivo</h2>
+            <div class="pnl-onb-checklist">
+              <span>✓ Conta conectada e status verde</span>
+              <span>✓ Vitrine atualizada e produtos selecionados</span>
+              <span>✓ Voz testada e volume conferido</span>
+              <span>✓ Respostas e proteção ativadas</span>
+              <span>✓ Página da LIVE mantida aberta</span>
+            </div>
             <div class="pnl-onb-tip">
-              A confirmação manual de respostas é opcional e fica nas opções avançadas.
+              Este tutorial pode ser reaberto em Avançado → “Ver tutorial”.
             </div>
           </article>
 
@@ -98,7 +174,7 @@
         <img src="icon.png" class="pnl-img-logo" alt="" />
         <div class="pnl-brand-text">
           <span class="pnl-logo">Pitch AI <b>LIVE</b></span>
-          <span class="pnl-ver">v0.18.5</span>
+          <span class="pnl-ver">v0.19.1</span>
         </div>
       </div>
       <div class="pnl-header-actions">
@@ -221,8 +297,8 @@
                 <div>
                   <h3>Ligar Respostas por Voz</h3>
                   <p>
-                    A IA lê o chat e responde os espectadores com voz natural. O botão “👁️ Ligar
-                    IA” da barra da live liga/desliga a IA inteira (canais incluídos) — aqui você
+                    A IA lê o chat e responde os espectadores com voz natural. O botão “👁️ Ligar IA”
+                    da barra da live liga/desliga a IA inteira (canais incluídos) — aqui você
                     escolhe os canais (voz e/ou texto) que ela vai usar ao voltar.
                   </p>
                 </div>
@@ -484,8 +560,8 @@
             <span>🛍️</span>
             <div>
               <strong>Fixação Automática de Produto:</strong>
-              O Pitch AI lê a vitrine uma vez, desfixa o produto em destaque e fixa novamente um dos
-              produtos selecionados abaixo.
+              O Pitch AI lê somente os produtos reais da vitrine e fixa um dos itens selecionados
+              abaixo. Se ele já estiver fixado, nenhum clique é feito.
             </div>
           </div>
 
@@ -716,25 +792,64 @@
                   <option value="none">Sem áudio (silêncio)</option>
                 </select>
               </label>
-              <button class="pnl-btn" id="pnl-src-audio" style="display: none">🎵 Escolher áudio</button>
+              <button class="pnl-btn" id="pnl-src-audio" style="display: none">
+                🎵 Escolher áudio
+              </button>
             </div>
             <div class="pnl-inline" style="margin-top: 10px; flex-wrap: wrap">
-              <label>Largura <input id="pnl-media-width" type="number" min="160" max="3840" value="1280" style="width: 84px" /></label>
-              <label>Altura <input id="pnl-media-height" type="number" min="90" max="2160" value="720" style="width: 84px" /></label>
-              <label>FPS <input id="pnl-media-fps" type="number" min="1" max="60" value="30" style="width: 68px" /></label>
-              <label class="pnl-inline"><input id="pnl-media-loop" type="checkbox" checked /> Repetir</label>
+              <label
+                >Largura
+                <input
+                  id="pnl-media-width"
+                  type="number"
+                  min="160"
+                  max="3840"
+                  value="1280"
+                  style="width: 84px"
+              /></label>
+              <label
+                >Altura
+                <input
+                  id="pnl-media-height"
+                  type="number"
+                  min="90"
+                  max="2160"
+                  value="720"
+                  style="width: 84px"
+              /></label>
+              <label
+                >FPS
+                <input
+                  id="pnl-media-fps"
+                  type="number"
+                  min="1"
+                  max="60"
+                  value="30"
+                  style="width: 68px"
+              /></label>
+              <label class="pnl-inline"
+                ><input id="pnl-media-loop" type="checkbox" checked /> Repetir</label
+              >
             </div>
             <div class="pnl-inline" style="margin-top: 8px; flex-wrap: wrap">
-              <label class="pnl-inline" title="Entrega a fonte da Pitch AI mesmo que o TikTok não deixe escolher a fonte">
+              <label
+                class="pnl-inline"
+                title="Entrega a fonte da Pitch AI mesmo que o TikTok não deixe escolher a fonte"
+              >
                 <input id="pnl-media-force" type="checkbox" checked /> Substituir qualquer câmera
               </label>
-              <label class="pnl-inline" title="Evita o aviso 'Nenhum áudio detectado' quando o vídeo está sem som">
+              <label
+                class="pnl-inline"
+                title="Evita o aviso 'Nenhum áudio detectado' quando o vídeo está sem som"
+              >
                 <input id="pnl-media-tone" type="checkbox" checked /> Sinal mínimo de áudio
               </label>
             </div>
             <div class="pnl-inline" style="margin-top: 12px; flex-wrap: wrap">
               <button class="pnl-btn primary" id="pnl-live-start">▶ Usar vídeo no TikTok</button>
-              <button class="pnl-btn danger" id="pnl-live-stop">■ Restaurar câmera e microfone</button>
+              <button class="pnl-btn danger" id="pnl-live-stop">
+                ■ Restaurar câmera e microfone
+              </button>
               <button class="pnl-btn ghost" id="pnl-media-refresh">↻ Atualizar fontes</button>
             </div>
             <!-- Som do vídeo: o vendedor usa isso no meio da live, então fica
@@ -792,7 +907,11 @@
             </div>
 
             <p class="pnl-sub" id="pnl-src-info" style="margin-top: 8px; font-weight: 500"></p>
-            <p class="pnl-sub mono" id="pnl-media-diag" style="margin-top: 4px; font-size: 11px; opacity: 0.8"></p>
+            <p
+              class="pnl-sub mono"
+              id="pnl-media-diag"
+              style="margin-top: 4px; font-size: 11px; opacity: 0.8"
+            ></p>
             <p class="pnl-sub" style="margin-top: 4px">
               Depois de ativar, abra <b>Configurações de áudio e vídeo</b> no TikTok e escolha
               <b>Pitch AI — Câmera Virtual</b> e <b>Pitch AI — Microfone Virtual</b>.

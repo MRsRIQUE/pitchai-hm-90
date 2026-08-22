@@ -423,6 +423,14 @@
   }
 }
 @media (max-width: 600px) {
+  .landing {
+    overflow-x: clip;
+  }
+
+  .landing .wrap {
+    padding-inline: 18px;
+  }
+
   .landing .lp-nav-signin {
     display: none;
   }
@@ -431,7 +439,31 @@
     font-size: 13px;
   }
   .landing .lp-nav-actions {
-    gap: 10px;
+    gap: 8px;
+  }
+  .landing .lp-nav-bar {
+    padding-inline: 12px 8px;
+  }
+  .landing .lp-nav {
+    border-radius: 0 0 22px 22px;
+  }
+  .landing .lp-nav-cta-label {
+    height: 38px;
+  }
+  .landing .lp-nav-cta-arrow,
+  .landing .lp-nav-burger {
+    width: 38px;
+    height: 38px;
+  }
+}
+
+@media (max-width: 360px) {
+  .landing .lp-nav-brand span:last-child {
+    display: none;
+  }
+  .landing .lp-nav-cta-label {
+    padding-inline: 11px;
+    font-size: 12.5px;
   }
 }
 
@@ -2453,7 +2485,13 @@ html {
 }
 @media (max-width: 600px) {
   .landing section {
-    padding: 72px 0;
+    padding: 64px 0;
+  }
+  .landing .sec-head {
+    margin-bottom: 38px;
+  }
+  .landing .sec-head p {
+    font-size: 15.5px;
   }
   .landing .hero {
     padding: 44px 0 64px;
@@ -2485,6 +2523,11 @@ html {
   }
   .landing .plans {
     grid-template-columns: 1fr;
+    width: 100%;
+  }
+  .landing .plan,
+  .landing .plan.pop {
+    padding-inline: 20px;
   }
   .landing .step-body {
     padding: 28px 22px 22px;
@@ -2502,7 +2545,26 @@ html {
     display: none;
   }
   .landing .foot-cols {
-    gap: 36px;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    width: 100%;
+    gap: 34px 24px;
+  }
+  .landing .safe-card {
+    padding: 26px 22px;
+  }
+  .landing details summary {
+    gap: 14px;
+    font-size: 15px;
+  }
+  .landing footer.foot-dark {
+    margin-top: 32px;
+    padding: 58px 0 34px;
+  }
+  .landing .foot-bot {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 8px;
   }
 }
 

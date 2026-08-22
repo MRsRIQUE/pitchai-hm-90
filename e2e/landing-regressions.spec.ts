@@ -1,6 +1,43 @@
 import { expect, test } from "@playwright/test";
 
 test.describe("regressões da landing", () => {
+  test("landing mobile mantém o hero legível e elimina vazios de scroll", async ({ page }) => {
+    for (const width of [320, 390, 430]) {
+      await page.setViewportSize({ width, height: 844 });
+      await page.goto("/", { waitUntil: "domcontentloaded" });
+
+      await expect(page.locator(".hero-mega-title")).toBeVisible();
+      const metrics = await page.evaluate(() => {
+        const rect = (selector: string) => {
+          const value = document.querySelector(selector)?.getBoundingClientRect();
+          if (!value) throw new Error(`Elemento ausente: ${selector}`);
+          return { top: value.top, bottom: value.bottom, height: value.height };
+        };
+        return {
+          viewport: window.innerWidth,
+          documentWidth: document.documentElement.scrollWidth,
+          title: rect(".hero-mega-text"),
+          offer: rect(".hero-mega-card"),
+          phone: rect(".hero-mobile-point"),
+          logoReveal: rect(".logo-reveal"),
+          manifesto: rect(".manifesto"),
+          finalCta: rect(".cta-final"),
+          finalPhoneDisplay: getComputedStyle(
+            document.querySelector(".cta-final-phone") as HTMLElement,
+          ).display,
+        };
+      });
+
+      expect(metrics.documentWidth).toBe(metrics.viewport);
+      expect(metrics.title.bottom).toBeLessThanOrEqual(metrics.offer.top + 1);
+      expect(metrics.offer.bottom).toBeLessThanOrEqual(metrics.phone.top + 1);
+      expect(metrics.logoReveal.height).toBeLessThan(800);
+      expect(metrics.manifesto.height).toBeLessThan(800);
+      expect(metrics.finalCta.height).toBeLessThan(650);
+      expect(metrics.finalPhoneDisplay).toBe("none");
+    }
+  });
+
   /*
    * O que este teste vigia mudou de forma, porque a landing mudou.
    *

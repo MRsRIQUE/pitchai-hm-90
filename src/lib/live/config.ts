@@ -41,6 +41,10 @@ export type AIContext = {
   niche: string;
   tone: string;
   targetAudience: string;
+  differentials: string;
+  policies: string;
+  frequentQuestions: string;
+  salesPlaybook: string;
   rules: string;
   extraContext: string;
 };
@@ -137,6 +141,10 @@ export const DEFAULT_AI_CONTEXT: AIContext = {
   niche: "",
   tone: "empolgado e amigável",
   targetAudience: "",
+  differentials: "",
+  policies: "",
+  frequentQuestions: "",
+  salesPlaybook: "",
   rules:
     "Nunca prometa resultados irreais. Não fale de política ou religião. Nunca invente preços ou promoções que não estejam cadastradas.",
   extraContext: "",
@@ -430,6 +438,10 @@ export function buildSystemPrompt(cfg: LiveConfig): string {
     aiContext.niche && `Nicho: ${aiContext.niche}.`,
     aiContext.targetAudience && `Público-alvo: ${aiContext.targetAudience}.`,
     `Tom de voz: ${aiContext.tone || "amigável"}.`,
+    aiContext.differentials && `Diferenciais confirmados: ${aiContext.differentials}`,
+    aiContext.policies && `Políticas confirmadas: ${aiContext.policies}`,
+    aiContext.frequentQuestions && `FAQ e objeções: ${aiContext.frequentQuestions}`,
+    aiContext.salesPlaybook && `Estratégia comercial: ${aiContext.salesPlaybook}`,
     aiContext.extraContext && `Contexto extra: ${aiContext.extraContext}`,
     `Regras obrigatórias: ${aiContext.rules}`,
     catalog ? `Catálogo:\n${catalog}` : "Catálogo vazio.",

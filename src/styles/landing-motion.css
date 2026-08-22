@@ -480,10 +480,14 @@
 }
 
 @media screen and (max-width: 860px) {
+  .landing {
+    --hero-tail: 0px;
+  }
+
   /* sem recuo lateral no celular, mas a cauda continua — é ela que segura o
      fundo e o esmaecido do aparelho */
   .landing .hero-mega {
-    padding: 0 0 var(--hero-tail);
+    padding: 0;
   }
 
   .landing .hero-video-area,
@@ -492,13 +496,34 @@
   }
 
   .landing .hero-mega-inner {
-    justify-content: center;
-    padding-top: 22vh;
-    padding-bottom: 8vh;
+    justify-content: flex-start;
+    min-height: auto;
+    padding: 104px 18px 48px;
+    gap: 34px;
+  }
+
+  .landing .hero-mega-content {
+    flex: none;
+    justify-content: flex-start;
+    gap: 26px;
+  }
+
+  .landing .hero-mega-text {
+    gap: 10px;
+  }
+
+  .landing .hero-mega-badge {
+    max-width: 100%;
+    margin-bottom: 4px;
+    padding-inline: 10px;
+    font-size: 11.5px;
+    line-height: 1.25;
+    white-space: normal;
   }
 
   .landing .hero-mega-title {
-    font-size: 18vw;
+    font-size: clamp(3.65rem, 18vw, 4.8rem);
+    line-height: 0.96;
   }
 
   .landing .hero-mega-tag {
@@ -511,6 +536,7 @@
   }
 
   .landing .hero-mega-card {
+    width: min(100%, 340px);
     flex-flow: column;
     gap: 16px;
     padding: 18px;
@@ -530,15 +556,19 @@
   }
 
   .landing .hero-mobile-point {
-    inset: 0;
+    position: relative;
+    inset: auto;
     z-index: 12;
     width: 100%;
+    height: auto;
+    order: 2;
   }
 
   .landing .hero-mobile {
+    position: relative;
     inset: auto;
     width: 100%;
-    height: 58vh;
+    height: auto;
     aspect-ratio: auto;
   }
 
@@ -546,7 +576,7 @@
     position: relative;
     top: auto;
     left: auto;
-    width: 74vw;
+    width: min(72vw, 274px);
     margin: 0 auto;
   }
 
@@ -558,6 +588,10 @@
 
   .landing .hero-video-p {
     display: block;
+  }
+
+  .landing .hero-down-mask {
+    display: none;
   }
 }
 
@@ -653,12 +687,30 @@
 }
 
 @media screen and (max-width: 860px) {
+  .landing .logo-reveal-height,
+  .landing .logo-reveal-subheight {
+    height: auto;
+  }
+
+  .landing .logo-reveal-height {
+    padding-top: 0;
+  }
+
+  .landing .logo-reveal-subheight {
+    top: auto;
+  }
+
+  .landing .logo-reveal-sticky {
+    position: relative;
+    height: clamp(430px, 72vh, 560px);
+  }
+
   .landing .logo-reveal-stage {
-    width: 86vw;
+    width: min(78vw, 330px);
   }
 
   .landing .logo-reveal-mark {
-    width: 18vw;
+    width: clamp(64px, 18vw, 78px);
   }
 
   .landing .logo-reveal-glow {
@@ -750,7 +802,7 @@
 
 @media screen and (max-width: 860px) {
   .landing .name-inner {
-    padding: 26vh 0;
+    padding: 112px 0;
   }
 
   .landing .name-headline-path {

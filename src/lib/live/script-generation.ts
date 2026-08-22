@@ -63,6 +63,12 @@ export function buildScriptPrompt(input: ScriptGenerationInput): ScriptPrompt {
     aiContext.niche ? `Nicho: ${aiContext.niche}.` : "",
     aiContext.targetAudience ? `Público: ${aiContext.targetAudience}.` : "",
     `Tom da marca: ${aiContext.tone || "amigável"}.`,
+    aiContext.differentials ? `Diferenciais confirmados: ${aiContext.differentials}` : "",
+    aiContext.policies ? `Políticas confirmadas: ${aiContext.policies}` : "",
+    aiContext.frequentQuestions
+      ? `Perguntas e objeções frequentes: ${aiContext.frequentQuestions}`
+      : "",
+    aiContext.salesPlaybook ? `Estratégia comercial preferida: ${aiContext.salesPlaybook}` : "",
     aiContext.rules ? `Regras obrigatórias: ${aiContext.rules}` : "",
     aiContext.extraContext ? `Contexto adicional: ${aiContext.extraContext}` : "",
   ]

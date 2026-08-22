@@ -1167,7 +1167,7 @@
   }
   async function saveConfig(cfg) {
     const encrypted = await encryptConfigObj(cfg);
-    chrome.storage.local.set({ [STORAGE_KEY]: encrypted });
+    await chrome.storage.local.set({ [STORAGE_KEY]: encrypted });
   }
   /**
    * Gravação incremental: relê a config no momento do save e aplica só o que mudou.
@@ -1421,8 +1421,22 @@
       const k = normKey(s);
       if (k && k.length >= 3 && k.length <= 40) accountNames.add(k);
     };
+    const isAudienceNode = (node) => {
+      if (!node) return false;
+      if (chatState?.node?.contains?.(node)) return true;
+      try {
+        return Boolean(
+          node.closest(
+            '[data-e2e*="comment" i], [data-e2e*="activity" i], [class*="comment-list" i], [class*="activity-list" i]',
+          ),
+        );
+      } catch {
+        return false;
+      }
+    };
     try {
       document.querySelectorAll('a[href*="/@"]').forEach((a) => {
+        if (isAudienceNode(a)) return;
         const m = (a.getAttribute("href") || "").match(/\/@([\w.\-]+)/);
         if (m) add(m[1]);
         add(a.textContent || "");
@@ -1431,7 +1445,9 @@
         .querySelectorAll(
           '[class*="nickname" i],[class*="userName" i],[class*="user-name" i],[data-e2e*="profile" i],[data-e2e*="nickname" i]',
         )
-        .forEach((n) => add(n.textContent || ""));
+        .forEach((n) => {
+          if (!isAudienceNode(n)) add(n.textContent || "");
+        });
     } catch {}
     if (accountNames.size > 60) accountNames.clear();
   }
@@ -2445,9 +2461,12 @@
     let author = "";
     let text = "";
     try {
-      const authorEl = node.querySelector(
-        '[data-e2e*="nickname" i], [data-e2e*="user" i], [class*="nickname" i], [class*="username" i], [class*="author" i], [class*="UserName" i]',
-      );
+      const authorSelector =
+        '[data-e2e*="nickname" i], [data-e2e*="user" i], [class*="nickname" i], [class*="username" i], [class*="author" i], [class*="UserName" i]';
+      const authorNodes = node.querySelectorAll(authorSelector);
+      // Um wrapper com vários autores é o feed inteiro, não uma mensagem.
+      if (authorNodes.length > 3) return null;
+      const authorEl = authorNodes[0];
       if (authorEl) {
         const a = (authorEl.textContent || "").replace(/\s+/g, " ").replace(/:$/, "").trim();
         if (a && a.length <= 40 && raw.startsWith(a)) {
@@ -2499,17 +2518,19 @@
 
   function buildSystemPrompt(cfg, featured) {
     const ctx = cfg.aiContext || {};
+    const brainFact = (value, max = 900) => String(value || "").trim().slice(0, max);
     const produtos = cfg.produtos || [];
     // O destaque vem do produto FIXADO na vitrine quando existe; senão o ativo.
     const destaque = featured || produtos.find((p) => p.active);
     // Com produto em destaque a IA vende SÓ ele — catálogo completo só entra
     // quando não sabemos o que está fixado.
     const catalog = destaque
-      ? `${destaque.name}${destaque.price ? " — " + destaque.price : ""}${destaque.description ? " · " + destaque.description : ""}`
+      ? `${brainFact(destaque.name, 200)}${destaque.price ? " — " + brainFact(destaque.price, 60) : ""}${destaque.description ? " · " + brainFact(destaque.description, 700) : ""}`
       : produtos
+          .slice(0, 12)
           .map(
             (p, i) =>
-              `${i + 1}. ${p.name}${p.price ? " — " + p.price : ""}${p.active ? " [ATIVO]" : ""}${p.description ? " · " + p.description : ""}`,
+              `${i + 1}. ${brainFact(p.name, 160)}${p.price ? " — " + brainFact(p.price, 60) : ""}${p.active ? " [ATIVO]" : ""}${p.description ? " · " + brainFact(p.description, 220) : ""}`,
           )
           .join("\n");
     let espectadores = "";
@@ -2519,18 +2540,26 @@
     } catch {}
     return [
       "Você é a IA vendedora da live no TikTok Shop.",
-      ctx.brandName && `Marca: ${ctx.brandName}.`,
-      ctx.niche && `Nicho: ${ctx.niche}.`,
-      ctx.targetAudience && `Público: ${ctx.targetAudience}.`,
-      `Tom: ${ctx.tone || "empolgado e amigável"}.`,
-      ctx.extraContext && `Contexto: ${ctx.extraContext}`,
-      `Regras: ${ctx.rules || "Nunca invente preços ou promoções."}`,
+      ctx.brandName && `Marca: ${brainFact(ctx.brandName, 160)}.`,
+      ctx.niche && `Nicho: ${brainFact(ctx.niche, 160)}.`,
+      ctx.targetAudience && `Público: ${brainFact(ctx.targetAudience, 400)}.`,
+      `Tom: ${brainFact(ctx.tone, 240) || "empolgado e amigável"}.`,
+      `Regras: ${brainFact(ctx.rules, 800) || "Nunca invente preços ou promoções."}`,
+      ctx.differentials && `Diferenciais confirmados: ${brainFact(ctx.differentials, 650)}`,
+      ctx.policies && `Políticas confirmadas: ${brainFact(ctx.policies, 650)}`,
+      ctx.frequentQuestions &&
+        `Perguntas e objeções frequentes: ${brainFact(ctx.frequentQuestions, 1000)}`,
+      ctx.salesPlaybook &&
+        `Estratégia comercial preferida: ${brainFact(ctx.salesPlaybook, 650)}`,
+      ctx.extraContext && `Contexto: ${brainFact(ctx.extraContext, 600)}`,
       espectadores ? `Publico atual na live: ${espectadores} espectadores.` : "",
       catalog ? `Catálogo:\n${catalog}` : "",
       destaque
         ? `Produto FIXADO em destaque: "${destaque.name}". Fale APENAS deste produto — não divulgue outros.`
         : "",
       "Responda em 1 frase curta, natural. Nunca escreva emojis nem asteriscos.",
+      "Use apenas fatos confirmados acima. Se faltar um dado, diga isso brevemente e indique onde conferir.",
+      "Adapte a resposta à etapa da conversa: primeiro entenda, depois esclareça; faça CTA apenas quando houver intenção ou oportunidade real.",
       'Quando souber o nome de quem comentou, chame pelo nome às vezes (ex.: "Maria, anota essa:") — não em TODA resposta, só quando natural.',
       "Varie as aberturas: nunca comece duas respostas com a mesma palavra.",
     ]
@@ -2938,7 +2967,8 @@
     queue: [],
     busy: false,
     lastReplyAt: 0,
-    history: [],
+    historyByAuthor: new Map(),
+    historyLoaded: false,
     observer: null,
     statusEl: null,
     count: 0,
@@ -2958,15 +2988,20 @@
     healthEl: null,
     sentReplies: new Map(),
     lastChatSendAt: 0,
+    lastAudienceAt: 0,
+    recentPitchLines: [],
   };
   const CHAT_SEND_INTERVAL_MS = 6000;
-  const PITCH_IDLE_MS = 8000;
+  const PITCH_IDLE_MS = 18000;
   const NO_MSG_WARN_MS = 60000;
-  const CHAT_DEDUPE_MS = 45000;
-  const SENT_REPLY_TTL_MS = 120000;
-  const MAX_CHAT_QUEUE = 20;
+  const CHAT_DEDUPE_MS = 3 * 60 * 1000;
+  const SENT_REPLY_TTL_MS = 10 * 60 * 1000;
+  const MAX_CHAT_QUEUE = 8;
+  const CHAT_MESSAGE_MAX_AGE_MS = 45 * 1000;
   const PITCH_BANK_STORAGE_KEY = "pitchai.pitchBanks.v1";
   const REPLY_CACHE_TTL_MS = 60 * 60 * 1000;
+  const CONVERSATION_MEMORY_KEY = "pitchai.conversationMemory.v1";
+  const CONVERSATION_MEMORY_TTL_MS = 2 * 60 * 60 * 1000;
   const STANDALONE_FAQ_RX =
     /\b(pre[cç]o|valor|quanto|frete|entrega|prazo|cupom|desconto|estoque|tamanho|medida|cor|material|garantia|troca|devolu|como usa|como usar|funciona|serve|parcel|pagamento|link|onde compra)\b/i;
 
@@ -2980,13 +3015,66 @@
       .trim();
   }
 
-  function replyCacheKey(cfg, text) {
+  function conversationKey(author) {
+    return normKey(author || "") || "__sem_autor__";
+  }
+
+  function loadConversationMemory() {
+    if (chatState.historyLoaded) return;
+    chatState.historyLoaded = true;
+    try {
+      const stored = JSON.parse(sessionStorage.getItem(CONVERSATION_MEMORY_KEY) || "[]");
+      const now = Date.now();
+      for (const [key, value] of Array.isArray(stored) ? stored : []) {
+        if (!key || !value?.at || now - value.at > CONVERSATION_MEMORY_TTL_MS) continue;
+        const turns = Array.isArray(value.turns) ? value.turns.slice(-8) : [];
+        if (turns.length) chatState.historyByAuthor.set(key, { at: value.at, turns });
+      }
+    } catch {}
+  }
+
+  function saveConversationMemory() {
+    try {
+      sessionStorage.setItem(
+        CONVERSATION_MEMORY_KEY,
+        JSON.stringify(Array.from(chatState.historyByAuthor.entries()).slice(-100)),
+      );
+    } catch {}
+  }
+
+  function conversationHistory(item) {
+    loadConversationMemory();
+    return chatState.historyByAuthor.get(conversationKey(item?.author))?.turns || [];
+  }
+
+  function rememberConversationTurn(item, reply) {
+    loadConversationMemory();
+    const key = conversationKey(item?.author);
+    const current = chatState.historyByAuthor.get(key)?.turns || [];
+    const turns = [
+      ...current,
+      { role: "user", content: `${item?.author ? item.author + ": " : ""}${item?.text || ""}` },
+      { role: "assistant", content: reply },
+    ].slice(-8);
+    chatState.historyByAuthor.set(key, { at: Date.now(), turns });
+    if (chatState.historyByAuthor.size > 120) {
+      const entries = Array.from(chatState.historyByAuthor.entries()).sort(
+        (a, b) => Number(a[1]?.at || 0) - Number(b[1]?.at || 0),
+      );
+      entries.slice(0, chatState.historyByAuthor.size - 100).forEach(([oldKey]) => {
+        chatState.historyByAuthor.delete(oldKey);
+      });
+    }
+    saveConversationMemory();
+  }
+
+  function replyCacheKey(cfg, text, author) {
     if (cfg?.pitchBank?.cacheReplies === false || !STANDALONE_FAQ_RX.test(text || "")) return "";
     const product = (cfg.produtos || []).find((p) => p.active) || cfg.produtos?.[0];
     const question = normalizedReplyQuestion(text);
     if (!question || question.length < 4) return "";
     return stableHash(
-      `${product?.id || product?.name || "sem-produto"}|${question}|${JSON.stringify(cfg.aiContext || {})}`,
+      `${product?.id || product?.name || "sem-produto"}|${product?.price || "sem-preco"}|${conversationKey(author)}|${question}|${JSON.stringify(cfg.aiContext || {})}`,
     );
   }
 
@@ -3181,6 +3269,20 @@
   ];
   const ctaState = { count: 0 };
 
+  function pickFreshPitchLine(lines) {
+    const available = (Array.isArray(lines) ? lines : []).filter(Boolean);
+    if (!available.length) return "";
+    const recent = new Set(chatState.recentPitchLines);
+    let line = available.find((value) => !recent.has(normalizedReplyText(value)));
+    if (!line) {
+      chatState.recentPitchLines = [];
+      line = available[0];
+    }
+    const key = normalizedReplyText(line);
+    if (key) chatState.recentPitchLines = [...chatState.recentPitchLines, key].slice(-5);
+    return line;
+  }
+
   async function pitchTick(runId) {
     if (extSecurity.isLocked || extSecurity.aiLocked) return "blocked";
     const cfg = await loadConfig();
@@ -3189,6 +3291,7 @@
     if (liveState.known && !liveState.active && !demo.isOn()) return "idle";
     if (isAudioBusy() || chatState.busy || chatState.queue.length) return "busy";
     if (Date.now() - chatState.lastReplyAt < PITCH_IDLE_MS) return "busy";
+    if (Date.now() - chatState.lastAudienceAt < 12000) return "busy";
     const controller = new AbortController();
     chatState.pitchAbort = controller;
     const lines = await getActivePitchLines(cfg, controller.signal);
@@ -3199,10 +3302,8 @@
     // carrinho) — variado e sem consumir tokens da IA.
     ctaState.count++;
     const ctaEnabled = cfg.cta?.enabled !== false;
-    const line =
-      ctaEnabled && ctaState.count % 4 === 0
-        ? CTA_LINES[Math.floor(Math.random() * CTA_LINES.length)]
-        : lines[chatState.pitchIdx % lines.length];
+    const source = ctaEnabled && ctaState.count % 4 === 0 ? CTA_LINES : lines;
+    const line = pickFreshPitchLine(source);
     chatState.pitchIdx++;
     chatState.pitchIdx = chatState.pitchIdx % 1000000;
     chatState.lastReplyAt = Date.now();
@@ -3253,7 +3354,7 @@
   function startPitchLoop() {
     if (chatState.pitchTimer || chatState.pitchBusy) return;
     const runId = ++chatState.pitchRunId;
-    scheduleNextPitch(runId, 1200);
+    scheduleNextPitch(runId, 8000 + Math.random() * 6000);
   }
 
   function stopPitchLoop() {
@@ -3357,9 +3458,12 @@
 
   function normalizedReplyText(value) {
     return String(value || "")
+      .toLowerCase()
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .replace(/[^a-z0-9 ]/g, " ")
       .replace(/\s+/g, " ")
-      .trim()
-      .toLowerCase();
+      .trim();
   }
 
   function rememberSentReply(value) {
@@ -3382,6 +3486,7 @@
         continue;
       }
       if (sent === normalized) return true;
+      if (sent.length >= 18 && normalized.includes(sent)) return true;
       // Eco truncado: o feed pode exibir a resposta cortada ou com o nome da
       // conta colado na frente — compara pelos prefixos para não responder a
       // si mesma em loop.
@@ -3391,6 +3496,26 @@
       }
     }
     return false;
+  }
+
+  function chatMessagePriority(text) {
+    const value = normalizedReplyText(text);
+    if (!value || value.length < 2) return 0;
+    if (/https?\s|www\s|(.)\1{7,}/i.test(value)) return 0;
+    const question =
+      /\?|\b(qual|quanto|como|quando|onde|porque|por que|tem|serve|funciona|pode|manda|mostra|repete)\b/i.test(
+        String(text || ""),
+      );
+    const purchase =
+      /\b(preco|valor|frete|entrega|cupom|desconto|estoque|tamanho|medida|cor|material|garantia|troca|devolucao|parcel|pagamento|link|comprar|quero|carrinho)\b/.test(
+        value,
+      );
+    if (question || purchase) return 3;
+    if (/^(oi|ola|bom dia|boa tarde|boa noite|cheguei|salve)\b/.test(value)) return 2;
+    if (/\b(amei|adorei|legal|barato|bonito|lindo|top|perfeito|maravilhoso)\b/.test(value)) {
+      return Number.parseInt(stableHash(value).slice(-2), 36) % 3 === 0 ? 1 : 0;
+    }
+    return value.length >= 8 ? 1 : 0;
   }
 
   let chatSendChain = Promise.resolve();
@@ -3558,7 +3683,15 @@
       return;
     }
 
-    const item = chatState.queue.shift();
+    let item = chatState.queue.shift();
+    while (
+      item &&
+      (Date.now() - Number(item.ts || 0) > CHAT_MESSAGE_MAX_AGE_MS ||
+        isRecentlySentReply(item.text))
+    ) {
+      activity.markStatus(item.id, "ignored", "mensagem antiga ou eco da própria IA");
+      item = chatState.queue.shift();
+    }
     if (!item) return;
     _credsOk = true;
     activity.markStatus(item.id, "processing");
@@ -3566,16 +3699,11 @@
 
     try {
       if (cfg.respostasIA) await waitForAudioEnd();
-      const cacheKey = replyCacheKey(cfg, item.text);
+      const cacheKey = replyCacheKey(cfg, item.text, item.author);
       const cachedReply = getCachedReply(cacheKey);
       if (cachedReply) {
         // Resposta FAQ repetida: entrega direto sem consumir tokens da IA.
-        chatState.history.push({
-          role: "user",
-          content: `${item.author ? item.author + ": " : ""}${item.text}`,
-        });
-        chatState.history.push({ role: "assistant", content: cachedReply });
-        chatState.history = chatState.history.slice(-8);
+        rememberConversationTurn(item, cachedReply);
         chatState.lastReplyAt = Date.now();
         const delivered = await deliverReply(item, cachedReply, cfg);
         if (!delivered) {
@@ -3592,6 +3720,8 @@
       const pinned = await getPinnedProduct(cfg);
       const systemPrompt = buildSystemPrompt(cfg, pinned);
       const authHeaders = await signRequest(cfg.syncToken, "chat_reply");
+      const replyController = new AbortController();
+      const replyTimeout = setTimeout(() => replyController.abort(), 20000);
       const r = await fetch(`${API_BASE}/api/public/chat/reply`, {
         method: "POST",
         headers: {
@@ -3602,11 +3732,13 @@
           message: item.text,
           author: item.author,
           systemPrompt,
-          history: chatState.history.slice(-4),
+          history: conversationHistory(item).slice(-6),
           blacklist: cfg.filtros?.blacklist || [],
           whitelist: cfg.filtros?.whitelist || [],
         }),
+        signal: replyController.signal,
       });
+      clearTimeout(replyTimeout);
       if (r.ok) {
         const data = await r.json();
         if (data.remaining !== undefined) {
@@ -3625,12 +3757,7 @@
           const reply = (data.reply || "").trim();
           if (reply) {
             setCachedReply(cacheKey, reply);
-            chatState.history.push({
-              role: "user",
-              content: `${item.author ? item.author + ": " : ""}${item.text}`,
-            });
-            chatState.history.push({ role: "assistant", content: reply });
-            chatState.history = chatState.history.slice(-8);
+            rememberConversationTurn(item, reply);
             chatState.lastReplyAt = Date.now();
             if (cfg.revisarAntesDeEnviar) {
               activity.addPending(item, reply, cfg);
@@ -3724,6 +3851,8 @@
       refreshAccountNames();
       if (accountNames.has(normKey(msg.author))) return;
     }
+    const priority = chatMessagePriority(msg.text);
+    if (!priority) return;
     const key = `${msg.author}|${msg.text}`.toLowerCase();
     const now = Date.now();
     const last = chatState.seen.get(key) || 0;
@@ -3739,7 +3868,7 @@
     updateHealth();
 
     const id = Math.random().toString(36).slice(2, 10);
-    const entry = { id, ...msg, ts: Date.now(), status: "pending" };
+    const entry = { id, ...msg, ts: Date.now(), status: "pending", priority };
     activity.add(entry);
     chatState.count++;
     if (chatState.statusEl) chatState.statusEl.textContent = `${chatState.count} msgs`;
@@ -3752,11 +3881,28 @@
         sessionEvent({ kind: "blocked" });
         return;
       }
+      chatState.queue = chatState.queue.filter((queued) => {
+        const fresh = Date.now() - Number(queued.ts || 0) <= CHAT_MESSAGE_MAX_AGE_MS;
+        if (!fresh) activity.markStatus(queued.id, "ignored", "mensagem expirou na fila");
+        return fresh;
+      });
+      const authorKey = conversationKey(entry.author);
+      const sameAuthor = chatState.queue.findIndex(
+        (queued) => conversationKey(queued.author) === authorKey,
+      );
+      if (sameAuthor >= 0) {
+        const previous = chatState.queue[sameAuthor];
+        activity.markStatus(previous.id, "ignored", "substituída por mensagem mais recente");
+        chatState.queue.splice(sameAuthor, 1);
+      }
       if (chatState.queue.length >= MAX_CHAT_QUEUE) {
         activity.markStatus(id, "ignored", "fila cheia · proteção anti-spam");
         return;
       }
       chatState.queue.push(entry);
+      chatState.queue.sort(
+        (a, b) => Number(b.priority || 0) - Number(a.priority || 0) || a.ts - b.ts,
+      );
       processQueue();
     });
   }
@@ -3789,8 +3935,14 @@
         !JOIN_EVENT_RX.test((el.textContent || "").replace(/\s+/g, " ").trim())
       )
         continue;
-      // ignora se um ancestral já foi escolhido (evita contar a mesma msg 2x)
-      if (picked.some((p) => p.contains(el))) continue;
+      // Prefere a linha mais interna. Wrappers externos acumulam mensagens
+      // virtualizadas e faziam o mesmo chat ser relido como uma mensagem nova.
+      const ancestorIndex = picked.findIndex((p) => p.contains(el));
+      if (ancestorIndex >= 0) {
+        picked[ancestorIndex] = el;
+        continue;
+      }
+      if (picked.some((p) => el.contains(p))) continue;
       picked.push(el);
     }
     return picked.length ? picked : parsedDirect;
@@ -3801,8 +3953,43 @@
   // eventos eram descartados pelo SYSTEM_MSG_RX. Agora alimentam uma fila de
   // nomes que vira uma saudação por voz a cada intervalo.
   const JOIN_EVENT_RX =
-    /^(.{2,40}?)\s+(?:entrou na (?:live|sala)|acabou de seguir|come[çc]ou a seguir|joined)/i;
-  const welcome = { names: [], follows: [], lastAt: 0, seen: new Map(), timer: null };
+    /^(.{2,40}?)\s+(?:entrou na (?:live|sala)|acabou de seguir|come[çc]ou a seguir|joined|started following)/i;
+  const welcome = {
+    names: [],
+    follows: [],
+    lastAt: 0,
+    lastOpening: "",
+    seen: new Map(),
+    timer: null,
+  };
+  const audienceActivity = {
+    node: null,
+    observer: null,
+    boot: null,
+    sweepTimer: null,
+    debounce: null,
+    seen: new Map(),
+  };
+
+  function parseAudienceEvent(value) {
+    let raw = String(value || "")
+      .replace(/\s+/g, " ")
+      .trim();
+    if (!raw || raw.length > 240) return null;
+    raw = raw.replace(
+      /^(?:atividades? dos espectadores|todas as atividades|atividade|activity)\s*[:\-]?\s*/i,
+      "",
+    );
+    const match = raw.match(JOIN_EVENT_RX);
+    if (!match) return null;
+    const name = match[1].replace(/^[@\s]+/, "").trim();
+    if (name.length < 2 || name.length > 40) return null;
+    return {
+      name,
+      kind: /seguir|following/i.test(raw) ? "follow" : "enter",
+      key: normKey(raw),
+    };
+  }
 
   function registerJoin(name, kind) {
     const key = normKey(name || "");
@@ -3817,6 +4004,100 @@
     }
     if (kind === "follow") welcome.follows.push(name);
     else welcome.names.push(name);
+    chatState.lastAudienceAt = now;
+  }
+
+  function scanAudienceActivity(node, { silent = false } = {}) {
+    if (!node) return 0;
+    let candidates = Array.from(node.children || []);
+    try {
+      candidates = candidates.concat(Array.from(node.querySelectorAll("li,[role='listitem']")));
+    } catch {}
+    if (!candidates.length && node instanceof HTMLElement) candidates = [node];
+    let found = 0;
+    for (const item of candidates.slice(-300)) {
+      const event = parseAudienceEvent(item.textContent);
+      if (!event?.key) continue;
+      const now = Date.now();
+      if (now - (audienceActivity.seen.get(event.key) || 0) < 20 * 60 * 1000) continue;
+      audienceActivity.seen.set(event.key, now);
+      if (!silent) registerJoin(event.name, event.kind);
+      found++;
+    }
+    const now = Date.now();
+    for (const [key, at] of audienceActivity.seen) {
+      if (now - at > 30 * 60 * 1000) audienceActivity.seen.delete(key);
+    }
+    return found;
+  }
+
+  function findAudienceActivityFeed(region) {
+    if (!region) return null;
+    let candidates = [region];
+    try {
+      candidates = candidates.concat(
+        Array.from(region.querySelectorAll('[role="list"], .arco-list-content, [class*="activity" i]')),
+      );
+    } catch {}
+    const orders = findOrdersFeed(region);
+    const scored = candidates
+      .filter((node) => node && node !== orders && !orders?.contains(node))
+      .map((node) => {
+        const sample = (node.textContent || "").replace(/\s+/g, " ").slice(0, 3000);
+        const events = (
+          sample.match(/entrou na|acabou de seguir|come[çc]ou a seguir|joined|started following/gi) || []
+        ).length;
+        const label = /atividades? dos espectadores|todas as atividades/i.test(sample) ? 4 : 0;
+        return { node, score: events * 5 + label };
+      })
+      .sort((a, b) => b.score - a.score);
+    return scored[0]?.node || region;
+  }
+
+  function stopAudienceActivityWatcher() {
+    try {
+      audienceActivity.observer?.disconnect();
+    } catch {}
+    clearInterval(audienceActivity.boot);
+    clearInterval(audienceActivity.sweepTimer);
+    clearTimeout(audienceActivity.debounce);
+    audienceActivity.node = null;
+    audienceActivity.observer = null;
+    audienceActivity.boot = null;
+    audienceActivity.sweepTimer = null;
+    audienceActivity.debounce = null;
+  }
+
+  function startAudienceActivityWatcher() {
+    if (audienceActivity.observer || audienceActivity.boot || demo.isOn()) return;
+    let attempts = 0;
+    const connect = async () => {
+      const region = await regionNode("activity");
+      const node = findAudienceActivityFeed(region);
+      if (!node) {
+        if (++attempts >= 90) {
+          clearInterval(audienceActivity.boot);
+          audienceActivity.boot = null;
+        }
+        return;
+      }
+      clearInterval(audienceActivity.boot);
+      audienceActivity.boot = null;
+      audienceActivity.node = node;
+      scanAudienceActivity(node, { silent: true });
+      audienceActivity.observer = new MutationObserver(() => {
+        clearTimeout(audienceActivity.debounce);
+        audienceActivity.debounce = setTimeout(() => scanAudienceActivity(node), 180);
+      });
+      audienceActivity.observer.observe(node, {
+        childList: true,
+        subtree: true,
+        characterData: true,
+      });
+      audienceActivity.sweepTimer = setInterval(() => scanAudienceActivity(node), 2500);
+    };
+    audienceActivity.boot = setInterval(() => connect().catch(() => {}), 2000);
+    connect().catch(() => {});
   }
 
   function buildWelcomeLine() {
@@ -3837,11 +4118,15 @@
             ? `${names[0]} e ${names[1]}`
             : `${names[0]}, ${names[1]} e ${names[2]}`;
       const partes = [
-        "Bem-vindo à live",
-        "Chegou gente boa, welcome",
-        "Olha quem chegou, bem-vindos",
+        "Boas-vindas para quem chegou agora:",
+        "Que bom ter vocês por aqui,",
+        "Olha quem acabou de chegar,",
+        "Pode chegar que a live está só começando,",
+        "Sejam muito bem-vindos,",
       ];
-      const abre = partes[Math.floor(Math.random() * partes.length)];
+      const alternativas = partes.filter((parte) => parte !== welcome.lastOpening);
+      const abre = alternativas[Math.floor(Math.random() * alternativas.length)] || partes[0];
+      welcome.lastOpening = abre;
       line += `${line ? " " : ""}${abre} ${lista}!`;
     }
     return line;
@@ -3857,13 +4142,18 @@
       return;
     }
     if (!cfg.respostasIA) return; // saudação é um recurso de voz
+    if (isAudioBusy() || chatState.busy || chatState.queue.length) return;
+    if (Date.now() - chatState.lastReplyAt < PITCH_IDLE_MS) return;
     const intervalMs = Math.max(30, Number(cfg.saudacoes?.minIntervalSec) || 60) * 1000;
     if (Date.now() - welcome.lastAt < intervalMs) return;
     const line = buildWelcomeLine();
     if (!line) return;
-    welcome.lastAt = Date.now();
     activity.log({ type: "pitch", text: line, ts: Date.now() });
-    await speakText(line, cfg, { useCache: true }).catch(() => {});
+    const spoken = await speakText(line, cfg, { useCache: true }).catch(() => false);
+    if (spoken) {
+      welcome.lastAt = Date.now();
+      chatState.lastReplyAt = welcome.lastAt;
+    }
   }
 
   function startWelcomeLoop() {
@@ -4106,6 +4396,7 @@
     saleTimer: null,
     violTimer: null,
     tourTimers: [],
+    violationClearTimer: null,
     msgIdx: 0,
     saleIdx: 0,
     badge: null,
@@ -4138,7 +4429,7 @@
       }
       if (!atual.some((p) => p.active) && atual.length) atual[0].active = true;
       cfg.produtos = atual;
-      saveConfig(cfg);
+      await saveConfig(cfg);
       pushConfigToBackend(cfg);
       activity.log({
         type: "catalog",
@@ -4163,7 +4454,7 @@
           demo: true,
         },
       ];
-      saveConfig(cfg);
+      await saveConfig(cfg);
       pushConfigToBackend(cfg);
       activity.log({
         type: "catalog",
@@ -4178,12 +4469,12 @@
       enqueueMessage({ author: m.author, text: m.text });
     },
 
-    simulateSale() {
+    async simulateSale() {
       const nomes = ["ana.souza", "carlos_m", "juliana", "pedro.lima", "bia.costa"];
       const nome = nomes[demo.saleIdx++ % nomes.length];
       const prod = DEMO_PRODUCTS[Math.floor(Math.random() * DEMO_PRODUCTS.length)];
       const txt = `${nome} comprou ${prod.name} · ${prod.price} · #${Math.floor(Math.random() * 9e5 + 1e5)}`;
-      handleSale({ textContent: txt }).catch(() => {});
+      await handleSale({ textContent: txt }, { simulated: true });
     },
 
     async simulateViolation() {
@@ -4191,28 +4482,37 @@
       await setViolation("Aviso de integridade: possível violação de conteúdo (simulado)", cfg, {
         strong: true,
       });
-      setTimeout(async () => {
+      clearTimeout(demo.violationClearTimer);
+      demo.violationClearTimer = setTimeout(async () => {
         const c = await loadConfig();
         await clearViolation(c);
         activity.log({ type: "violation", text: "Violação simulada encerrada.", ts: Date.now() });
+        demo.violationClearTimer = null;
       }, 20000);
     },
 
     async testVoice() {
       const cfg = await loadConfig();
+      if (!(await checkExtensionLock(cfg.syncToken)) || extSecurity.aiLocked) {
+        throw new Error(extSecurity.message || "conecte uma conta válida para testar a voz");
+      }
       const ativo = (cfg.produtos || []).find((p) => p.active) || DEMO_PRODUCTS[0];
       activity.log({ type: "pitch", text: "Teste de voz da IA…", ts: Date.now() });
       await waitForAudioEnd();
-      await speakText(
+      const spoken = await speakText(
         `Teste de voz do Pitch AI. Estou apresentando ${ativo.name} por ${ativo.price || "um super preço"}. Aproveita que o estoque é limitado!`,
         cfg,
       );
+      if (!spoken) throw new Error("o áudio não foi confirmado pelo navegador");
     },
 
     async runPitch() {
       startPitchLoop();
       activity.log({ type: "pitch", text: "Pitch de demonstração iniciado.", ts: Date.now() });
-      await pitchTick(chatState.pitchRunId).catch(() => {});
+      const result = await pitchTick(chatState.pitchRunId);
+      if (result === "blocked") throw new Error(extSecurity.message || "IA indisponível");
+      if (result === "disabled") throw new Error("ative as respostas da IA e os pitches automáticos");
+      return result;
     },
 
     async startTour() {
@@ -4226,8 +4526,12 @@
       demo.tourTimers.push(
         setTimeout(() => {
           if (!demo.on) return;
-          demo.simulateSale();
-          ackDemo("tour", true, "2/4 · Venda simulada com aviso ao vivo");
+          demo
+            .simulateSale()
+            .then(() => ackDemo("tour", true, "2/4 · Venda simulada com aviso ao vivo"))
+            .catch((error) =>
+              ackDemo("tour", false, `Venda simulada não concluiu: ${error?.message || error}`),
+            );
         }, 2800),
       );
       demo.tourTimers.push(
@@ -4262,8 +4566,8 @@
 
     /**
      * `preloaded` reaproveita a config de quem chamou (o toggle já releu).
-     * Nada de rede é aguardado aqui: a vitrine simulada e a sessão sobem em
-     * segundo plano para o botão da barra responder na hora.
+     * A vitrine simulada é persistida antes de confirmar o início. Sessão e
+     * timers continuam em segundo plano.
      */
     async start(preloaded) {
       if (demo.on) return;
@@ -4275,7 +4579,13 @@
         text: "Modo Demo ligado — tudo abaixo é simulado.",
         ts: Date.now(),
       });
-      demo.applyCatalog(cfg).catch(() => {});
+      try {
+        await demo.applyCatalog(cfg);
+      } catch (error) {
+        demo.on = false;
+        demo.hideBadge();
+        throw error;
+      }
       sessionStart().catch(() => {});
       chatState.detectVia = "demo";
       chatState.lastMsgAt = Date.now();
@@ -4293,21 +4603,21 @@
       if (cfg.demo?.comVendas !== false) {
         const loop = () => {
           if (!demo.on) return;
-          demo.simulateSale();
+          demo.simulateSale().catch(() => {});
           demo.saleTimer = setTimeout(loop, (30000 + Math.random() * 30000) / vel);
         };
         demo.saleTimer = setTimeout(loop, 15000 / vel);
       }
       if (cfg.demo?.comViolacao) {
         demo.violTimer = setTimeout(() => {
-          if (demo.on) demo.simulateViolation();
+          if (demo.on) demo.simulateViolation().catch(() => {});
         }, 45000 / vel);
       }
     },
 
     /** Mesma regra do start: desliga tudo na hora e deixa a rede para depois. */
     async stop(preloaded) {
-      if (!demo.on) return;
+      const wasOn = demo.on;
       demo.on = false;
       clearInterval(demo.chatTimer);
       demo.chatTimer = null;
@@ -4315,6 +4625,8 @@
       demo.saleTimer = null;
       clearTimeout(demo.violTimer);
       demo.violTimer = null;
+      clearTimeout(demo.violationClearTimer);
+      demo.violationClearTimer = null;
       demo.tourTimers.forEach((timer) => clearTimeout(timer));
       demo.tourTimers = [];
       demo.hideBadge();
@@ -4322,11 +4634,14 @@
       stopHealthCheck();
       chatState.detectVia = null;
       updateHealth();
-      activity.log({ type: "live", text: "Modo Demo desligado.", ts: Date.now() });
+      if (wasOn) activity.log({ type: "live", text: "Modo Demo desligado.", ts: Date.now() });
+      const cfg = preloaded || (await loadConfig());
+      cfg.produtos = (cfg.produtos || []).filter((produto) => !produto.demo);
+      await saveConfig(cfg);
+      pushConfigToBackend(cfg);
       // encerramento da violação simulada + fim de sessão sem travar o clique
       (async () => {
         try {
-          const cfg = preloaded || (await loadConfig());
           await clearViolation(cfg);
         } catch {}
         sessionEnd().catch(() => {});
@@ -5258,14 +5573,14 @@
     }
   }
 
-  async function handleSale(node) {
-    if (extSecurity.isLocked) return;
+  async function handleSale(node, { simulated = false } = {}) {
+    if (extSecurity.isLocked && !simulated) return false;
     const key = saleKey(node);
-    if (!looksLikeSale(key)) return;
+    if (!looksLikeSale(key)) return false;
     auto.saleEvidenceAt = Date.now();
     const now = Date.now();
     const last = auto.saleTimes.get(key) || 0;
-    if (last && now - last < SALE_DEDUPE_MS) return;
+    if (last && now - last < SALE_DEDUPE_MS) return false;
     auto.saleSeen.add(key);
     auto.saleTimes.set(key, now);
     if (auto.saleTimes.size > 300) {
@@ -5282,13 +5597,15 @@
 
     const cfg = await loadConfig();
     if (cfg.somVenda?.enabled !== false) playSaleSound(cfg.somVenda?.volume ?? 0.8);
-    if (!cfg.notificacoesVenda) return;
+    if (!cfg.notificacoesVenda || (simulated && extSecurity.isLocked)) return true;
     const nome = (key.match(/^([\w.@-]{2,24})/) || [])[1] || "";
     const frase = nome
       ? `Muito obrigado pela compra, ${nome}! Aproveita que ainda tem estoque.`
       : "Saiu mais uma venda! Obrigado, aproveita que ainda tem estoque.";
     await waitForAudioEnd();
-    await speakText(frase, cfg);
+    const spoken = await speakText(frase, cfg);
+    if (spoken) chatState.lastReplyAt = Date.now();
+    return true;
   }
 
   function startSaleWatcher() {
@@ -5977,6 +6294,7 @@
     automationsStarted = false;
     stopPitchLoop();
     stopChatListener();
+    stopAudienceActivityWatcher();
     try {
       auto.catalogObserver?.disconnect();
       auto.saleObserver?.disconnect();
@@ -6034,6 +6352,7 @@
     startCatalogWatcher();
     startAutoPin();
     startSaleWatcher();
+    startAudienceActivityWatcher();
     startViolationWatcher();
     startLiveTimer();
   }
@@ -6187,6 +6506,7 @@
     "mensagem",
     "venda",
     "violacao",
+    "voz",
     "pitch",
   ]);
 
@@ -6217,6 +6537,15 @@
       pitch: async () => {
         await demo.runPitch();
         return "Pitch de teste gerado";
+      },
+      "demo:start": async () => {
+        await demo.toggle(true);
+        await demo.applyCatalog();
+        return "Modo Demo ligado e vitrine simulada carregada";
+      },
+      "demo:stop": async () => {
+        await demo.toggle(false);
+        return "Modo Demo desligado e dados simulados removidos";
       },
       encerrar: async () => {
         await finishLive("demo manual");
@@ -6400,6 +6729,19 @@
     } catch (e) {
       ackDemo(action, false, `Falhou (${action}): ${e?.message || e}`);
     }
+  }
+
+  function consumeDemoCommand(command) {
+    const commandTs = Number(command?.ts || command?.at || 0);
+    if (!command?.action || !commandTs || commandTs === lastCmdTs) return false;
+    // Quando o service worker abre a página da LIVE, o comando já existia antes
+    // do content script. Aceita esse comando pendente, mas nunca repete lixo antigo.
+    if (Date.now() - commandTs > 120000) return false;
+    lastCmdTs = commandTs;
+    runDemoCommand(command.action).catch((error) => {
+      ackDemo(command.action, false, `Falhou (${command.action}): ${error?.message || error}`);
+    });
+    return true;
   }
 
   // ---------- Modo "apontar elemento" ----------
@@ -6890,12 +7232,15 @@
         })();
       }
       const cmd = changes[DEMO_CMD_KEY]?.newValue;
-      const cmdTs = cmd?.ts || cmd?.at || 0;
-      if (cmd?.action && cmdTs !== lastCmdTs) {
-        lastCmdTs = cmdTs;
-        runDemoCommand(cmd.action);
-      }
+      consumeDemoCommand(cmd);
     });
+
+    // Um comando pode ter sido enviado pelo painel antes de esta aba existir.
+    // O background abre a página e esta leitura conclui o fluxo após o mount.
+    try {
+      const pendingDemo = (await chrome.storage.local.get([DEMO_CMD_KEY]))?.[DEMO_CMD_KEY];
+      consumeDemoCommand(pendingDemo);
+    } catch {}
   }
 
   if (document.body) mount();

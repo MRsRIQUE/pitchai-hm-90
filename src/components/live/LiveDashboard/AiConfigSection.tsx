@@ -188,6 +188,59 @@ export function AiConfigSection({ compact = false }: AiConfigSectionProps) {
               placeholder="Ex: mulheres 25-45"
             />
           </div>
+          <div className="sm:col-span-2 mt-2 border-t border-border/60 pt-4">
+            <div className="mb-1 text-sm font-semibold">Base de conhecimento</div>
+            <p className="mb-3 text-xs text-muted-foreground">
+              Separe fatos, políticas e dúvidas comuns. Assim a IA encontra a resposta certa sem
+              inventar nem vasculhar um texto enorme.
+            </p>
+          </div>
+          <div className="sm:col-span-2">
+            <label className="mb-1 block text-xs uppercase tracking-wide text-muted-foreground">
+              Diferenciais confirmados
+            </label>
+            <Textarea
+              value={config.aiContext.differentials}
+              onChange={(e) => updateContext("differentials", e.target.value)}
+              rows={3}
+              placeholder="Ex: fabricação própria; tecido respirável; acompanha cabo e estojo. Um fato por linha."
+            />
+          </div>
+          <div>
+            <label className="mb-1 block text-xs uppercase tracking-wide text-muted-foreground">
+              Políticas e condições
+            </label>
+            <Textarea
+              value={config.aiContext.policies}
+              onChange={(e) => updateContext("policies", e.target.value)}
+              rows={4}
+              placeholder="Frete, prazo, troca, garantia, formas de pagamento e condições reais."
+            />
+          </div>
+          <div>
+            <label className="mb-1 block text-xs uppercase tracking-wide text-muted-foreground">
+              Perguntas e objeções frequentes
+            </label>
+            <Textarea
+              value={config.aiContext.frequentQuestions}
+              onChange={(e) => updateContext("frequentQuestions", e.target.value)}
+              rows={4}
+              placeholder={
+                "Ex:\n“É original?” — Sim, com nota fiscal.\n“Serve em iPhone?” — modelos 11 ou superior."
+              }
+            />
+          </div>
+          <div className="sm:col-span-2">
+            <label className="mb-1 block text-xs uppercase tracking-wide text-muted-foreground">
+              Estratégia de conversa e venda
+            </label>
+            <Textarea
+              value={config.aiContext.salesPlaybook}
+              onChange={(e) => updateContext("salesPlaybook", e.target.value)}
+              rows={3}
+              placeholder="Ex: seja consultiva; pergunte a necessidade antes do pitch; destaque praticidade; convide ao carrinho quando houver interesse."
+            />
+          </div>
           <div className="sm:col-span-2">
             <label className="mb-1 block text-xs uppercase tracking-wide text-muted-foreground">
               Regras (o que NUNCA fazer)

@@ -56,6 +56,74 @@ function matchesAny(text: string, words: string[]) {
   });
 }
 
+function normalizeForEcho(value: string) {
+  return String(value || "")
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function repeatsAssistant(message: string, history: { role: string; content: string }[]) {
+  const incoming = normalizeForEcho(message);
+  if (incoming.length < 12) return false;
+  return history
+    .filter((turn) => turn.role === "assistant")
+    .slice(-6)
+    .some((turn) => {
+      const spoken = normalizeForEcho(turn.content);
+      return spoken.length >= 12 && (incoming.includes(spoken) || spoken.includes(incoming));
+    });
+}
+
+type ConversationIntent =
+  "purchase" | "objection" | "product_question" | "comparison" | "greeting" | "reaction" | "other";
+
+function detectConversationIntent(message: string): ConversationIntent {
+  const value = normalizeForEcho(message);
+  if (/\b(comprar|quero|carrinho|link|fecha|pedido|pagamento|parcel|pix)\b/.test(value))
+    return "purchase";
+  if (
+    /\b(caro|medo|duvida|receio|nao confio|nao sei|vale a pena|garantia|troca|devolucao|funciona mesmo)\b/.test(
+      value,
+    )
+  )
+    return "objection";
+  if (/\b(melhor|pior|diferenca|comparado|versus|qual escolher)\b/.test(value)) return "comparison";
+  if (
+    /\?|\b(preco|valor|frete|entrega|tamanho|medida|cor|material|serve|funciona|tem|como|quanto|qual|onde|quando)\b/.test(
+      value,
+    )
+  )
+    return "product_question";
+  if (/^(oi|ola|bom dia|boa tarde|boa noite|salve|cheguei)\b/.test(value)) return "greeting";
+  if (/\b(amei|adorei|legal|barato|bonito|lindo|top|perfeito|maravilhoso)\b/.test(value))
+    return "reaction";
+  return "other";
+}
+
+function intentInstruction(intent: ConversationIntent, historyLength: number) {
+  const stage = historyLength >= 6 ? "continuação" : historyLength >= 2 ? "consideração" : "início";
+  const goals: Record<ConversationIntent, string> = {
+    purchase:
+      "Há intenção de compra: responda o necessário para fechar e termine com um CTA curto para o produto fixado.",
+    objection:
+      "Há uma objeção: reconheça a preocupação, responda com um fato confirmado e faça no máximo uma pergunta curta se faltar contexto.",
+    product_question:
+      "Há uma dúvida de produto: entregue primeiro a resposta objetiva; CTA só se ajudar o próximo passo.",
+    comparison:
+      "Há comparação: explique a diferença relevante sem atacar concorrentes e ajude a pessoa a escolher pelo uso.",
+    greeting: "É uma chegada/saudação: acolha brevemente, sem disparar um pitch completo.",
+    reaction:
+      "É uma reação curta: responda apenas se houver algo útil a acrescentar; não transforme todo elogio em venda.",
+    other:
+      "Descubra a intenção pelo contexto. Se não houver relação útil com a live, use o marcador de ignorar.",
+  };
+  return `Momento da conversa: ${stage}. Intenção detectada: ${intent}. ${goals[intent]}`;
+}
+
 import { GoogleGenAI, ThinkingLevel } from "@google/genai";
 import { AI_MODELS, chatModelCascade } from "@/lib/live/ai-models";
 
@@ -207,22 +275,25 @@ export const Route = createFileRoute("/api/public/chat/reply")({
 
         // Modo breve: resposta de no máximo 20 palavras, uma frase só.
         const brief = body.brief === true;
+        const intent = detectConversationIntent(message);
 
         const filterRules = [
           "",
           "REGRAS DE RESPOSTA (obrigatórias):",
           "- Responda SEMPRE que a mensagem tiver qualquer relação com a compra: produto, preço, desconto, cupom, frete, prazo de entrega, pagamento, parcelamento, estoque, tamanho, cor, material, garantia, troca, durabilidade, como usar, comparação entre produtos ou pedido de link.",
-          "- Também responda saudação, elogio, dúvida vaga ('serve pra mim?', 'vale a pena?') e pedido de repetição de informação.",
-          "- Na dúvida, RESPONDA. Só ignore palavrão, xingamento, spam, corrente, divulgação de outro vendedor ou assunto totalmente fora da live.",
+          "- Responda saudações, dúvidas vagas e pedidos de repetição quando isso mantiver uma conversa útil; reações soltas não exigem resposta toda vez.",
+          "- Ignore spam, corrente, divulgação de outro vendedor, assunto totalmente fora da live e frases que pareçam ser a própria fala comercial da apresentadora/IA retornando pelo chat.",
           "- Se não souber o dado exato (frete, cupom, prazo), responda mesmo assim de forma honesta e curta, orientando a conferir no carrinho/checkout — nunca invente valor.",
           `- Para ignorar, responda EXATAMENTE e somente: ${IGNORE_TAG}`,
           "- Responda em 1 frase curta e natural, como se estivesse falando ao vivo.",
+          `- ${intentInstruction(intent, body.history?.length || 0)}`,
+          "- Não repita uma explicação já dada. Continue do ponto em que a pessoa parou e varie abertura, argumento e CTA.",
           brief
             ? "- Esta é uma resposta BREVE: use NO MÁXIMO 20 palavras, em uma única frase."
             : "",
           author
-            ? `- Comece a resposta cumprimentando pelo primeiro nome: "${author.split(/\s+/)[0]}, ...".`
-            : "- Comece a resposta chamando o espectador de forma amigável (ex: 'oi, ...').",
+            ? `- O espectador se chama "${author.split(/\s+/)[0]}". Use o nome apenas quando soar natural e não tiver sido usado recentemente; nunca comece todas as respostas do mesmo jeito.`
+            : "- Converse naturalmente sem inventar um nome para o espectador.",
           "- Nunca use emojis nem asteriscos. Nunca invente preço ou promoção.",
           prioritized
             ? "- ATENÇÃO: esta mensagem foi marcada como prioritária pelo vendedor. Responda obrigatoriamente."
@@ -241,6 +312,12 @@ export const Route = createFileRoute("/api/public/chat/reply")({
               content: String(h.content ?? "").slice(0, 800),
             }))
           : [];
+
+        // Defesa no servidor: mesmo que o DOM do TikTok devolva a fala da
+        // própria extensão com prefixos/badges, ela não consome IA nem cria loop.
+        if (repeatsAssistant(message, history)) {
+          return json(200, { reply: "", ignore: true, reason: "self_echo", intent });
+        }
 
         const userLine = author ? `${author}: ${message}` : message;
         const messages = [...history, { role: "user", content: userLine }];
@@ -319,6 +396,7 @@ export const Route = createFileRoute("/api/public/chat/reply")({
           reply: finalReply,
           ignore,
           reason: ignore ? "off_topic" : null,
+          intent,
           prioritized,
           remaining: guard.remaining,
           plan: guard.plan,

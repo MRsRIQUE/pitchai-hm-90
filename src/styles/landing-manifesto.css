@@ -166,7 +166,13 @@
 
 @media screen and (max-width: 860px) {
   .landing .manifesto-height {
-    height: 220vh;
+    height: auto;
+  }
+
+  .landing .manifesto-pin {
+    position: relative;
+    min-height: auto;
+    padding: 96px 0;
   }
 
   .landing .manifesto-headline {
@@ -188,6 +194,11 @@
 
   .landing .manifesto-lede {
     margin-left: 0;
+    margin-top: 38px;
+  }
+
+  .landing .manifesto-word {
+    opacity: 1 !important;
   }
 }
 

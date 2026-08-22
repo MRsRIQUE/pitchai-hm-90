@@ -147,6 +147,10 @@ export const AIContextSchema = z.object({
   niche: z.string().optional(),
   tone: z.string().default("empolgado e amigável"),
   targetAudience: z.string().optional(),
+  differentials: z.string().optional(),
+  policies: z.string().optional(),
+  frequentQuestions: z.string().optional(),
+  salesPlaybook: z.string().optional(),
   rules: z
     .string()
     .default(
@@ -276,6 +280,10 @@ export const DEFAULT_CONFIG: Config = {
     niche: "",
     tone: "empolgado e amigável",
     targetAudience: "",
+    differentials: "",
+    policies: "",
+    frequentQuestions: "",
+    salesPlaybook: "",
     rules:
       "Nunca prometa resultados irreais. Não fale de política ou religião. Nunca invente preços ou promoções que não estejam cadastradas.",
     extraContext: "",

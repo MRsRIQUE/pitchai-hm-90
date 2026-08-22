@@ -768,9 +768,22 @@ document.addEventListener("DOMContentLoaded", async () => {
 
     if (el.classList.contains("pnl-toggle")) {
       el.addEventListener("click", () => {
-        set(cfg, key, !get(cfg, key));
+        const next = !get(cfg, key);
+        set(cfg, key, next);
+        if (key === "demo.enabled" && !next) {
+          cfg.produtos = (cfg.produtos || []).filter((produto) => !produto.demo);
+        }
         save(cfg);
         el.classList.toggle("on");
+        if (key === "demo.enabled") {
+          sendDemoCommand(next ? "demo:start" : "demo:stop");
+          const hint = document.getElementById("pnl-demo-hint");
+          if (hint) {
+            hint.textContent = next
+              ? "Preparando o ambiente seguro de demonstração…"
+              : "Encerrando a demonstração e limpando os dados simulados…";
+          }
+        }
       });
     } else if (el.tagName === "SELECT") {
       el.addEventListener("change", () => {

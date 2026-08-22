@@ -39,7 +39,7 @@ describe("painel distribuído", () => {
 
   it("protege o chat contra spam, auto-loop e sobrescrita de rascunho", () => {
     expect(contentSource).toContain("CHAT_SEND_INTERVAL_MS = 6000");
-    expect(contentSource).toContain("SENT_REPLY_TTL_MS = 120000");
+    expect(contentSource).toContain("SENT_REPLY_TTL_MS = 10 * 60 * 1000");
     expect(contentSource).toContain("rememberSentReply(value);");
     expect(contentSource).toContain("chatState.sentReplies");
     expect(contentSource).toContain("chatState.sentReplies.delete");

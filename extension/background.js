@@ -8,6 +8,20 @@
 const PEDIDO = "PITCHAI_SCRAPE_PRODUCT";
 const PEDIDO_INSTALL_ID = "PITCHAI_GET_INSTALL_ID";
 const INSTALL_ID_KEY = "pitchai_install_id";
+const DEMO_CMD_KEY = "pitchai.demo.cmd";
+const DEMO_ACK_KEY = "pitchai.demo.ack";
+const DEMO_HOST_URL = "https://shop.tiktok.com/streamer/live/product/dashboard";
+const DEMO_HOST_ACTIONS = new Set([
+  "tour",
+  "vitrine",
+  "produto",
+  "mensagem",
+  "venda",
+  "violacao",
+  "voz",
+  "pitch",
+  "demo:start",
+]);
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 const ORIGENS_PERMITIDAS = [
@@ -53,6 +67,51 @@ chrome.runtime.onInstalled.addListener(() => {
 
 chrome.runtime.onStartup.addListener(() => {
   garantirInstallId().catch(() => {});
+});
+
+let demoHostEmCurso = null;
+async function garantirPaginaDoDemo(command) {
+  if (!DEMO_HOST_ACTIONS.has(String(command?.action || ""))) return;
+  if (demoHostEmCurso) return demoHostEmCurso;
+  demoHostEmCurso = (async () => {
+    const tabs = await chrome.tabs.query({
+      url: ["https://shop.tiktok.com/streamer/*", "https://shop.tiktok.com/*live*"],
+    });
+    if (tabs.some((tab) => typeof tab.id === "number")) return;
+
+    await chrome.storage.local.set({
+      [DEMO_ACK_KEY]: {
+        action: command.action,
+        ok: true,
+        message: "Abrindo a página da LIVE para executar a demonstração…",
+        ts: Date.now(),
+      },
+    });
+    await chrome.tabs.create({ url: DEMO_HOST_URL, active: true });
+  })();
+  try {
+    await demoHostEmCurso;
+  } finally {
+    demoHostEmCurso = null;
+  }
+}
+
+chrome.storage.onChanged.addListener((changes, areaName) => {
+  if (areaName !== "local") return;
+  const command = changes[DEMO_CMD_KEY]?.newValue;
+  if (!command?.action) return;
+  garantirPaginaDoDemo(command).catch(async () => {
+    await chrome.storage.local
+      .set({
+        [DEMO_ACK_KEY]: {
+          action: command.action,
+          ok: false,
+          message: "Não foi possível abrir a página da LIVE para executar o modo demo.",
+          ts: Date.now(),
+        },
+      })
+      .catch(() => {});
+  });
 });
 
 function origemDoRemetente(sender) {

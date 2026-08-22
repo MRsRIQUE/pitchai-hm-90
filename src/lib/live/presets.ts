@@ -5,7 +5,7 @@ export type NichePreset = {
   label: string;
   emoji: string;
   hint: string;
-  context: Pick<AIContext, "niche" | "tone" | "targetAudience" | "rules" | "extraContext">;
+  context: Pick<AIContext, "niche" | "tone" | "targetAudience" | "rules" | "frequentQuestions">;
 };
 
 /**
@@ -24,7 +24,7 @@ export const NICHE_PRESETS: NichePreset[] = [
       targetAudience: "mulheres e homens de 18 a 45 anos que compram roupa pelo celular",
       rules:
         "Nunca prometa que a peça serve sem confirmar a tabela de medidas. Não invente promoções. Sempre cite tamanho, tecido e caimento quando perguntarem.",
-      extraContext:
+      frequentQuestions:
         "Objeções comuns: 'vai servir em mim?', 'o tecido é fino?', 'encolhe na lavagem?', 'quanto tempo pra chegar?'. Responda citando tabela de medidas, composição do tecido e prazo de envio.",
     },
   },
@@ -39,7 +39,7 @@ export const NICHE_PRESETS: NichePreset[] = [
       targetAudience: "pessoas que buscam cuidado com a pele e maquiagem do dia a dia",
       rules:
         "Nunca prometa resultado médico ou cura. Não indique produto para condição de pele diagnosticada. Sempre diga que resultados variam.",
-      extraContext:
+      frequentQuestions:
         "Objeções comuns: 'serve pra pele oleosa?', 'é testado dermatologicamente?', 'quanto tempo dura?', 'tem cheiro forte?'. Fale de textura, rendimento e modo de uso.",
     },
   },
@@ -54,7 +54,7 @@ export const NICHE_PRESETS: NichePreset[] = [
       targetAudience: "pessoas que querem facilitar a rotina da casa gastando pouco",
       rules:
         "Nunca invente medidas ou voltagem. Se não souber, diga que vai confirmar. Não prometa durabilidade sem base.",
-      extraContext:
+      frequentQuestions:
         "Objeções comuns: 'qual o tamanho?', 'é 110 ou 220?', 'pode ir na lava-louças?', 'é resistente?'. Sempre cite material e medida.",
     },
   },
@@ -69,7 +69,7 @@ export const NICHE_PRESETS: NichePreset[] = [
       targetAudience: "consumidores que comparam preço e ficha técnica antes de comprar",
       rules:
         "Nunca invente especificação técnica. Só cite compatibilidade que está na descrição. Sempre informe a garantia real.",
-      extraContext:
+      frequentQuestions:
         "Objeções comuns: 'funciona no meu celular?', 'quantas horas de bateria?', 'tem garantia?', 'é original?'. Responda com a ficha técnica cadastrada.",
     },
   },
@@ -84,7 +84,7 @@ export const NICHE_PRESETS: NichePreset[] = [
       targetAudience: "pessoas que treinam e buscam performance ou emagrecimento",
       rules:
         "NUNCA prometa emagrecimento, cura ou resultado garantido. Nunca dê orientação médica ou de dosagem individual. Sempre recomende acompanhamento profissional.",
-      extraContext:
+      frequentQuestions:
         "Objeções comuns: 'qual o sabor?', 'quantas doses rende?', 'posso tomar todo dia?', 'tem lactose?'. Fale de sabor, rendimento e modo de uso da embalagem.",
     },
   },
@@ -99,7 +99,7 @@ export const NICHE_PRESETS: NichePreset[] = [
       targetAudience: "pessoas que querem aprender uma habilidade nova e mudar de patamar",
       rules:
         "Nunca prometa ganho financeiro específico nem resultado garantido. Deixe claro que o resultado depende da dedicação do aluno.",
-      extraContext:
+      frequentQuestions:
         "Objeções comuns: 'é vitalício?', 'tem certificado?', 'serve pra iniciante?', 'e se eu não gostar?'. Fale de formato das aulas, suporte e prazo de garantia.",
     },
   },

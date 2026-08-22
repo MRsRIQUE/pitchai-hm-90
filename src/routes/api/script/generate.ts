@@ -20,6 +20,10 @@ const AiContextSchema = z.object({
   niche: z.string().max(160).default(""),
   tone: z.string().max(240).default("amigável"),
   targetAudience: z.string().max(500).default(""),
+  differentials: z.string().max(2_000).default(""),
+  policies: z.string().max(2_000).default(""),
+  frequentQuestions: z.string().max(3_000).default(""),
+  salesPlaybook: z.string().max(2_000).default(""),
   rules: z.string().max(2_000).default(""),
   extraContext: z.string().max(2_000).default(""),
 });
