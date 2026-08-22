@@ -55,9 +55,10 @@ if (keyPemPath && !WEBSTORE) {
   process.exit(1);
 }
 
+const privateAssetsDir = path.join(rootDir, "private-assets");
 const outZip = WEBSTORE
   ? path.join(rootDir, "dist", "pitchai-extension-webstore.zip")
-  : path.join(rootDir, "private-assets", "pitchai-extension.zip");
+  : path.join(privateAssetsDir, "pitchai-extension.zip");
 
 // Arquivos distribuídos — exatamente os referenciados pelo manifest.json
 const FILES = [
